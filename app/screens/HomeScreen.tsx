@@ -86,6 +86,8 @@ export default function HomeScreen() {
   const [isDatePickerExpanded, setIsDatePickerExpanded] = useState(false);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
+  const [isWeatherExpanded, setIsWeatherExpanded] = useState(false);
+  const [weeklyForecast, setWeeklyForecast] = useState<any[]>([]);
   
   // Weather animations
   const weatherIconAnim = useRef(new Animated.Value(1)).current;
@@ -93,6 +95,7 @@ export default function HomeScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const backgroundAnim = useRef(new Animated.Value(0)).current;
   const gradientAnim = useRef(new Animated.Value(0)).current;
+  const expandAnim = useRef(new Animated.Value(0)).current;
   
   const dispatch = useDispatch();
   
@@ -361,6 +364,30 @@ export default function HomeScreen() {
     });
   };
 
+  const handleWeatherCardPress = () => {
+    if (!isWeatherExpanded) {
+      // Generate mock weekly forecast data
+      const mockForecast = [
+        { day: 'Mon', temp: 28, condition: 'Clear', icon: '01d' },
+        { day: 'Tue', temp: 26, condition: 'Cloudy', icon: '03d' },
+        { day: 'Wed', temp: 24, condition: 'Rain', icon: '10d' },
+        { day: 'Thu', temp: 27, condition: 'Clear', icon: '01d' },
+        { day: 'Fri', temp: 29, condition: 'Sunny', icon: '01d' },
+        { day: 'Sat', temp: 25, condition: 'Cloudy', icon: '03d' },
+        { day: 'Sun', temp: 30, condition: 'Clear', icon: '01d' },
+      ];
+      setWeeklyForecast(mockForecast);
+    }
+    
+    setIsWeatherExpanded(!isWeatherExpanded);
+    
+    Animated.timing(expandAnim, {
+      toValue: isWeatherExpanded ? 0 : 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+
   return (
     <SafeAreaWrapper backgroundColor="#f5f5f5" style={{ flex: 1 }}>
       <Image source={backgroundImg} style={styles.backgroundImage} resizeMode="cover" />
@@ -461,90 +488,134 @@ export default function HomeScreen() {
         {/* Climate Card */}
         <View style={styles.climateSection}>
           <Text style={styles.sectionTitle}>Weather & Climate</Text>
-          <Animated.View 
-            style={[
-              styles.climateCard,
-              {
-                transform: [{ scale: pulseAnim }],
-                shadowOpacity: cardGlowAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.1, 0.3],
-                }),
-                shadowRadius: cardGlowAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [4, 12],
-                }),
-                backgroundColor: backgroundAnim.interpolate({
-                  inputRange: [0, 0.5, 1],
-                  outputRange: ['white', '#f0f0f0', '#e3f2fd'],
-                }),
-                borderColor: gradientAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['transparent', COLORS.PRIMARY.LIGHT],
-                }),
-                borderWidth: gradientAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 1],
-                }),
-              }
-            ]}
+          <TouchableOpacity 
+            activeOpacity={0.9}
+            onPress={handleWeatherCardPress}
+            style={styles.climateCardWrapper}
           >
-            {weatherLoading ? (
-              <View style={styles.climateLoading}>
-                <Text style={styles.climateLoadingText}>Loading weather data...</Text>
-              </View>
-            ) : weatherData ? (
-              <View style={styles.climateContent}>
-                <View style={styles.climateHeader}>
-                  <Animated.View 
-                    style={[
-                      styles.weatherIconContainer,
-                      {
-                        transform: [
-                          { scale: weatherIconAnim },
-                          { rotate: weatherIconAnim.interpolate({
-                            inputRange: [0.8, 1.1],
-                            outputRange: ['0deg', '360deg'],
-                          })}
-                        ],
-                      }
-                    ]}
-                  >
+            <Animated.View 
+              style={[
+                styles.climateCard,
+                {
+                  transform: [{ scale: pulseAnim }],
+                  shadowOpacity: cardGlowAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.1, 0.3],
+                  }),
+                  shadowRadius: cardGlowAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [4, 12],
+                  }),
+                  backgroundColor: backgroundAnim.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: ['white', '#f0f0f0', '#e3f2fd'],
+                  }),
+                  borderColor: gradientAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['transparent', COLORS.PRIMARY.LIGHT],
+                  }),
+                  borderWidth: gradientAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 1],
+                  }),
+                }
+              ]}
+            >
+              {weatherLoading ? (
+                <View style={styles.climateLoading}>
+                  <Text style={styles.climateLoadingText}>Loading weather data...</Text>
+                </View>
+              ) : weatherData ? (
+                <View style={styles.climateContent}>
+                  <View style={styles.climateHeader}>
+                    <Animated.View 
+                      style={[
+                        styles.weatherIconContainer,
+                        {
+                          transform: [
+                            { scale: weatherIconAnim },
+                            { rotate: weatherIconAnim.interpolate({
+                              inputRange: [0.8, 1.1],
+                              outputRange: ['0deg', '360deg'],
+                            })}
+                          ],
+                        }
+                      ]}
+                    >
                     <Ionicons 
                       name={ClimateService.getWeatherIcon(weatherData.icon)} 
-                      size={28} 
+                      size={32} 
                       color={COLORS.PRIMARY.MAIN} 
                     />
-                  </Animated.View>
-                  <View style={styles.mainWeatherInfo}>
-                    <Text style={styles.temperatureText}>{weatherData.temperature}°</Text>
-                    <Text style={styles.conditionText}>{weatherData.condition}</Text>
-                  </View>
-                  <View style={styles.weatherMetrics}>
-                    <View style={styles.metricItem}>
-                      <Ionicons name="water-outline" size={14} color={COLORS.TEXT.SECONDARY} />
-                      <Text style={styles.metricText}>{weatherData.humidity}%</Text>
+                    </Animated.View>
+                    <View style={styles.mainWeatherInfo}>
+                      <Text style={styles.temperatureText}>{weatherData.temperature}°</Text>
+                      <Text style={styles.conditionText}>{weatherData.condition}</Text>
                     </View>
-                    <View style={styles.metricItem}>
-                      <Ionicons name="speedometer-outline" size={14} color={COLORS.TEXT.SECONDARY} />
-                      <Text style={styles.metricText}>{weatherData.windSpeed}</Text>
+                    <View style={styles.weatherMetrics}>
+                      <View style={styles.metricItem}>
+                        <Ionicons name="water-outline" size={14} color={COLORS.TEXT.SECONDARY} />
+                        <Text style={styles.metricText}>{weatherData.humidity}%</Text>
+                      </View>
+                      <View style={styles.metricItem}>
+                        <Ionicons name="speedometer-outline" size={14} color={COLORS.TEXT.SECONDARY} />
+                        <Text style={styles.metricText}>{weatherData.windSpeed}</Text>
+                      </View>
                     </View>
+                    <Ionicons 
+                      name={isWeatherExpanded ? "chevron-up" : "chevron-down"} 
+                      size={16} 
+                      color={COLORS.TEXT.SECONDARY} 
+                    />
                   </View>
                 </View>
-                <View style={styles.weatherAdvice}>
-                  <Ionicons name="bulb-outline" size={14} color={COLORS.PRIMARY.MAIN} />
-                  <Text style={styles.adviceText}>
-                    {ClimateService.getWeatherAdvice(weatherData.condition, weatherData.temperature)}
-                  </Text>
+              ) : (
+                <View style={styles.climateError}>
+                  <Ionicons name="cloud-offline-outline" size={24} color={COLORS.TEXT.SECONDARY} />
+                  <Text style={styles.climateErrorText}>Weather data unavailable</Text>
                 </View>
-              </View>
-            ) : (
-              <View style={styles.climateError}>
-                <Ionicons name="cloud-offline-outline" size={24} color={COLORS.TEXT.SECONDARY} />
-                <Text style={styles.climateErrorText}>Weather data unavailable</Text>
-              </View>
-            )}
-          </Animated.View>
+              )}
+            </Animated.View>
+            
+            {/* Weekly Forecast */}
+            <Animated.View 
+              style={[
+                styles.weeklyForecastContainer,
+                {
+                  maxHeight: expandAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 140],
+                  }),
+                  opacity: expandAnim,
+                  transform: [{
+                    translateY: expandAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-10, 0],
+                    })
+                  }],
+                }
+              ]}
+            >
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.forecastScrollContent}
+              >
+                {weeklyForecast.map((day, index) => (
+                  <View key={index} style={styles.forecastDay}>
+                    <Text style={styles.forecastDayText}>{day.day}</Text>
+                    <Ionicons 
+                      name={ClimateService.getWeatherIcon(day.icon)} 
+                      size={24} 
+                      color={COLORS.PRIMARY.MAIN} 
+                    />
+                    <Text style={styles.forecastTempText}>{day.temp}°</Text>
+                    <Text style={styles.forecastConditionText}>{day.condition}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </Animated.View>
+          </TouchableOpacity>
         </View>
 
        <View style={styles.ctaSection}>
@@ -552,9 +623,9 @@ export default function HomeScreen() {
         <View style={styles.ctaCardsRow}>
           <TouchableOpacity style={styles.ctaCard} activeOpacity={0.8}>
             <View style={styles.ctaContent}>
-              <Text style={styles.ctaTitle}>Need mechanical{
+              <Text style={styles.ctaTitle}>Need mechanical {
 }help?</Text>
-              <Text style={styles.ctaSubtitle}>Find nearby{
+              <Text style={styles.ctaSubtitle}>Find nearby {
 }tractor</Text>
               <TouchableOpacity style={styles.ctaButton} activeOpacity={0.7}>
                 <Text style={styles.ctaButtonText}>Explore</Text>
@@ -750,7 +821,7 @@ const styles = StyleSheet.create({
   },
   ctaSection: {
     paddingHorizontal: SPACING.MD,
-    marginTop: SPACING.XL,
+    marginTop: SPACING.MD,
   },
   quickServicesTitle: {
     fontSize: 16,
@@ -828,9 +899,9 @@ const styles = StyleSheet.create({
   },
   climateCard: {
     backgroundColor: 'white',
-    borderRadius: BORDER_RADIUS.LG,
-    padding: SPACING.MD,
-    ...SHADOWS.SM,
+    borderRadius: BORDER_RADIUS.XL,
+    padding: SPACING.SM,
+    ...SHADOWS.MD,
   },
   climateLoading: {
     alignItems: 'center',
@@ -850,57 +921,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   weatherIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 56,
+    height: 46,
+    borderRadius: 28,
     backgroundColor: COLORS.PRIMARY.LIGHT,
     justifyContent: 'center',
     alignItems: 'center',
+    ...SHADOWS.SM,
   },
   mainWeatherInfo: {
     flex: 1,
-    marginLeft: SPACING.SM,
+    marginLeft: SPACING.MD,
+    flexShrink: 1,
   },
   temperatureText: {
-    fontSize: 20,
+    fontSize: 28,
     fontFamily: FONTS.POPPINS.BOLD,
     color: COLORS.TEXT.PRIMARY,
+    lineHeight: 32,
   },
   conditionText: {
-    fontSize: 12,
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.SECONDARY,
     textTransform: 'capitalize',
+    marginTop: 2,
   },
   weatherMetrics: {
     alignItems: 'flex-end',
-    gap: 4,
+    gap: SPACING.SM,
+    flexShrink: 0,
   },
   metricItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: SPACING.XS,
+    backgroundColor: COLORS.BACKGROUND.CARD,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.SM,
   },
   metricText: {
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.SECONDARY,
   },
-  weatherAdvice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.XS,
-    paddingTop: SPACING.SM,
-    borderTopWidth: 0.5,
-    borderTopColor: COLORS.BORDER.PRIMARY,
-  },
-  adviceText: {
-    flex: 1,
-    fontSize: 10,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
-    lineHeight: 12,
-  },
+  
   climateError: {
     alignItems: 'center',
     paddingVertical: SPACING.SM,
@@ -910,5 +976,50 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
     marginTop: SPACING.XS,
+  },
+  // Weekly Forecast Styles
+  climateCardWrapper: {
+    overflow: 'hidden',
+    borderRadius: BORDER_RADIUS.XL,
+    ...SHADOWS.MD,
+  },
+  weeklyForecastContainer: {
+    backgroundColor: COLORS.BACKGROUND.CARD,
+    borderTopWidth: 0.5,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+    overflow: 'hidden',
+    minHeight: 0,
+  },
+  forecastScrollContent: {
+    paddingVertical: SPACING.SM,
+    gap: SPACING.SM,
+  },
+  forecastDay: {
+    alignItems: 'center',
+    minWidth: 67,
+    paddingVertical: SPACING.SM,
+    backgroundColor: 'white',
+    borderRadius: BORDER_RADIUS.MD,
+    paddingHorizontal: SPACING.SM,
+    ...SHADOWS.SM,
+  },
+  forecastDayText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.SM,
+  },
+  forecastTempText: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.BOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginTop: SPACING.SM,
+  },
+  forecastConditionText: {
+    fontSize: 10,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    textAlign: 'center',
+    marginTop: 4,
   },
 });
