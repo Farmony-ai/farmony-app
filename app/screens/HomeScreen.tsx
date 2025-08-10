@@ -17,7 +17,7 @@ import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import LocationService from '../services/locationService';
-
+import ClimateService, { WeatherData } from '../services/ClimateService';
 
 import SmartDatePicker from '../components/SmartDatePicker';
 import ExpandableSearchFilter from '../components/ExpandableSearchFilter';
@@ -84,6 +84,8 @@ export default function HomeScreen() {
   const headerHeightAnim = useRef(new Animated.Value(INITIAL_HEADER_HEIGHT)).current;
   const [categories, setCategories] = useState<Category[]>([]);
   const [isDatePickerExpanded, setIsDatePickerExpanded] = useState(false);
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
   
   const dispatch = useDispatch();
   
@@ -112,6 +114,23 @@ export default function HomeScreen() {
     };
     fetchCategories();
   }, []);
+
+  useEffect(() => {
+    const fetchWeatherData = async () => {
+      if (latitude && longitude) {
+        setWeatherLoading(true);
+        try {
+          const data = await ClimateService.getWeatherData(latitude, longitude);
+          setWeatherData(data);
+        } catch (error) {
+          console.error('Error fetching weather data:', error);
+        } finally {
+          setWeatherLoading(false);
+        }
+      }
+    };
+    fetchWeatherData();
+  }, [latitude, longitude]);
 
   const handleFilterToggle = (expanded: boolean, filterContentHeight: number) => {
     const targetHeaderHeight = expanded
@@ -254,6 +273,55 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
           </ScrollView>
+        </View>
+
+        {/* Climate Card */}
+        <View style={styles.climateSection}>
+          <Text style={styles.sectionTitle}>Weather & Climate</Text>
+          <View style={styles.climateCard}>
+            {weatherLoading ? (
+              <View style={styles.climateLoading}>
+                <Text style={styles.climateLoadingText}>Loading weather data...</Text>
+              </View>
+            ) : weatherData ? (
+              <View style={styles.climateContent}>
+                <View style={styles.climateHeader}>
+                  <View style={styles.weatherIconContainer}>
+                    <Ionicons 
+                      name={ClimateService.getWeatherIcon(weatherData.icon)} 
+                      size={28} 
+                      color={COLORS.PRIMARY.MAIN} 
+                    />
+                  </View>
+                  <View style={styles.mainWeatherInfo}>
+                    <Text style={styles.temperatureText}>{weatherData.temperature}°</Text>
+                    <Text style={styles.conditionText}>{weatherData.condition}</Text>
+                  </View>
+                  <View style={styles.weatherMetrics}>
+                    <View style={styles.metricItem}>
+                      <Ionicons name="water-outline" size={14} color={COLORS.TEXT.SECONDARY} />
+                      <Text style={styles.metricText}>{weatherData.humidity}%</Text>
+                    </View>
+                    <View style={styles.metricItem}>
+                      <Ionicons name="speedometer-outline" size={14} color={COLORS.TEXT.SECONDARY} />
+                      <Text style={styles.metricText}>{weatherData.windSpeed}</Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.weatherAdvice}>
+                  <Ionicons name="bulb-outline" size={14} color={COLORS.PRIMARY.MAIN} />
+                  <Text style={styles.adviceText}>
+                    {ClimateService.getWeatherAdvice(weatherData.condition, weatherData.temperature)}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.climateError}>
+                <Ionicons name="cloud-offline-outline" size={24} color={COLORS.TEXT.SECONDARY} />
+                <Text style={styles.climateErrorText}>Weather data unavailable</Text>
+              </View>
+            )}
+          </View>
         </View>
 
        <View style={styles.ctaSection}>
@@ -529,5 +597,95 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.SECONDARY.LIGHT,
     borderRadius: BORDER_RADIUS.LG,
+  },
+  // Climate Card Styles
+  climateSection: {
+    paddingHorizontal: SPACING.MD,
+    marginTop: SPACING.LG,
+  },
+  climateCard: {
+    backgroundColor: 'white',
+    borderRadius: BORDER_RADIUS.LG,
+    padding: SPACING.MD,
+    ...SHADOWS.SM,
+  },
+  climateLoading: {
+    alignItems: 'center',
+    paddingVertical: SPACING.SM,
+  },
+  climateLoadingText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  climateContent: {
+    gap: SPACING.SM,
+  },
+  climateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  weatherIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mainWeatherInfo: {
+    flex: 1,
+    marginLeft: SPACING.SM,
+  },
+  temperatureText: {
+    fontSize: 20,
+    fontFamily: FONTS.POPPINS.BOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  conditionText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.SECONDARY,
+    textTransform: 'capitalize',
+  },
+  weatherMetrics: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  metricItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  metricText: {
+    fontSize: 10,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  weatherAdvice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.XS,
+    paddingTop: SPACING.SM,
+    borderTopWidth: 0.5,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+  },
+  adviceText: {
+    flex: 1,
+    fontSize: 10,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    lineHeight: 12,
+  },
+  climateError: {
+    alignItems: 'center',
+    paddingVertical: SPACING.SM,
+  },
+  climateErrorText: {
+    fontSize: 11,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginTop: SPACING.XS,
   },
 });
