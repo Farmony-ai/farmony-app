@@ -43,6 +43,7 @@ const ProviderScreen = () => {
         icon: 'calendar',
         bgColor: '#fff3e0',
         iconColor: '#f57c00',
+        onPress: () => navigation.navigate('ProviderBookings'),
       },
       {
         label: 'Listings',
@@ -50,16 +51,28 @@ const ProviderScreen = () => {
         icon: 'list',
         bgColor: '#fff3e0',
         iconColor: '#f57c00',
+        onPress: () => navigation.navigate('MyListings'),
       },
+      
       {
         label: 'Rating',
         value: String(summary?.averageRating ?? 0),
         icon: 'star',
         bgColor: '#fff3e0',
         iconColor: '#f57c00',
+        onPress: () => {}, // No action for rating
       },
+      {
+        label: 'Listing',
+        value: 'Add',
+        icon: 'add-circle',
+        bgColor: '#fff3e0',
+        iconColor: '#f57c00',
+        onPress: () => navigation.navigate('CreateListing'),
+      },
+      
     ];
-  }, [dashboard]);
+  }, [dashboard, navigation]);
 
   // quickActions placeholder removed (inline JSX is used)
 
@@ -137,67 +150,55 @@ const ProviderScreen = () => {
           <View style={styles.headerCircle} />
         </View>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Horizontal ScrollView */}
         <View style={styles.statsContainer}>
-          {stats.map((stat, index) => (
-            <View key={index} style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: stat.bgColor }]}>
-                <Ionicons name={stat.icon as any} size={18} color={stat.iconColor} />
-              </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </View>
-          ))}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statsScrollContent}
+          >
+            {stats.map((stat, index) => (
+              <TouchableOpacity 
+                key={index} 
+                style={styles.statCard}
+                onPress={stat.onPress}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.statIconContainer, { backgroundColor: stat.bgColor }]}>
+                  <Ionicons name={stat.icon as any} size={18} color={stat.iconColor} />
+                </View>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel}>{stat.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Quick Actions
-          </Text>
-          <View style={styles.quickActionsContainer}>
-            <View style={styles.quickActionsGrid}>
-              <TouchableOpacity 
-                style={styles.quickActionItem}
-                onPress={() => navigation.navigate('CreateListing')}
-              >
-                <View style={styles.quickActionIconWrapper}>
+        {/* Create First Listing Card - Shows when user has 0 listings */}
+        {(dashboard?.summary?.activeListings || 0) === 0 && (
+          <View style={styles.section}>
+            <TouchableOpacity 
+              style={styles.createListingCard}
+              onPress={() => navigation.navigate('CreateListing')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.createListingContent}>
+                <View style={styles.createListingIconBadge}>
                   <Ionicons name="add-circle-outline" size={28} color={COLORS.PRIMARY.MAIN} />
                 </View>
-                <Text style={styles.quickActionLabel}>Add New</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.quickActionItem}
-                onPress={() => navigation.navigate('MyListings')}
-              >
-                <View style={styles.quickActionIconWrapper}>
-                  <Ionicons name="document-text-outline" size={26} color={COLORS.PRIMARY.MAIN} />
+                <View style={styles.createListingText}>
+                  <Text style={styles.createListingTitle}>Create Your First Listing</Text>
+                  <Text style={styles.createListingSubtitle}>Start earning by offering your services to customers</Text>
                 </View>
-                <Text style={styles.quickActionLabel}>My Listings</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.quickActionItem}  onPress={() => navigation.navigate('ProviderBookings')}>
-                <View style={styles.quickActionIconWrapper}>
-                  <Ionicons name="calendar-outline" size={26} color={COLORS.PRIMARY.MAIN} />
-                </View>
-                <Text style={styles.quickActionLabel}>Bookings</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.quickActionItem}>
-                <View style={styles.quickActionIconWrapper}>
-                  <Ionicons name="bar-chart-outline" size={28} color={COLORS.PRIMARY.MAIN} />
-                </View>
-                <Text style={styles.quickActionLabel}>Analytics</Text>
-              </TouchableOpacity>
-            </View>
+              </View>
+            </TouchableOpacity>
           </View>
-        </View>
+        )}
 
-        {/* Recent Bookings */}
+        {/* Upcoming Bookings */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Bookings</Text>
+            <Text style={styles.sectionTitle}>Upcoming Bookings</Text>
             {(dashboard?.recentBookings?.length || 0) > 0 && (
               <TouchableOpacity onPress={() => navigation.navigate('ProviderBookings')}>
                 <Text style={styles.viewAllText}>View All</Text>
@@ -210,8 +211,8 @@ const ProviderScreen = () => {
               <View style={styles.emptyIconBadge}>
                 <Ionicons name="calendar-clear-outline" size={24} color={COLORS.PRIMARY.MAIN} />
               </View>
-              <Text style={styles.emptyTitle}>No recent bookings</Text>
-              <Text style={styles.emptySubtitle}>New bookings will appear here as customers book your listings.</Text>
+              <Text style={styles.emptyTitle}>No upcoming bookings</Text>
+              <Text style={styles.emptySubtitle}>You don't have any scheduled bookings at the moment. Check back later for new bookings.</Text>
               <Button
                 title="Go to Bookings"
                 variant="outline"
@@ -335,14 +336,15 @@ const styles = StyleSheet.create({
     borderRadius: 125,
   },
   statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
     marginTop: -90,
-    gap: 12,
     zIndex: 10,
   },
+  statsScrollContent: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
   statCard: {
-    flex: 1,
+    width: 100,
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 15,
     paddingVertical: 17,
@@ -395,35 +397,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.PRIMARY.MAIN,
   },
-  quickActionsContainer: {
-    marginTop: 16,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    
-  },
-  quickActionItem: {
-    alignItems: 'center',
-    width: '25%',
-    marginBottom: 12,
-    // backgroundColor: COLORS.NEUTRAL.WHITE,
-    // borderRadius: BORDER_RADIUS.MD,
-  },
-  quickActionIconWrapper: {
-    width: 56,
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  quickActionLabel: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
   bookingCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 16,
@@ -464,6 +437,42 @@ const styles = StyleSheet.create({
   },
   emptyCta: {
     paddingHorizontal: 14,
+  },
+  createListingCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 15,
+    ...SHADOWS.MD,
+  },
+  createListingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  createListingIconBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  createListingText: {
+    flex: 1,
+  },
+  createListingTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 4,
+  },
+  createListingSubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: '#6B7280',
+    lineHeight: 18,
   },
   bookingHeader: {
     flexDirection: 'row',
