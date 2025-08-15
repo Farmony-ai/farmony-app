@@ -98,8 +98,13 @@ class LocationService {
   }
 
   async getCurrentLocation(): Promise<LocationData | null> {
+    await this.ensureAppIsActive(); // Wait for app to be active
+    if (AppState.currentState !== 'active') {
+      console.log('LocationService: App is not active, skipping location fetch.');
+      return null;
+    }
+
     try {
-      await this.ensureAppIsActive(); // Wait for app to be active
       const hasPermission = await this.requestLocationPermission();
       if (!hasPermission) {
         console.log('LocationService: Location permission denied');

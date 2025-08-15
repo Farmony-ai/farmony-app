@@ -30,10 +30,7 @@ export default function DateCards({ selectedDate, onDateSelect, onMorePress }: D
     return dates;
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+
 
   const dates = getNextFiveDays();
 

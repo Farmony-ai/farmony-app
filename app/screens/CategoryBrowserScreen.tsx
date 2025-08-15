@@ -20,7 +20,8 @@ import Text from '../components/Text';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '../store';
 import CatalogueService from '../services/CatalogueService';
 import { setCategory, setSubCategory } from '../store/slices/listingSlice';
 
@@ -104,6 +105,10 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const { selectedCategoryId } = route.params || {};
+
+  // Get location and date range from Redux
+  const { latitude, longitude, radius } = useSelector((state: RootState) => state.location);
+  const { startDate, endDate } = useSelector((state: RootState) => state.date);
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -265,7 +270,15 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
       ]).start(() => {
         dispatch(setCategory(selectedCategory._id));
         dispatch(setSubCategory(subCategory._id));
-        navigation.navigate('Listings');
+        navigation.navigate('SearchResults', {
+          categoryId: selectedCategory._id,
+          subCategoryId: subCategory._id,
+          searchQuery: searchQuery, // Pass existing search query if any
+          dateRange: { startDate, endDate }, // Pass existing date range if any
+          latitude: latitude, // Pass latitude from Redux
+          longitude: longitude, // Pass longitude from Redux
+          radius: radius, // Pass radius from Redux
+        });
       });
     }
   };

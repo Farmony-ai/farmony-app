@@ -9,15 +9,12 @@ import Text from '../components/Text'; // Custom Text component
 import { COLORS, BORDER_RADIUS, SHADOWS } from '../utils'; // Your theme constants
 
 import ProfileScreen from '../screens/ProfileScreen';
+import BookingsScreen from '../screens/BookingsScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 
 const Tab = createBottomTabNavigator();
 
-function PlaceholderScreen({ label }: { label: string }) {
-  return <Text style={{ flex: 1, textAlign: 'center', marginTop: 100 }}>{label} Screen</Text>;
-}
-
-const BookingsScreen = () => <PlaceholderScreen label="Bookings" />;
-const NotificationsScreen = () => <PlaceholderScreen label="Notifications" />;
+// Removed unused placeholder screen
 
 export default function BottomTabNavigator() {
   const [defaultTab, setDefaultTab] = useState<'seeker' | 'provider'>('seeker');
@@ -46,7 +43,7 @@ export default function BottomTabNavigator() {
   return (
     <Tab.Navigator
       initialRouteName={defaultTab === 'provider' ? 'Provider' : 'Seeker'}
-      screenOptions={({ route }) => ({
+      screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: {
@@ -65,71 +62,46 @@ export default function BottomTabNavigator() {
           borderTopWidth: 0,
           elevation: 8,
         },
-        tabBarIcon: ({ focused }) => {
-          let iconName = '';
-          let label = '';
-
-          if (route.name === 'Seeker') {
-            iconName = 'search-outline';
-            label = 'Seeker';
-          } else if (route.name === 'Provider') {
-            iconName = 'briefcase-outline';
-            label = 'Provider';
-          } else if (route.name === 'Bookings') {
-            iconName = 'calendar-outline';
-            label = 'Bookings';
-          } else if (route.name === 'Notifications') {
-            iconName = 'notifications-outline';
-            label = 'Notifications';
-          } else if (route.name === 'Profile') {
-            iconName = 'person-outline';
-            label = 'Profile';
-          }
-
-          return (
-            <View
-              style={{
-                flexDirection: 'column',
-                backgroundColor: focused ? COLORS.PRIMARY.MAIN : 'transparent',
-                paddingHorizontal: focused ? 5 : 0,
-                paddingVertical: focused ? 2 : 0,
-                borderRadius: 20,
-                alignItems: 'center',
-                justifyContent: 'center',
-                minWidth: focused ? 100 : undefined,
-                maxHeight: 60,
-                minHeight: 60,
-                marginLeft: 5,
-                alignSelf: 'center',
-              }}
-            >
-              <Ionicons
-                name={iconName}
-                size={20}
-                color={focused ? COLORS.BACKGROUND.NAV : COLORS.TEXT.SECONDARY}
-              />
-              {focused && (
-                <Text
-                  style={{
-                    color: COLORS.BACKGROUND.NAV,
-                    marginLeft: 6,
-                    fontSize: 12,
-                    fontWeight: '600',
-                  }}
-                >
-                  {label}
-                </Text>
-              )}
-            </View>
-          );
-        },
-      })}
+      }}
     >
-      <Tab.Screen name="Seeker" component={HomeScreen} />
-      <Tab.Screen name="Provider" component={ProviderNavigator} />
-      <Tab.Screen name="Bookings" component={BookingsScreen} />
-      <Tab.Screen name="Notifications" component={NotificationsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Seeker" component={HomeScreen} options={{ tabBarIcon: ({ focused }) => renderIcon('search-outline', 'Seeker', focused) }} />
+      <Tab.Screen name="Provider" component={ProviderNavigator} options={{ tabBarIcon: ({ focused }) => renderIcon('briefcase-outline', 'Provider', focused) }} />
+      <Tab.Screen name="Bookings" component={BookingsScreen} options={{ tabBarIcon: ({ focused }) => renderIcon('calendar-outline', 'Bookings', focused) }} />
+      <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ tabBarIcon: ({ focused }) => renderIcon('notifications-outline', 'Notifications', focused) }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: ({ focused }) => renderIcon('person-outline', 'Profile', focused) }} />
     </Tab.Navigator>
+  );
+}
+
+function renderIcon(iconName: string, label: string, focused: boolean) {
+  const wrapperStyle = {
+    flexDirection: 'column' as const,
+    backgroundColor: focused ? COLORS.PRIMARY.MAIN : 'transparent',
+    paddingHorizontal: focused ? 5 : 0,
+    paddingVertical: focused ? 2 : 0,
+    borderRadius: 20,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    minWidth: focused ? 100 : undefined,
+    maxHeight: 60,
+    minHeight: 60,
+    marginLeft: 5,
+    alignSelf: 'center' as const,
+  };
+  const labelStyle = {
+    color: COLORS.BACKGROUND.NAV,
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: '600' as const,
+  };
+  return (
+    <View style={wrapperStyle}>
+      <Ionicons
+        name={iconName as any}
+        size={20}
+        color={focused ? COLORS.BACKGROUND.NAV : COLORS.TEXT.SECONDARY}
+      />
+      {focused && <Text style={labelStyle}>{label}</Text>}
+    </View>
   );
 }

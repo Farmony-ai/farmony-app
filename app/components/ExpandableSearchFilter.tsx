@@ -17,7 +17,7 @@ export default function ExpandableSearchFilter({ onToggleExpand }: { onToggleExp
   const animatedHeight = useRef(new Animated.Value(0)).current;
   const contentOpacityAnim = useRef(new Animated.Value(0)).current;
   const dispatch = useDispatch();
-  const { startDate, endDate } = useSelector((state: RootState) => state.dateRange);
+  const { startDate, endDate } = useSelector((state: RootState) => state.date);
   const dotAnimation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -52,13 +52,15 @@ export default function ExpandableSearchFilter({ onToggleExpand }: { onToggleExp
   }, []);
 
   const getCurrentContentHeight = () => {
-    return showDatePicker ? datePickerHeight : dateCardsHeight;
+    const height = showDatePicker ? datePickerHeight : dateCardsHeight;
+    console.log('getCurrentContentHeight - showDatePicker:', showDatePicker, 'height:', height);
+    return height;
   };
 
   const toggleExpand = () => {
     const currentHeight = getCurrentContentHeight();
-    if (currentHeight === 0) return;
-
+    console.log('toggleExpand - currentHeight:', currentHeight, 'dateCardsHeight:', dateCardsHeight);
+    
     const newExpandedState = !expanded;
     setExpanded(newExpandedState);
 
@@ -68,10 +70,15 @@ export default function ExpandableSearchFilter({ onToggleExpand }: { onToggleExp
       // Reset height to 0 first to ensure clean animation
       animatedHeight.setValue(0);
       contentOpacityAnim.setValue(0); // Also reset opacity
+      
+      // Use a minimum height if measurement failed
+      const targetHeight = dateCardsHeight > 0 ? dateCardsHeight : 200;
+      console.log('Expanding to height:', targetHeight);
+      
       Animated.parallel([
-        Animated.timing(animatedHeight, { toValue: dateCardsHeight, duration: 300, useNativeDriver: false }),
+        Animated.timing(animatedHeight, { toValue: targetHeight, duration: 300, useNativeDriver: false }),
         Animated.timing(contentOpacityAnim, { toValue: 1, duration: 200, delay: 100, useNativeDriver: true }),
-      ]).start(() => onToggleExpand(true, dateCardsHeight));
+      ]).start(() => onToggleExpand(true, targetHeight));
     } else {
       Animated.sequence([
         Animated.timing(contentOpacityAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
@@ -271,7 +278,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: BORDER_RADIUS.MD,
     marginTop: SPACING['XL'],
-    marginBottom: 0, // Removed bottom margin completely
+    marginBottom: -20, // Removed bottom margin completely
     marginHorizontal: SPACING.MD,
   },
   header: {

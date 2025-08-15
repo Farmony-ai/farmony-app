@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+/* eslint-disable react-hooks/rules-of-hooks */
+import React, { useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,86 +8,34 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import ListingService from '../services/ListingService';
-import DateTimePicker from '@react-native-community/datetimepicker';
-
-interface ListingDetail {
-  _id: string;
-  title: string;
-  description: string;
-  photos: string[];
-  price: number;
-  unitOfMeasure: string;
-  minimumOrder: number;
-  isActive: boolean;
-  tags: string[];
-  viewCount: number;
-  bookingCount: number;
-  availableFrom: string;
-  availableTo: string;
-  createdAt: string;
-  location: {
-    type: string;
-    coordinates: number[];
-  };
-  providerId: {
-    _id: string;
-    name: string;
-    email: string;
-    phone: string;
-  };
-  categoryId: {
-    _id: string;
-    name: string;
-    icon: string;
-  };
-  subCategoryId: {
-    _id: string;
-    name: string;
-  };
-}
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+import ListingService, { PopulatedListing } from '../services/ListingService';
 
 const ListingDetailScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { listingId } = route.params;
+  const { token } = useSelector((state: RootState) => state.auth);
 
-  const [listing, setListing] = useState<ListingDetail | null>(null);
+  const [listing, setListing] = useState<PopulatedListing | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editedData, setEditedData] = useState<any>({});
-  const [showFromDatePicker, setShowFromDatePicker] = useState(false);
-  const [showToDatePicker, setShowToDatePicker] = useState(false);
-  const [tagInput, setTagInput] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isToggling, setIsToggling] = useState(false);
 
-  useEffect(() => {
-    fetchListingDetail();
-  }, []);
-
-  const fetchListingDetail = async () => {
+  const fetchListingDetail = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await ListingService.getListingById(listingId);
+      const response = await ListingService.getListingById(listingId, token || undefined);
+      console.log("This is the response", response);
       setListing(response);
-      setEditedData({
-        title: response.title,
-        description: response.description,
-        price: response.price.toString(),
-        minimumOrder: response.minimumOrder.toString(),
-        tags: [...response.tags],
-        availableFrom: new Date(response.availableFrom),
-        availableTo: new Date(response.availableTo),
-        isActive: response.isActive,
-      });
     } catch (error) {
       console.error('Error fetching listing detail:', error);
       Alert.alert('Error', 'Failed to load listing details.');
@@ -94,7 +43,13 @@ const ListingDetailScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [listingId, token, navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchListingDetail();
+    }, [fetchListingDetail])
+  );
 
   const handleDelete = () => {
     Alert.alert(
@@ -108,7 +63,8 @@ const ListingDetailScreen = () => {
           onPress: async () => {
             try {
               setLoading(true);
-              await ListingService.deleteListing(listingId);
+              if (!token) throw new Error('Authentication token not found');
+              await ListingService.deleteListing(listingId, token);
               Alert.alert('Success', 'Listing deleted successfully', [
                 { text: 'OK', onPress: () => navigation.goBack() },
               ]);
@@ -120,76 +76,52 @@ const ListingDetailScreen = () => {
             }
           },
         },
-      ],
+      ]
     );
   };
 
-  const handleSave = async () => {
+  const handleEdit = () => {
+    setShowMenu(false);
+    navigation.navigate('CreateListing', { listingId: listing?._id });
+  };
+
+  const handleToggleStatus = async () => {
+    if (!listing || !token || isToggling) return;
+    
     try {
-      setLoading(true);
-      const updatePayload = {
-        title: editedData.title,
-        description: editedData.description,
-        price: parseFloat(editedData.price),
-        minimumOrder: parseInt(editedData.minimumOrder),
-        tags: editedData.tags,
-        availableFrom: editedData.availableFrom.toISOString().split('T')[0],
-        availableTo: editedData.availableTo.toISOString().split('T')[0],
-        isActive: editedData.isActive,
-      };
+      setIsToggling(true);
+      setShowMenu(false);
       
-      await ListingService.updateListing(listingId, updatePayload);
-      Alert.alert('Success', 'Listing updated successfully');
-      setIsEditMode(false);
-      fetchListingDetail(); // Refresh data
+      const newStatus = !listing.isActive;
+      await ListingService.toggleListingStatus(listing._id, newStatus, token);
+      
+      // Update the local state
+      setListing(prevListing => 
+        prevListing ? { ...prevListing, isActive: newStatus } : null
+      );
+      
+      Alert.alert(
+        'Success', 
+        `Listing has been ${newStatus ? 'activated' : 'deactivated'} successfully.`
+      );
     } catch (error) {
-      console.error('Error updating listing:', error);
-      Alert.alert('Error', 'Failed to update listing. Please try again.');
+      console.error('Error toggling listing status:', error);
+      Alert.alert('Error', 'Failed to update listing status. Please try again.');
     } finally {
-      setLoading(false);
+      setIsToggling(false);
     }
   };
 
-  const handleCancel = () => {
-    if (listing) {
-      setEditedData({
-        title: listing.title,
-        description: listing.description,
-        price: listing.price.toString(),
-        minimumOrder: listing.minimumOrder.toString(),
-        tags: [...listing.tags],
-        availableFrom: new Date(listing.availableFrom),
-        availableTo: new Date(listing.availableTo),
-        isActive: listing.isActive,
-      });
-    }
-    setIsEditMode(false);
-  };
-
-  const handleAddTag = () => {
-    if (tagInput.trim() && !editedData.tags.includes(tagInput.trim())) {
-      setEditedData({
-        ...editedData,
-        tags: [...editedData.tags, tagInput.trim()],
-      });
-      setTagInput('');
-    }
-  };
-
-  const handleRemoveTag = (index: number) => {
-    setEditedData({
-      ...editedData,
-      tags: editedData.tags.filter((_: string, i: number) => i !== index),
-    });
-  };
-
-  const formatDate = (date: Date | string) => {
-    const d = typeof date === 'string' ? new Date(date) : date;
-    return d.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+  const getUnitLabel = (unit: string) => {
+    const unitLabels: { [key: string]: string } = {
+        per_hour: '/hr',
+        per_day: '/day',
+        per_hectare: '/ha',
+        per_kg: '/kg',
+        per_unit: '/unit',
+        per_piece: '/piece',
+    };
+    return unitLabels[unit] || unit;
   };
 
   if (loading) {
@@ -206,559 +138,332 @@ const ListingDetailScreen = () => {
 
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
-          </TouchableOpacity>
-          <Text variant="h4" weight="semibold" style={styles.headerTitle}>
-            {isEditMode ? 'Edit Listing' : 'Listing Details'}
-          </Text>
-          {isEditMode ? (
-            <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-              <Text variant="body" weight="semibold" color={COLORS.PRIMARY.MAIN}>
-                Save
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
+        </TouchableOpacity>
+        <Text variant="h4" weight="semibold" style={styles.headerTitle}>
+          Listing Details
+        </Text>
+        <TouchableOpacity style={styles.menuButton} onPress={() => setShowMenu(!showMenu)}>
+          <Ionicons name="ellipsis-vertical" size={24} color={COLORS.TEXT.PRIMARY} />
+        </TouchableOpacity>
+        {showMenu && (
+          <View style={styles.menuDropdown}>
+            <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
+              <Ionicons name="create-outline" size={18} color={COLORS.TEXT.PRIMARY} />
+              <Text style={styles.menuText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.menuItem, isToggling && styles.menuItemDisabled]} 
+              onPress={handleToggleStatus}
+              disabled={isToggling}
+            >
+              <Ionicons 
+                name={listing?.isActive ? "pause-outline" : "play-outline"} 
+                size={18} 
+                color={listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN} 
+              />
+              <Text style={[styles.menuText, { 
+                color: listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN 
+              }]}>
+                {isToggling 
+                  ? 'Processing...' 
+                  : (listing?.isActive ? 'Deactivate' : 'Activate')
+                }
               </Text>
             </TouchableOpacity>
-          ) : (
-            <View style={{ width: 40 }} />
-          )}
-        </View>
-
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Image Gallery */}
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.imageGallery}
-          >
-            {listing.photos.map((photo, index) => (
-              <Image key={index} source={{ uri: photo }} style={styles.listingImage} />
-            ))}
-          </ScrollView>
-
-          {/* Basic Info */}
-          <View style={styles.section}>
-            {isEditMode ? (
-              <>
-                <Text style={styles.inputLabel}>Title</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={editedData.title}
-                  onChangeText={(text) => setEditedData({ ...editedData, title: text })}
-                  placeholder="Enter title"
-                />
-              </>
-            ) : (
-              <Text variant="h4" weight="bold" style={styles.title}>
-                {listing.title}
-              </Text>
-            )}
-
-            <View style={styles.metaContainer}>
-              <View style={styles.categoryBadge}>
-                <Ionicons name="pricetag-outline" size={16} color={COLORS.PRIMARY.MAIN} />
-                <Text variant="caption" color={COLORS.PRIMARY.MAIN} style={{ marginLeft: 4 }}>
-                  {listing.categoryId.name} • {listing.subCategoryId.name}
-                </Text>
-              </View>
-              <View style={[styles.statusBadge, !listing.isActive && styles.statusBadgeInactive]}>
-                <Text variant="caption" weight="medium" color={listing.isActive ? COLORS.PRIMARY.MAIN : '#6B7280'}>
-                  {listing.isActive ? 'Active' : 'Inactive'}
-                </Text>
-              </View>
-            </View>
-
-            {isEditMode ? (
-              <>
-                <Text style={styles.inputLabel}>Description</Text>
-                <TextInput
-                  style={[styles.textInput, styles.textArea]}
-                  value={editedData.description}
-                  onChangeText={(text) => setEditedData({ ...editedData, description: text })}
-                  placeholder="Enter description"
-                  multiline
-                  numberOfLines={4}
-                />
-              </>
-            ) : (
-              <Text variant="body" color={COLORS.TEXT.SECONDARY} style={styles.description}>
-                {listing.description}
-              </Text>
-            )}
+            <TouchableOpacity style={styles.menuItem} onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+              <Text style={[styles.menuText, { color: "#EF4444" }]}>Delete</Text>
+            </TouchableOpacity>
           </View>
+        )}
+      </View>
 
-          {/* Pricing */}
-          <View style={styles.section}>
-            <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-              Pricing Details
-            </Text>
-            <View style={styles.pricingContainer}>
-              {isEditMode ? (
-                <View style={styles.editRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.inputLabel}>Price</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={editedData.price}
-                      onChangeText={(text) => setEditedData({ ...editedData, price: text })}
-                      keyboardType="numeric"
-                      placeholder="0"
-                    />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: SPACING.SM }}>
-                    <Text style={styles.inputLabel}>Minimum Order</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={editedData.minimumOrder}
-                      onChangeText={(text) => setEditedData({ ...editedData, minimumOrder: text })}
-                      keyboardType="numeric"
-                      placeholder="1"
-                    />
-                  </View>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.priceItem}>
-                    <Text variant="body" color={COLORS.TEXT.SECONDARY}>Price</Text>
-                    <Text variant="h4" weight="bold" color={COLORS.PRIMARY.MAIN}>
-                      ₹{listing.price}/{listing.unitOfMeasure}
-                    </Text>
-                  </View>
-                  <View style={styles.priceItem}>
-                    <Text variant="body" color={COLORS.TEXT.SECONDARY}>Minimum Order</Text>
-                    <Text variant="h4" weight="semibold">
-                      {listing.minimumOrder} {listing.unitOfMeasure}
-                    </Text>
-                  </View>
-                </>
-              )}
-            </View>
-          </View>
-
-          {/* Availability */}
-          <View style={styles.section}>
-            <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-              Availability
-            </Text>
-            {isEditMode ? (
-              <View style={styles.dateContainer}>
-                <TouchableOpacity
-                  style={styles.dateInput}
-                  onPress={() => setShowFromDatePicker(true)}
-                >
-                  <Text variant="body" color={COLORS.TEXT.SECONDARY}>From</Text>
-                  <Text variant="body">{formatDate(editedData.availableFrom)}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dateInput}
-                  onPress={() => setShowToDatePicker(true)}
-                >
-                  <Text variant="body" color={COLORS.TEXT.SECONDARY}>To</Text>
-                  <Text variant="body">{formatDate(editedData.availableTo)}</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.dateContainer}>
-                <View style={styles.dateItem}>
-                  <Ionicons name="calendar-outline" size={20} color={COLORS.TEXT.SECONDARY} />
-                  <View style={{ marginLeft: SPACING.SM }}>
-                    <Text variant="caption" color={COLORS.TEXT.SECONDARY}>From</Text>
-                    <Text variant="body" weight="medium">{formatDate(listing.availableFrom)}</Text>
-                  </View>
-                </View>
-                <View style={styles.dateItem}>
-                  <Ionicons name="calendar-outline" size={20} color={COLORS.TEXT.SECONDARY} />
-                  <View style={{ marginLeft: SPACING.SM }}>
-                    <Text variant="caption" color={COLORS.TEXT.SECONDARY}>To</Text>
-                    <Text variant="body" weight="medium">{formatDate(listing.availableTo)}</Text>
-                  </View>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Tags */}
-          <View style={styles.section}>
-            <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-              Tags
-            </Text>
-            {isEditMode && (
-              <View style={styles.tagInputContainer}>
-                <TextInput
-                  style={[styles.textInput, { flex: 1 }]}
-                  value={tagInput}
-                  onChangeText={setTagInput}
-                  placeholder="Add tag"
-                  onSubmitEditing={handleAddTag}
-                  returnKeyType="done"
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {listing.photoUrls && listing.photoUrls.length > 0 ? (
+          <View style={styles.imageGalleryContainer}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.imageGallery}
+              onMomentumScrollEnd={(event) => {
+                const index = Math.round(event.nativeEvent.contentOffset.x / 400);
+                setCurrentImageIndex(index);
+              }}
+            >
+              {listing.photoUrls.map((photo, index) => (
+                <Image 
+                  key={index} 
+                  source={{ uri: typeof photo === 'string' ? photo : photo.uri }} 
+                  style={styles.listingImage} 
                 />
-                <TouchableOpacity style={styles.addTagButton} onPress={handleAddTag}>
-                  <Ionicons name="add" size={20} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
-            <View style={styles.tagsContainer}>
-              {editedData.tags.map((tag: string, index: number) => (
-                <View key={index} style={styles.tag}>
-                  <Text variant="body" color={COLORS.PRIMARY.MAIN}>
-                    {tag}
-                  </Text>
-                  {isEditMode && (
-                    <TouchableOpacity onPress={() => handleRemoveTag(index)}>
-                      <Ionicons name="close-circle" size={18} color={COLORS.PRIMARY.MAIN} />
-                    </TouchableOpacity>
-                  )}
-                </View>
               ))}
+            </ScrollView>
+            {listing.photoUrls.length > 1 && (
+              <View style={styles.paginationContainer}>
+                {listing.photoUrls.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.paginationDot,
+                      index === currentImageIndex && styles.paginationDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.noImageContainer}>
+            <Ionicons name="image-outline" size={64} color={COLORS.TEXT.SECONDARY} />
+            <Text style={styles.noImageText}>No images available</Text>
+          </View>
+        )}
+       
+
+        <View style={styles.section}>
+          <Text variant="h4" weight="bold" style={styles.title}>
+            {listing.subCategoryId.name}
+          </Text>
+          <View style={styles.metaContainer}>
+            <View style={styles.categoryBadge}>
+              <Ionicons name="pricetag-outline" size={16} color={COLORS.PRIMARY.MAIN} />
+              <Text variant="caption" color={COLORS.PRIMARY.MAIN} style={{ marginLeft: 4 }}>
+                {listing.categoryId.name}
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, !listing.isActive && styles.statusBadgeInactive]}>
+              <Text variant="caption" weight="medium" color={listing.isActive ? COLORS.PRIMARY.MAIN : '#6B7280'}>
+                {listing.isActive ? 'Active' : 'Inactive'}
+              </Text>
             </View>
           </View>
-
-          {/* Stats */}
-          {!isEditMode && (
-            <View style={styles.section}>
-              <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-                Statistics
-              </Text>
-              <View style={styles.statsContainer}>
-                <View style={styles.statCard}>
-                  <Ionicons name="eye-outline" size={24} color={COLORS.PRIMARY.MAIN} />
-                  <Text variant="h3" weight="bold" style={styles.statValue}>
-                    {listing.viewCount}
-                  </Text>
-                  <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-                    Views
-                  </Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Ionicons name="calendar-check-outline" size={24} color={COLORS.PRIMARY.MAIN} />
-                  <Text variant="h3" weight="bold" style={styles.statValue}>
-                    {listing.bookingCount}
-                  </Text>
-                  <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-                    Bookings
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Status Toggle in Edit Mode */}
-          {isEditMode && (
-            <View style={styles.section}>
-              <View style={styles.statusToggleContainer}>
-                <Text variant="body" weight="medium">Listing Status</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.statusToggle,
-                    editedData.isActive && styles.statusToggleActive,
-                  ]}
-                  onPress={() => setEditedData({ ...editedData, isActive: !editedData.isActive })}
-                >
-                  <Text
-                    variant="body"
-                    weight="medium"
-                    color={editedData.isActive ? '#fff' : COLORS.TEXT.SECONDARY}
-                  >
-                    {editedData.isActive ? 'Active' : 'Inactive'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </ScrollView>
-
-        {/* Date Pickers */}
-        {showFromDatePicker && (
-          <DateTimePicker
-            value={editedData.availableFrom}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, date) => {
-              setShowFromDatePicker(Platform.OS === 'ios');
-              if (date) setEditedData({ ...editedData, availableFrom: date });
-            }}
-          />
-        )}
-
-        {showToDatePicker && (
-          <DateTimePicker
-            value={editedData.availableTo}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, date) => {
-              setShowToDatePicker(Platform.OS === 'ios');
-              if (date) setEditedData({ ...editedData, availableTo: date });
-            }}
-          />
-        )}
-
-        {/* Action Buttons */}
-        <View style={styles.actionContainer}>
-          {isEditMode ? (
-            <>
-              <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-                <Text variant="body" weight="semibold" color={COLORS.TEXT.SECONDARY}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity style={styles.editButton} onPress={() => setIsEditMode(true)}>
-                <Ionicons name="create-outline" size={20} color="#fff" />
-                <Text variant="body" weight="semibold" color="#fff" style={{ marginLeft: 8 }}>
-                  Edit
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-                <Ionicons name="trash-outline" size={20} color="#fff" />
-                <Text variant="body" weight="semibold" color="#fff" style={{ marginLeft: 8 }}>
-                  Delete
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
+          <Text variant="body" color={COLORS.TEXT.SECONDARY} style={styles.description}>
+            {listing.description}
+          </Text>
         </View>
-      </KeyboardAvoidingView>
+
+        <View style={styles.section}>
+          <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
+            Pricing Details
+          </Text>
+          <View style={styles.pricingContainer}>
+            <View style={styles.priceItem}>
+              <Text variant="body" color={COLORS.TEXT.SECONDARY}>Price</Text>
+              <Text variant="h4" weight="bold" color={COLORS.PRIMARY.MAIN}>
+                ₹{listing.price}{getUnitLabel(listing.unitOfMeasure)}
+              </Text>
+            </View>
+            <View style={styles.priceItem}>
+              <Text variant="body" color={COLORS.TEXT.SECONDARY}>Minimum Order</Text>
+              <Text variant="h4" weight="semibold">
+                {listing.minimumOrder} {listing.unitOfMeasure.replace('per_', '')}(s)
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
+            Statistics
+          </Text>
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Ionicons name="eye-outline" size={24} color={COLORS.PRIMARY.MAIN} />
+              <Text variant="h3" weight="bold" style={styles.statValue}>
+                {listing.viewCount}
+              </Text>
+              <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
+                Views
+              </Text>
+            </View>
+            <View style={styles.statCard}>
+              <Ionicons name="calendar-check-outline" size={24} color={COLORS.PRIMARY.MAIN} />
+              <Text variant="h3" weight="bold" style={styles.statValue}>
+                {listing.bookingCount}
+              </Text>
+              <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
+                Bookings
+              </Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.TEXT.PRIMARY,
-  },
-  saveButton: {
-    paddingHorizontal: SPACING.MD,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-  imageGallery: {
-    height: 250,
-    backgroundColor: COLORS.BACKGROUND.CARD,
-  },
-  listingImage: {
-    width: 375, // Adjust based on screen width
-    height: 250,
-    resizeMode: 'cover',
-  },
-  section: {
-    padding: SPACING.MD,
-    backgroundColor: '#fff',
-    marginBottom: SPACING.SM,
-  },
-  title: {
-    marginBottom: SPACING.SM,
-    fontSize: 20,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.MD,
-  },
-  categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  statusBadge: {
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  statusBadgeInactive: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
-  },
-  description: {
-    lineHeight: 22,
-    fontSize: 14,
-    color: COLORS.TEXT.SECONDARY,
-  },
-  sectionTitle: {
-    marginBottom: SPACING.MD,
-    fontSize: 16,
-    // fontWeight: '600',
-  },
-  pricingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  priceItem: {
-    flex: 1,
-  },
-  dateContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dateItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.SM,
-  },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.XS,
-    borderRadius: BORDER_RADIUS.LG,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statCard: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    marginVertical: SPACING.XS,
-  },
-  actionContainer: {
-    flexDirection: 'row',
-    padding: SPACING.MD,
-    gap: SPACING.SM,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.BORDER.PRIMARY,
-  },
-  editButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    ...SHADOWS.SM,
-  },
-  deleteButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EF4444',
-    paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    ...SHADOWS.SM,
-  },
-  cancelButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: SPACING.XS,
-    marginTop: SPACING.SM,
-  },
-  textInput: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  editRow: {
-    flexDirection: 'row',
-  },
-  dateInput: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    padding: SPACING.MD,
-    marginHorizontal: SPACING.XS,
-  },
-  tagInputContainer: {
-    flexDirection: 'row',
-    marginBottom: SPACING.SM,
-    gap: SPACING.SM,
-  },
-  addTagButton: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    paddingHorizontal: SPACING.MD,
-    justifyContent: 'center',
-    borderRadius: BORDER_RADIUS.MD,
-  },
-  statusToggleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusToggle: {
-    paddingHorizontal: SPACING.LG,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MD,
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-  },
-  statusToggleActive: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    borderColor: COLORS.PRIMARY.MAIN,
-  },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+      },
+      header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: SPACING.MD,
+        paddingVertical: SPACING.MD,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.BORDER.PRIMARY,
+        position: 'relative',
+      },
+      backButton: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+      },
+      headerTitle: {
+        flex: 1,
+        textAlign: 'center',
+        fontSize: 18,
+        fontWeight: '600',
+        color: COLORS.TEXT.PRIMARY,
+      },
+      menuButton: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+      },
+      menuDropdown: {
+        position: 'absolute',
+        top: 60,
+        right: SPACING.MD,
+        backgroundColor: COLORS.BACKGROUND.CARD,
+        borderRadius: BORDER_RADIUS.MD,
+        padding: SPACING.XS,
+        ...SHADOWS.MD,
+        zIndex: 1000,
+        width: 120,
+      },
+      menuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: SPACING.SM,
+      },
+      menuText: {
+        marginLeft: SPACING.SM,
+        fontSize: 14,
+        fontFamily: FONTS.POPPINS.MEDIUM,
+      },
+      menuItemDisabled: {
+        opacity: 0.5,
+      },
+      scrollContent: {
+        paddingBottom: 100,
+      },
+      imageGallery: {
+        height: 250,
+        backgroundColor: COLORS.BACKGROUND.CARD,
+      },
+      listingImage: {
+        width: 400,
+        height: 250,
+        resizeMode: 'cover',
+      },
+      section: {
+        padding: SPACING.MD,
+        backgroundColor: '#fff',
+        marginBottom: SPACING.SM,
+      },
+      title: {
+        marginBottom: SPACING.SM,
+        fontSize: 20,
+      },
+      metaContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.MD,
+      },
+      categoryBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.PRIMARY.LIGHT,
+        paddingHorizontal: SPACING.SM,
+        paddingVertical: 4,
+        borderRadius: BORDER_RADIUS.SM,
+      },
+      statusBadge: {
+        backgroundColor: COLORS.PRIMARY.LIGHT,
+        paddingHorizontal: SPACING.SM,
+        paddingVertical: 4,
+        borderRadius: BORDER_RADIUS.SM,
+      },
+      statusBadgeInactive: {
+        backgroundColor: COLORS.BACKGROUND.CARD,
+      },
+      description: {
+        lineHeight: 22,
+        fontSize: 14,
+        color: COLORS.TEXT.SECONDARY,
+      },
+      sectionTitle: {
+        marginBottom: SPACING.MD,
+        fontSize: 16,
+      },
+      pricingContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+      },
+      priceItem: {
+        flex: 1,
+      },
+      statsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+      },
+      statCard: {
+        alignItems: 'center',
+        flex: 1,
+      },
+      statValue: {
+        marginVertical: SPACING.XS,
+      },
+      noImageContainer: {
+        height: 250,
+        backgroundColor: COLORS.BACKGROUND.CARD,
+        justifyContent: 'center',
+        alignItems: 'center',
+      },
+      noImageText: {
+        marginTop: SPACING.SM,
+        fontSize: 16,
+        fontFamily: FONTS.POPPINS.MEDIUM,
+        color: COLORS.TEXT.SECONDARY,
+      },
+      imageGalleryContainer: {
+        position: 'relative',
+      },
+      paginationContainer: {
+        position: 'absolute',
+        bottom: SPACING.MD,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+      },
+      paginationDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+        marginHorizontal: 4,
+      },
+      paginationDotActive: {
+        backgroundColor: COLORS.PRIMARY.MAIN,
+      },
 });
 
 export default ListingDetailScreen;

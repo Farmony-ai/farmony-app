@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,17 +6,25 @@ import {
   TouchableOpacity,
   Platform,
   Image,
+  RefreshControl,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS, FONT_SIZES } from '../utils';
+import { COLORS, SHADOWS, FONTS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+import ProviderService, { ProviderDashboardResponse } from '../services/ProviderService';
+import Button from '../components/Button';
 
 const backgroundImg = require('../assets/provider-bg.png');
 
 const ProviderScreen = () => {
   const navigation = useNavigation<any>();
+  const { user, token } = useSelector((state: RootState) => state.auth);
+  const [dashboard, setDashboard] = useState<ProviderDashboardResponse | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
   // Get greeting based on time
   const getGreeting = () => {
@@ -26,48 +34,79 @@ const ProviderScreen = () => {
     return 'Good evening';
   };
 
-  const stats = [
-    { 
-      label: 'Bookings', 
-      value: '48', 
-      icon: 'calendar', 
-      bgColor: '#fff3e0',
-      iconColor: '#f57c00' 
-    },
-    { 
-      label: 'Listings', 
-      value: '12', 
-      icon: 'list', 
-       bgColor: '#fff3e0',
-      iconColor: '#f57c00' 
-    },
-    { 
-      label: 'Rating', 
-      value: '4.2', 
-      icon: 'star', 
-      bgColor: '#fff3e0',
-      iconColor: '#f57c00' 
-    },
-  ];
+  const stats = useMemo(() => {
+    const summary = dashboard?.summary;
+    return [
+      {
+        label: 'Bookings',
+        value: String(summary?.totalBookings ?? 0),
+        icon: 'calendar',
+        bgColor: '#fff3e0',
+        iconColor: '#f57c00',
+        onPress: () => navigation.navigate('ProviderBookings'),
+      },
+      {
+        label: 'Listings',
+        value: String(summary?.activeListings ?? 0),
+        icon: 'list',
+        bgColor: '#fff3e0',
+        iconColor: '#f57c00',
+        onPress: () => navigation.navigate('MyListings'),
+      },
+      
+      {
+        label: 'Rating',
+        value: String(summary?.averageRating ?? 0),
+        icon: 'star',
+        bgColor: '#fff3e0',
+        iconColor: '#f57c00',
+        onPress: () => {}, // No action for rating
+      },
+      {
+        label: 'Listing',
+        value: 'Add',
+        icon: 'add-circle',
+        bgColor: '#fff3e0',
+        iconColor: '#f57c00',
+        onPress: () => navigation.navigate('CreateListing'),
+      },
+      
+    ];
+  }, [dashboard, navigation]);
 
-  const quickActions = [
-    { label: 'Add New', icon: 'add-circle-outline' },
-    { label: 'My Listings', icon: 'document-text-outline' },
-    { label: 'Bookings', icon: 'checkmark-done-outline' },
-    { label: 'Analytics', icon: 'bar-chart-outline' },
-  ];
+  // quickActions placeholder removed (inline JSX is used)
 
-  const recentBookings = [
-    { 
-      service: 'Tractor Rental', 
-      customer: 'Rajesh Kumar', 
-      time: 'Today, 2:00 PM', 
-      status: 'Confirmed' 
-    },
-  ];
+
+  const fetchDashboard = async (isRefresh = false) => {
+    if (!user?.id) {
+      if (isRefresh) setRefreshing(false);
+      return;
+    }
+    try {
+      if (isRefresh) setRefreshing(true);
+      const data = await ProviderService.getDashboard(user.id, token || undefined);
+      setDashboard(data);
+    } finally {
+      if (isRefresh) setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, token]);
+
+  const onRefresh = () => fetchDashboard(true);
+
+  // Refresh when returning from Create Listing or any navigation back
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => fetchDashboard());
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, user?.id, token]);
 
   return (
-    <SafeAreaWrapper backgroundColor="#f5f5f5" style={{ flex: 1}}>
+    <SafeAreaWrapper backgroundColor="#f5f5f5" style={styles.flex}>
       {/* Background Image */}
       <Image 
         source={backgroundImg} 
@@ -79,6 +118,13 @@ const ProviderScreen = () => {
         contentContainerStyle={styles.container} 
         showsVerticalScrollIndicator={false}
         bounces={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.PRIMARY.MAIN]}
+          />
+        }
       >
         {/* Header with Gradient Background */}
         <View style={styles.headerContainer}>
@@ -104,115 +150,114 @@ const ProviderScreen = () => {
           <View style={styles.headerCircle} />
         </View>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Horizontal ScrollView */}
         <View style={styles.statsContainer}>
-          {stats.map((stat, index) => (
-            <View key={index} style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: stat.bgColor }]}>
-                <Ionicons name={stat.icon} size={18} color={stat.iconColor} />
-              </View>
-              <Text style={styles.statValue}>
-                {stat.value}
-              </Text>
-              <Text style={styles.statLabel}>
-                {stat.label}
-              </Text>
-            </View>
-          ))}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statsScrollContent}
+          >
+            {stats.map((stat, index) => (
+              <TouchableOpacity 
+                key={index} 
+                style={styles.statCard}
+                onPress={stat.onPress}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.statIconContainer, { backgroundColor: stat.bgColor }]}>
+                  <Ionicons name={stat.icon as any} size={18} color={stat.iconColor} />
+                </View>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel}>{stat.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Quick Actions
-          </Text>
-          <View style={styles.quickActionsContainer}>
-            <View style={styles.quickActionsGrid}>
-              <TouchableOpacity 
-                style={styles.quickActionItem}
-                onPress={() => navigation.navigate('CreateListing')}
-              >
-                <View style={styles.quickActionIconWrapper}>
+        {/* Create First Listing Card - Shows when user has 0 listings */}
+        {(dashboard?.summary?.activeListings || 0) === 0 && (
+          <View style={styles.section}>
+            <TouchableOpacity 
+              style={styles.createListingCard}
+              onPress={() => navigation.navigate('CreateListing')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.createListingContent}>
+                <View style={styles.createListingIconBadge}>
                   <Ionicons name="add-circle-outline" size={28} color={COLORS.PRIMARY.MAIN} />
                 </View>
-                <Text style={styles.quickActionLabel}>Add New</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.quickActionItem}
-                onPress={() => navigation.navigate('MyListingsScreen')}
-              >
-                <View style={styles.quickActionIconWrapper}>
-                  <Ionicons name="document-text-outline" size={26} color={COLORS.PRIMARY.MAIN} />
+                <View style={styles.createListingText}>
+                  <Text style={styles.createListingTitle}>Create Your First Listing</Text>
+                  <Text style={styles.createListingSubtitle}>Start earning by offering your services to customers</Text>
                 </View>
-                <Text style={styles.quickActionLabel}>My Listings</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.quickActionItem}  onPress={() => navigation.navigate('ProviderBookings')}>
-                <View style={styles.quickActionIconWrapper}>
-                  <Ionicons name="calendar-outline" size={26} color={COLORS.PRIMARY.MAIN} />
-                </View>
-                <Text style={styles.quickActionLabel}>Bookings</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.quickActionItem}>
-                <View style={styles.quickActionIconWrapper}>
-                  <Ionicons name="bar-chart-outline" size={28} color={COLORS.PRIMARY.MAIN} />
-                </View>
-                <Text style={styles.quickActionLabel}>Analytics</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Recent Bookings */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              Recent Bookings
-            </Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAllText}>
-                View All
-              </Text>
+              </View>
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* Upcoming Bookings */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Upcoming Bookings</Text>
+            {(dashboard?.recentBookings?.length || 0) > 0 && (
+              <TouchableOpacity onPress={() => navigation.navigate('ProviderBookings')}>
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
-          {recentBookings.map((booking, index) => (
+          {(dashboard?.recentBookings || []).length === 0 ? (
+            <View style={styles.emptyBookingsCard}>
+              <View style={styles.emptyIconBadge}>
+                <Ionicons name="calendar-clear-outline" size={24} color={COLORS.PRIMARY.MAIN} />
+              </View>
+              <Text style={styles.emptyTitle}>No upcoming bookings</Text>
+              <Text style={styles.emptySubtitle}>You don't have any scheduled bookings at the moment. Check back later for new bookings.</Text>
+              <Button
+                title="Go to Bookings"
+                variant="outline"
+                size="small"
+                onPress={() => navigation.navigate('ProviderBookings')}
+                style={styles.emptyCta}
+              />
+            </View>
+          ) : (
+          (dashboard?.recentBookings || []).map((booking, index) => (
             <View key={index} style={styles.bookingCard}>
               <View style={styles.bookingHeader}>
                 <View style={styles.bookingInfo}>
                   <Text style={styles.bookingTitle}>
-                    {booking.service}
+                    {booking.service || booking.listingTitle || 'Service'}
                   </Text>
                   <Text style={styles.customerName}>
-                    {booking.customer}
+                    {booking.customer || booking.customerName || ''}
                   </Text>
                 </View>
                 <View style={styles.statusBadge}>
                   <Text style={styles.statusText}>
-                    {booking.status}
+                    {booking.status || '—'}
                   </Text>
                 </View>
               </View>
               <View style={styles.bookingTime}>
                 <Ionicons name="time-outline" size={12} color="#6B7280" />
                 <Text style={styles.timeText}>
-                  {booking.time}
+                  {booking.time || booking.scheduledAt || ''}
                 </Text>
               </View>
             </View>
-          ))}
+          )))}
         </View>
 
         {/* Bottom Padding */}
-        <View style={{ height: 100 }} />
+        <View style={styles.bottomPad} />
       </ScrollView>
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {
     flexGrow: 1,
     backgroundColor: 'transparent', // Changed to transparent
@@ -291,14 +336,15 @@ const styles = StyleSheet.create({
     borderRadius: 125,
   },
   statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
     marginTop: -90,
-    gap: 12,
     zIndex: 10,
   },
+  statsScrollContent: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
   statCard: {
-    flex: 1,
+    width: 100,
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 15,
     paddingVertical: 17,
@@ -351,41 +397,82 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.PRIMARY.MAIN,
   },
-  quickActionsContainer: {
-    marginTop: 16,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    
-  },
-  quickActionItem: {
-    alignItems: 'center',
-    width: '25%',
-    marginBottom: 12,
-    // backgroundColor: COLORS.NEUTRAL.WHITE,
-    // borderRadius: BORDER_RADIUS.MD,
-  },
-  quickActionIconWrapper: {
-    width: 56,
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  quickActionLabel: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
   bookingCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 16,
     padding: 15,
     marginBottom: 12,
     ...SHADOWS.SM,
+  },
+  emptyBookingsCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 16,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.SM,
+  },
+  emptyIconBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  emptyCta: {
+    paddingHorizontal: 14,
+  },
+  createListingCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 15,
+    ...SHADOWS.MD,
+  },
+  createListingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  createListingIconBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  createListingText: {
+    flex: 1,
+  },
+  createListingTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 4,
+  },
+  createListingSubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: '#6B7280',
+    lineHeight: 18,
   },
   bookingHeader: {
     flexDirection: 'row',
@@ -427,6 +514,9 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
     marginLeft: 6,
+  },
+  bottomPad: {
+    height: 100,
   },
 });
 

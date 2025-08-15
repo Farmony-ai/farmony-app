@@ -11,6 +11,11 @@ export const COLORS = {
     DARK: '#6FCF97',
     CONTRAST: '#1A7F5A',
   },
+  SUCCESS: {
+    MAIN: '#28A745', // A standard green for success
+    LIGHT: '#D4EDDA', // Lighter shade for backgrounds
+    DARK: '#1E7E34', // Darker shade for text/icons
+  },
   NEUTRAL: {
     WHITE: '#FFFFFF',
     BLACK: '#222222',

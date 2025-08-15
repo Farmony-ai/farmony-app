@@ -4,6 +4,8 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -13,82 +15,118 @@ import { RootState } from '../store';
 import ListingService from '../services/ListingService';
 import ListingCard from '../components/ListingCard';
 
-interface Listing {
-  _id: string;
-  title: string;
-  description: string;
-  price: number;
-  unitOfMeasure: string;
-  photos: string[];
-  location: {
-    address: string;
-    coordinates: { lat: number; lng: number };
-  };
-  providerId: string;
-  categoryId: string;
-  subCategoryId: string;
-}
+import { Listing } from '../services/ListingService';
 
 const ListingsScreen = () => {
-  const { categoryId, subCategoryId } = useSelector((state: RootState) => state.listing);
+  const { user, token } = useSelector((state: RootState) => state.auth);
+  const authToken = token || undefined; // Convert null to undefined for type safety
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (categoryId && subCategoryId) {
-      fetchListingsByCategories(categoryId, subCategoryId);
+    console.log('🔄 ListingsScreen mounted/updated');
+    console.log('👤 User:', user);
+    console.log('🔑 Token:', token ? 'Present' : 'Missing');
+    console.log('🆔 User ID from user.id:', user?.id);
+    console.log('🆔 User ID from user._id:', (user as any)?._id);
+    
+    if (user?.id) {
+      console.log('✅ User ID found, fetching listings');
+      fetchListings();
     } else {
-      // Optionally fetch all listings or show a message if no category is selected
-      // For now, we'll just log a message
-      console.log('No category or subcategory selected. Displaying all listings or a default view.');
-      // fetchAllListings(); // Uncomment if you want to fetch all listings by default
+      console.log('❌ No user ID available');
     }
-  }, [categoryId, subCategoryId]);
+  }, [user?.id]);
 
-  const fetchListingsByCategories = async (catId: string, subCatId: string) => {
+  const fetchListings = async () => {
     try {
+      if (!user?.id) {
+        throw new Error('User ID not found');
+      }
+      console.log('🔄 Starting to fetch listings');
+      console.log('👤 Using provider ID:', user.id);
+      console.log('🔑 Using auth token:', authToken ? 'Yes' : 'No');
+      console.log('🔑 Token value:', authToken);
+      
       setLoading(true);
-      // Assuming ListingService has a method to fetch by category and subcategory
-      const fetchedListings = await ListingService.getListingsByCategories(catId, subCatId);
+      const fetchedListings = await ListingService.getProviderListings(user.id, authToken);
+      
+      console.log('✅ Fetched listings:', fetchedListings);
+      console.log('📊 Number of listings:', fetchedListings.length);
+      
       setListings(fetchedListings);
-    } catch (error) {
-      console.error('Error fetching listings:', error);
-      Alert.alert('Error', 'Failed to load listings. Please try again.');
+    } catch (error: any) {
+      console.error('❌ Error fetching listings:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      let errorMessage = 'Failed to load listings. Please try again.';
+      
+      if (error.message.includes('Network Error')) {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication error. Please log in again.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You do not have permission to view these listings.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'No listings found for this provider.';
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  // Example of fetching all listings (if needed)
-  // const fetchAllListings = async () => {
-  //   try {
-  //     setLoading(true);
-  //     const fetchedListings = await ListingService.getAllListings();
-  //     setListings(fetchedListings);
-  //   } catch (error) {
-  //     console.error('Error fetching all listings:', error);
-  //     Alert.alert('Error', 'Failed to load all listings. Please try again.');
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchListings();
+  };
+
+  const handleListingUpdate = () => {
+    fetchListings();
+  };
 
   return (
     <SafeAreaWrapper>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Listings</Text>
+        <Text style={styles.headerTitle}>My Listings</Text>
       </View>
-      <ScrollView contentContainerStyle={styles.container}>
-        {loading ? (
-          <Text style={styles.loadingText}>Loading listings...</Text>
-        ) : listings.length > 0 ? (
-          listings.map((listing) => (
-            <ListingCard key={listing._id} listing={listing} />
-          ))
-        ) : (
-          <Text style={styles.noListingsText}>No listings found for the selected categories.</Text>
-        )}
-      </ScrollView>
+      {loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+        </View>
+      ) : (
+        <ScrollView 
+          contentContainerStyle={styles.container}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.PRIMARY.MAIN]}
+            />
+          }
+        >
+          {listings.length > 0 ? (
+            listings.map((listing) => (
+              <ListingCard 
+                key={listing._id} 
+                listing={listing}
+                onListingUpdate={handleListingUpdate}
+              />
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.noListingsText}>
+                You haven't created any listings yet.
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
     </SafeAreaWrapper>
   );
 };
@@ -97,7 +135,8 @@ const styles = StyleSheet.create({
   header: {
     padding: SPACING.LG,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+    backgroundColor: COLORS.BACKGROUND.CARD,
     alignItems: 'center',
   },
   headerTitle: {
@@ -107,16 +146,24 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: SPACING.LG,
+    paddingBottom: SPACING['4XL'],
   },
-  loadingText: {
-    padding: SPACING.LG,
-    textAlign: 'center',
-    color: COLORS.TEXT.SECONDARY,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING['4XL'],
   },
   noListingsText: {
-    padding: SPACING.LG,
-    textAlign: 'center',
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.SECONDARY,
+    textAlign: 'center',
   },
 });
 

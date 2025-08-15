@@ -23,6 +23,8 @@ import ChatScreen from '../screens/ChatScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { COLORS } from '../utils';
 import ProfileScreen from '../screens/ProfileScreen';
+import CreateListingScreen from '../screens/CreateListingScreen';
+import MyListingsScreen from '../screens/MyListingsScreen';
 
 const Stack = createStackNavigator();
 
@@ -58,6 +60,8 @@ const RootNavigator = () => {
             <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="CreateListing" component={CreateListingScreen} />
+            <Stack.Screen name="MyListings" component={MyListingsScreen} />
           </>
         ) : (
           <>

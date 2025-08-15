@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, BASE_URL, } from '../config/api';
 
-const BASE_URL = API_CONFIG.development.ios + '/api' // Replace with actual base URL
+const BASE_URL1 = BASE_URL + '/api' // Replace with actual base URL
 
-interface Category {
+export interface Category {
   _id: string;
   name: string;
   slug: string;
@@ -11,13 +11,15 @@ interface Category {
   description?: string;
 }
 
-interface SubCategory {
+export interface SubCategory {
   _id: string;
   categoryId: string;
   name: string;
   slug: string;
   description?: string;
   icon?: string;
+  defaultUnitOfMeasure?: string;
+  suggestedMinPrice?: number;
 }
 
 interface CategoryHierarchy {
@@ -29,7 +31,7 @@ class CatalogueService {
   // Get all categories
   async getCategories(): Promise<Category[]> {
     try {
-      const response = await axios.get(`${BASE_URL}/catalogue/categories`);
+      const response = await axios.get(`${BASE_URL1}/catalogue/categories`);
       return response.data;
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -37,10 +39,25 @@ class CatalogueService {
     }
   }
 
+  // Get a single category by its ID
+  async getCategoryById(categoryId: string): Promise<Category> {
+    try {
+      const categories = await this.getCategories();
+      const category = categories.find(c => c._id === categoryId);
+      if (!category) {
+        throw new Error(`Category with ID ${categoryId} not found`);
+      }
+      return category;
+    } catch (error) {
+      console.error('Error fetching category by ID:', error);
+      throw error;
+    }
+  }
+
   // Get categories by type
   async getCategoriesByType(type: string): Promise<Category[]> {
     try {
-      const response = await axios.get(`${BASE_URL}/catalogue/categories`, {
+      const response = await axios.get(`${BASE_URL1}/catalogue/categories`, {
         params: { category: type }
       });
       return response.data;
@@ -54,7 +71,7 @@ class CatalogueService {
   async getSubCategories(categoryId: string): Promise<SubCategory[]> {
     try {
       const response = await axios.get(
-        `${BASE_URL}/catalogue/${categoryId}/subcategories`
+        `${BASE_URL1}/catalogue/${categoryId}/subcategories`
       );
       return response.data;
     } catch (error) {
@@ -63,10 +80,28 @@ class CatalogueService {
     }
   }
 
+  // Get a single sub-category by its ID
+  async getSubCategoryById(subCategoryId: string): Promise<SubCategory> {
+    try {
+      // Since there is no direct endpoint, we need to fetch all and then filter
+      // This is not ideal, but it's the only way with the current API
+      const response = await axios.get(`${BASE_URL1}/catalogue/subcategories`);
+      const subCategory = response.data.find((sc: SubCategory) => sc._id === subCategoryId);
+
+      if (!subCategory) {
+        throw new Error(`Sub-category with ID ${subCategoryId} not found`);
+      }
+      return subCategory;
+    } catch (error) {
+      console.error('Error fetching sub-category by ID:', error);
+      throw error;
+    }
+  }
+
   // Get complete category hierarchy
   async getCategoryHierarchy(): Promise<CategoryHierarchy[]> {
     try {
-      const response = await axios.get(`${BASE_URL}/catalogue/hierarchy`);
+      const response = await axios.get(`${BASE_URL1}/catalogue/hierarchy`);
       return response.data;
     } catch (error) {
       console.error('Error fetching category hierarchy:', error);

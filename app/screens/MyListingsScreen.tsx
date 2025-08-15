@@ -10,47 +10,56 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
-import ListingService from '../services/ListingService';
+import ListingService, { Listing } from '../services/ListingService';
+import ListingCard from '../components/ListingCard';
 
-interface Listing {
-  _id: string;
-  title: string;
-  description: string;
-  photos: string[];
-  price: number;
-  unitOfMeasure: string;
-  minimumOrder: number;
-  isActive: boolean;
-  tags: string[];
-  viewCount: number;
-  bookingCount: number;
-  createdAt: string;
-  location: {
-    type: string;
-    coordinates: number[];
-  };
-}
+
+
 
 const MyListingsScreen = () => {
   const navigation = useNavigation<any>();
+  const { user, token } = useSelector((state: RootState) => state.auth);
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchListings();
-  }, []);
+    if (user?.id) {
+      fetchListings();
+    } else {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  // Refresh listings whenever returning to this screen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user?.id) {
+        fetchListings();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, user?.id]);
 
   const fetchListings = async () => {
     try {
       setLoading(true);
-      // Hardcoded provider ID as requested
-      const response = await ListingService.getProviderListings('687b5692b9434ec2d0e7adc9');
+      const providerId = user?.id;
+      const authToken = token || undefined;
+
+      if (!providerId) {
+        throw new Error('User ID not found');
+      }
+
+      const response = await ListingService.getProviderListings(providerId, authToken);
+      console.log('response', response);
       setListings(response);
     } catch (error) {
       console.error('Error fetching listings:', error);
@@ -105,82 +114,6 @@ const MyListingsScreen = () => {
         </Text>
       </TouchableOpacity>
     </View>
-  );
-
-  const ListingCard = ({ listing }: { listing: Listing }) => (
-    <TouchableOpacity
-      style={styles.listingCard}
-      onPress={() => navigation.navigate('ListingDetail', { listingId: listing._id })}
-      activeOpacity={0.8}
-    >
-      <Image
-        source={{ uri: listing.photos[0] || 'https://via.placeholder.com/100' }}
-        style={styles.listingImage}
-      />
-      <View style={styles.listingContent}>
-        <View style={styles.listingHeader}>
-          <Text variant="body" weight="semibold" numberOfLines={1} style={styles.listingTitle}>
-            {listing.title}
-          </Text>
-          <View style={[styles.statusBadge, !listing.isActive && styles.statusBadgeInactive]}>
-            <Text variant="caption" weight="medium" color={listing.isActive ? COLORS.PRIMARY.MAIN : '#6B7280'}>
-              {listing.isActive ? 'Active' : 'Inactive'}
-            </Text>
-          </View>
-        </View>
-        
-        {/* <Text variant="caption" color={COLORS.TEXT.SECONDARY} numberOfLines={2} style={styles.listingDescription}>
-          {listing.description}
-        </Text> */}
-
-        <View style={styles.listingMeta}>
-          <View style={styles.priceContainer}>
-            <Text variant="h4" weight="bold" color={COLORS.PRIMARY.MAIN}>
-              ₹{listing.price}
-            </Text>
-            <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-              {getUnitLabel(listing.unitOfMeasure)}
-            </Text>
-          </View>
-          
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Ionicons name="eye-outline" size={14} color={COLORS.TEXT.SECONDARY} />
-              <Text variant="caption" color={COLORS.TEXT.SECONDARY} style={{ marginLeft: 4 }}>
-                {listing.viewCount}
-              </Text>
-            </View>
-            <View style={styles.statItem}>
-              <Ionicons name="calendar-outline" size={14} color={COLORS.TEXT.SECONDARY} />
-              <Text variant="caption" color={COLORS.TEXT.SECONDARY} style={{ marginLeft: 4 }}>
-                {listing.bookingCount}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* {listing.tags.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {listing.tags.slice(0, 3).map((tag, index) => (
-              <View key={index} style={styles.tag}>
-                <Text variant="caption" color={COLORS.PRIMARY.MAIN}>
-                  {tag}
-                </Text>
-              </View>
-            ))}
-            {listing.tags.length > 3 && (
-              <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-                +{listing.tags.length - 3}
-              </Text>
-            )}
-          </View>
-        )} */}
-
-        <Text variant="caption" color={COLORS.TEXT.SECONDARY} style={styles.createdDate}>
-          Listed on {formatDate(listing.createdAt)}
-        </Text>
-      </View>
-    </TouchableOpacity>
   );
 
   return (
@@ -251,7 +184,7 @@ const MyListingsScreen = () => {
           }
         >
           {listings.map((listing) => (
-            <ListingCard key={listing._id} listing={listing} />
+            <ListingCard key={listing._id} listing={listing} onListingUpdate={onRefresh} />
           ))}
         </ScrollView>
       )}
@@ -331,78 +264,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.MD,
     borderRadius: BORDER_RADIUS.MD,
     ...SHADOWS.MD,
-  },
-  listingCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: BORDER_RADIUS.LG,
-    marginBottom: SPACING.MD,
-    ...SHADOWS.SM,
-    overflow: 'hidden',
-  },
-  listingImage: {
-    width: 100,
-    height: '100%',
-    backgroundColor: COLORS.BACKGROUND.CARD,
-  },
-  listingContent: {
-    flex: 1,
-    padding: SPACING.MD,
-  },
-  listingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.XS,
-  },
-  listingTitle: {
-    flex: 1,
-    marginRight: SPACING.SM,
-  },
-  statusBadge: {
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  statusBadgeInactive: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
-  },
-  listingDescription: {
-    marginBottom: SPACING.SM,
-  },
-  listingMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.SM,
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: SPACING.MD,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.XS,
-    marginBottom: SPACING.SM,
-  },
-  tag: {
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  createdDate: {
-    marginTop: SPACING.XS,
   },
 });
 
