@@ -3,6 +3,7 @@
 // Built with clean, readable code that feels like plain english
 
 import { API_BASE_URL } from '../config/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -14,7 +15,7 @@ interface ApiResponse<T> {
 interface RegisterRequest {
   name: string;
   email: string;
-  phone: string; // Now required according to the guide
+  phone: string;
   password: string;
   role: 'individual' | 'SHG' | 'FPO';
 }
@@ -25,10 +26,10 @@ interface LoginRequest {
 }
 
 interface User {
-  _id: string;
+  id: string;
   name: string;
   email: string;
-  phone: string; // Now included in user profile
+  phone: string;
   role: 'individual' | 'SHG' | 'FPO' | 'admin';
   isVerified: boolean;
   kycStatus: 'pending' | 'approved' | 'rejected';
@@ -38,6 +39,18 @@ interface User {
 
 interface LoginResponse {
   access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  user: User;
+}
+
+interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+interface TokenValidationResponse {
+  valid: boolean;
   user?: User;
 }
 
@@ -63,26 +76,119 @@ interface UserUpdateRequest {
 class ApiService {
   private baseURL: string;
   private authToken: string | null = null;
+  private refreshToken: string | null = null;
+  private isRefreshing: boolean = false;
+  private refreshSubscribers: Array<(token: string) => void> = [];
   
   constructor() {
-    // Base URL for Rural Share API - configured in config/api.ts
     this.baseURL = API_BASE_URL;
+    this.initializeTokens();
+  }
+
+  // Initialize tokens from storage
+  private async initializeTokens() {
+    try {
+      const [accessToken, refreshToken] = await Promise.all([
+        AsyncStorage.getItem('access_token'),
+        AsyncStorage.getItem('refresh_token')
+      ]);
+      
+      if (accessToken) this.authToken = accessToken;
+      if (refreshToken) this.refreshToken = refreshToken;
+    } catch (error) {
+      console.error('Failed to initialize tokens:', error);
+    }
   }
   
-  // 🔑 Set authentication token for protected routes
-  setAuthToken(token: string) {
-    this.authToken = token;
+  // 🔑 Set authentication tokens
+  async setAuthTokens(accessToken: string, refreshToken: string) {
+    this.authToken = accessToken;
+    this.refreshToken = refreshToken;
+    
+    try {
+      await Promise.all([
+        AsyncStorage.setItem('access_token', accessToken),
+        AsyncStorage.setItem('refresh_token', refreshToken)
+      ]);
+    } catch (error) {
+      console.error('Failed to save tokens:', error);
+    }
   }
   
-  // 🚫 Clear authentication token
-  clearAuthToken() {
+  // 🚫 Clear authentication tokens
+  async clearAuthTokens() {
     this.authToken = null;
+    this.refreshToken = null;
+    this.isRefreshing = false;
+    this.refreshSubscribers = [];
+    
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem('access_token'),
+        AsyncStorage.removeItem('refresh_token'),
+        AsyncStorage.removeItem('user')
+      ]);
+    } catch (error) {
+      console.error('Failed to clear tokens:', error);
+    }
+  }
+
+  // Subscribe to token refresh
+  private subscribeToRefresh(callback: (token: string) => void) {
+    this.refreshSubscribers.push(callback);
+  }
+
+  // Notify subscribers of new token
+  private notifyRefreshSubscribers(token: string) {
+    this.refreshSubscribers.forEach(callback => callback(token));
+    this.refreshSubscribers = [];
+  }
+
+  // Refresh token logic
+  private async refreshAuthToken(): Promise<string | null> {
+    if (!this.refreshToken) {
+      return null;
+    }
+
+    if (this.isRefreshing) {
+      return new Promise((resolve) => {
+        this.subscribeToRefresh((token) => resolve(token));
+      });
+    }
+
+    this.isRefreshing = true;
+
+    try {
+      const response = await this.makeRequest<LoginResponse>('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: this.refreshToken }),
+      });
+
+      if (response.success && response.data) {
+        const { access_token, refresh_token } = response.data;
+        await this.setAuthTokens(access_token, refresh_token);
+        this.notifyRefreshSubscribers(access_token);
+        this.isRefreshing = false;
+        return access_token;
+      } else {
+        // Refresh failed, clear tokens
+        await this.clearAuthTokens();
+        this.isRefreshing = false;
+        return null;
+      }
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      await this.clearAuthTokens();
+      this.isRefreshing = false;
+      return null;
+    }
   }
   
-  // 📡 Generic API request handler
+  // 📡 Generic API request handler with auto-refresh
   private async makeRequest<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount: number = 0
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseURL}${endpoint}`;
@@ -106,6 +212,14 @@ class ApiService {
       
       console.log('📡 Response status:', response.status);
       
+      // Check for new token in headers
+      const newToken = response.headers.get('X-New-Token');
+      if (newToken) {
+        console.log('🔄 New token received in headers');
+        this.authToken = newToken;
+        await AsyncStorage.setItem('access_token', newToken);
+      }
+      
       const data = await response.json();
       
       if (response.ok) {
@@ -114,6 +228,21 @@ class ApiService {
           success: true,
           data,
         };
+      } else if (response.status === 401 && retryCount === 0) {
+        // Token expired, try to refresh
+        console.log('🔄 Token expired, attempting refresh...');
+        const newToken = await this.refreshAuthToken();
+        
+        if (newToken) {
+          // Retry the request with new token
+          return this.makeRequest<T>(endpoint, options, retryCount + 1);
+        } else {
+          // Refresh failed, return error
+          return {
+            success: false,
+            error: 'Authentication failed',
+          };
+        }
       } else {
         console.error('❌ API request failed:', data);
         return {
@@ -179,8 +308,16 @@ class ApiService {
   }
   
   // 🔓 Refresh authentication token
-  async refreshToken(): Promise<ApiResponse<LoginResponse>> {
+  async refreshToken(refreshToken: string): Promise<ApiResponse<LoginResponse>> {
     return this.makeRequest<LoginResponse>('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    });
+  }
+
+  // ✅ Validate token
+  async validateToken(): Promise<ApiResponse<TokenValidationResponse>> {
+    return this.makeRequest<TokenValidationResponse>('/auth/validate-token', {
       method: 'POST',
     });
   }
@@ -282,11 +419,17 @@ export const authAPI = {
   // 🚪 Logout
   logout: () => apiService.logoutUser(),
   
-  // 🔑 Set auth token
-  setToken: (token: string) => apiService.setAuthToken(token),
+  // 🔑 Set auth tokens
+  setTokens: (accessToken: string, refreshToken: string) => apiService.setAuthTokens(accessToken, refreshToken),
   
-  // 🚫 Clear auth token
-  clearToken: () => apiService.clearAuthToken(),
+  // 🚫 Clear auth tokens
+  clearTokens: () => apiService.clearAuthTokens(),
+  
+  // ✅ Validate token
+  validateToken: () => apiService.validateToken(),
+  
+  // 🔓 Refresh token
+  refreshToken: (refreshToken: string) => apiService.refreshToken(refreshToken),
 };
 
 // 📱 Check if phone number exists in database

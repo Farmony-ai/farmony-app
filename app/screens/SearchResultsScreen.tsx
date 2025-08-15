@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   FlatList,
-  Image,
   Animated,
   ActivityIndicator,
   Modal,
@@ -17,16 +16,14 @@ import {
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS, FONT_SIZES } from '../utils';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import { setLocation, setRadius } from '../store/slices/locationSlice';
-import categoryIcons from '../utils/icons';
-import ListingService, { Listing } from '../services/ListingService'; // Import ListingService and Listing type
-import SearchListingCard from '../components/SearchListingCard'; // Assuming you have a ListingCard component
+import ListingService, { Listing } from '../services/ListingService';
+import SearchListingCard from '../components/SearchListingCard';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -48,9 +45,12 @@ const SearchResultsScreen: React.FC = () => {
   const [search, setSearch] = useState(searchQuery || '');
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
-  const [results, setResults] = useState<Listing[]>([]); // Change type to Listing[]
+  const [results, setResults] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [priceMin, setPriceMin] = useState<string>('');
+  const [priceMax, setPriceMax] = useState<string>('');
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -60,6 +60,46 @@ const SearchResultsScreen: React.FC = () => {
   const reduxDateRange = useSelector((state: RootState) => state.date);
   const activeDateRange = dateRange || reduxDateRange;
   const { latitude, longitude, city, radius } = useSelector((state: RootState) => state.location);
+
+  const performSearch = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      
+      // Basic search parameters
+      if (search) params.text = search;
+      if (categoryId) params.categoryId = categoryId;
+      if (subCategoryId) params.subCategoryId = subCategoryId;
+      
+      // Location-based search
+      if (latitude && longitude && radius) {
+        params.latitude = latitude;
+        params.longitude = longitude;
+        params.radius = radius;
+      } else if (city && city !== 'Loading...') {
+        params.location = city;
+      }
+
+      // Date filtering
+      if (activeDateRange?.startDate) params.date = activeDateRange.startDate;
+
+      // Advanced search parameters from filter modal
+      if (priceMin) params.priceMin = Number(priceMin);
+      if (priceMax) params.priceMax = Number(priceMax);
+      if (showActiveOnly !== undefined) params.isActive = showActiveOnly;
+
+      console.log('SearchResultsScreen: Calling searchListings with params:', params);
+      const fetchedListings = await ListingService.searchListings(params);
+      setResults(fetchedListings);
+      console.log('SearchResultsScreen: Results state updated with:', fetchedListings);
+    } catch (error: any) {
+      console.error('Error performing search:', error);
+      Alert.alert('Error', 'Failed to perform search. Please try again.');
+      setResults([]); // Clear results on error
+    } finally {
+      setLoading(false);
+    }
+  }, [search, categoryId, subCategoryId, latitude, longitude, radius, city, activeDateRange, priceMin, priceMax, showActiveOnly]);
 
   useEffect(() => {
     // Entrance animation
@@ -77,60 +117,40 @@ const SearchResultsScreen: React.FC = () => {
       }),
     ]).start();
     
-    console.log('SearchResultsScreen: route.params:', route.params); // Log incoming params
+    console.log('SearchResultsScreen: route.params:', route.params);
     // Perform initial search
     performSearch();
-  }, [search, activeDateRange, categoryId, subCategoryId, latitude, longitude, radius]); // Add dependencies
+  }, [fadeAnim, slideAnim, performSearch, route.params]);
 
-  const performSearch = async () => {
+  // Add function for nearby search
+  const performNearbySearch = async () => {
+    if (!latitude || !longitude) {
+      Alert.alert('Location Required', 'Please enable location services to search nearby listings.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const params: any = {};
-      if (search) params.text = search;
-      if (categoryId) params.categoryId = categoryId;
-      if (subCategoryId) params.subCategoryId = subCategoryId;
-      
-      // Use coordinates from Redux if available
-      if (latitude && longitude && radius) {
-        params.latitude = latitude;
-        params.longitude = longitude;
-        params.radius = radius;
-      } else if (city && city !== 'Loading...') { // Fallback to city string if coordinates are not available
-        params.location = city;
-      }
-
-      if (activeDateRange?.startDate) params.date = activeDateRange.startDate; // Assuming search by start date
-
-      console.log('SearchResultsScreen: Calling searchListings with params:', params); // Log outgoing params
-      const fetchedListings = await ListingService.searchListings(params);
-      setResults(fetchedListings);
-      console.log('SearchResultsScreen: Results state updated with:', fetchedListings); // Log updated results
+      const nearbyListings = await ListingService.getNearbyListings({
+        lat: latitude,
+        lng: longitude,
+        distance: radius || 5, // Default 5km radius
+      });
+      setResults(nearbyListings);
     } catch (error: any) {
-      console.error('Error performing search:', error);
-      Alert.alert('Error', 'Failed to perform search. Please try again.');
-      setResults([]); // Clear results on error
+      console.error('Error performing nearby search:', error);
+      Alert.alert('Error', 'Failed to search nearby listings. Please try again.');
+      setResults([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleCategoryPress = (listing: Listing) => { // Change parameter type to Listing
-    // Navigate to listing detail screen
-    navigation.navigate('ListingDetail', { listingId: listing._id });
   };
 
   const handleLocationPress = () => {
     setShowLocationModal(true);
   };
 
-  const handleLocationSelect = (newLocation: string) => {
-    // This function might need to be updated to dispatch setLocation to Redux
-    // For now, it just updates local state and triggers a search
-    // If you want to update Redux, you'd dispatch setLocation here
-    // dispatch(setLocation({ latitude: newLat, longitude: newLon, city: newLocation }));
-    // For now, we'll just update the local state for the modal display
-    // and rely on Redux for the actual search params.
-    // setCurrentLocation(newLocation); // This state is no longer used for search params
+  const handleLocationSelect = (_newLocation: string) => {
     setShowLocationModal(false);
   };
 
@@ -161,7 +181,6 @@ const SearchResultsScreen: React.FC = () => {
     >
       <SearchListingCard 
         listing={item} 
-        onPress={() => handleCategoryPress(item)} // Pass listing to handleCategoryPress
       />
     </Animated.View>
   );
@@ -277,7 +296,7 @@ const SearchResultsScreen: React.FC = () => {
           </TouchableOpacity>
           
           <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={20} color={COLORS.TEXT.SECONDARY} />
+            <Ionicons name="search" size={20} color={COLORS.PRIMARY.MAIN} />
             <TextInput
               style={styles.searchInput}
               placeholder="Find Services or Listings"
@@ -285,7 +304,7 @@ const SearchResultsScreen: React.FC = () => {
               value={search}
               onChangeText={setSearch}
               autoFocus={false}
-              onSubmitEditing={performSearch} // Trigger search on submit
+              onSubmitEditing={performSearch}
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={() => setSearch('')}>
@@ -293,23 +312,34 @@ const SearchResultsScreen: React.FC = () => {
               </TouchableOpacity>
             )}
           </View>
+          
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowFilterModal(true)}
+          >
+            <Ionicons name="filter" size={20} color={COLORS.PRIMARY.MAIN} />
+          </TouchableOpacity>
         </View>
         
-        {/* Location Bar */}
+        {/* Enhanced Location Bar */}
         <TouchableOpacity
           style={styles.locationBar}
           onPress={handleLocationPress}
           activeOpacity={0.7}
         >
-          <Ionicons name="location-outline" size={20} color={COLORS.TEXT.SECONDARY} />
+          <View style={styles.locationIconContainer}>
+            <Ionicons name="location" size={18} color={COLORS.PRIMARY.MAIN} />
+          </View>
           <Text style={styles.locationText}>{city?.toUpperCase() || 'LOCATION UNAVAILABLE'}</Text>
-          <Ionicons name="chevron-down" size={20} color={COLORS.TEXT.SECONDARY} />
+          <Ionicons name="chevron-down" size={18} color={COLORS.TEXT.SECONDARY} />
         </TouchableOpacity>
         
-        {/* Date Range Info */}
+        {/* Enhanced Date Range Info */}
         {activeDateRange && (
           <View style={styles.dateRangeBar}>
-            <Ionicons name="calendar-outline" size={16} color={COLORS.PRIMARY.MAIN} />
+            <View style={styles.dateIconContainer}>
+              <Ionicons name="calendar-outline" size={16} color={COLORS.PRIMARY.MAIN} />
+            </View>
             <Text style={styles.dateRangeText}>
               Available: {formatDateRange()}
             </Text>
@@ -317,7 +347,7 @@ const SearchResultsScreen: React.FC = () => {
         )}
         
         {/* Results */}
-        {loading && results.length === 0 ? ( // Show loading only if no results yet
+        {loading && results.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
             <Text style={styles.loadingText}>Searching...</Text>
@@ -325,16 +355,26 @@ const SearchResultsScreen: React.FC = () => {
         ) : (
           <FlatList
             data={results}
-            renderItem={renderListingItem} // Change render item to Listing
-            keyExtractor={(item) => item._id} // Use _id for key
+            renderItem={renderListingItem}
+            keyExtractor={(item) => item._id}
             numColumns={2}
             columnWrapperStyle={styles.row}
             contentContainerStyle={styles.gridContainer}
             ListHeaderComponent={renderHeader}
             showsVerticalScrollIndicator={false}
-            ListEmptyComponent={!loading ? ( // Show "No results" only if not loading and no results
+            ListEmptyComponent={!loading ? (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No listings found for your search criteria.</Text>
+                <View style={styles.emptyIconContainer}>
+                  <Ionicons name="search-outline" size={48} color={COLORS.TEXT.SECONDARY} />
+                </View>
+                <Text style={styles.emptyTitle}>No listings found</Text>
+                <Text style={styles.emptySubtitle}>Try adjusting your search criteria or filters</Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={performSearch}
+                >
+                  <Text style={styles.retryButtonText}>Try Again</Text>
+                </TouchableOpacity>
               </View>
             ) : null}
           />
@@ -342,6 +382,120 @@ const SearchResultsScreen: React.FC = () => {
         
         {/* Location Modal */}
         <LocationModal />
+        
+        {/* Filter Modal */}
+        <Modal
+          visible={showFilterModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowFilterModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowFilterModal(false)}
+          >
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={styles.modalContent}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Search Filters</Text>
+                <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.TEXT.PRIMARY} />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.filterContent}>
+                {/* Price Range */}
+                <View style={styles.filterSection}>
+                  <Text style={styles.filterSectionTitle}>Price Range</Text>
+                  <View style={styles.priceInputContainer}>
+                    <View style={styles.priceInput}>
+                      <Text style={styles.priceLabel}>Min</Text>
+                      <TextInput
+                        style={styles.priceInputField}
+                        placeholder="0"
+                        value={priceMin}
+                        onChangeText={setPriceMin}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <Text style={styles.priceSeparator}>-</Text>
+                    <View style={styles.priceInput}>
+                      <Text style={styles.priceLabel}>Max</Text>
+                      <TextInput
+                        style={styles.priceInputField}
+                        placeholder="1000"
+                        value={priceMax}
+                        onChangeText={setPriceMax}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                </View>
+
+
+
+                {/* Active Only Toggle */}
+                <View style={styles.filterSection}>
+                  <View style={styles.toggleContainer}>
+                    <Text style={styles.filterSectionTitle}>Show Active Listings Only</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleButton,
+                        showActiveOnly && styles.toggleButtonActive
+                      ]}
+                      onPress={() => setShowActiveOnly(!showActiveOnly)}
+                    >
+                      <View style={[
+                        styles.toggleThumb,
+                        showActiveOnly && styles.toggleThumbActive
+                      ]} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Nearby Search Button */}
+                <View style={styles.filterSection}>
+                  <TouchableOpacity
+                    style={styles.nearbyButton}
+                    onPress={() => {
+                      setShowFilterModal(false);
+                      performNearbySearch();
+                    }}
+                  >
+                    <Ionicons name="location" size={20} color={COLORS.NEUTRAL.WHITE} />
+                    <Text style={styles.nearbyButtonText}>Search Nearby</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+
+              {/* Apply Filters Button */}
+              <View style={styles.filterActions}>
+                                  <TouchableOpacity
+                    style={styles.clearButton}
+                    onPress={() => {
+                      setPriceMin('');
+                      setPriceMax('');
+                      setShowActiveOnly(true);
+                    }}
+                  >
+                  <Text style={styles.clearButtonText}>Clear All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.applyButton}
+                  onPress={() => {
+                    setShowFilterModal(false);
+                    performSearch();
+                  }}
+                >
+                  <Text style={styles.applyButtonText}>Apply Filters</Text>
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </TouchableOpacity>
+        </Modal>
       </View>
     </SafeAreaWrapper>
   );
@@ -356,14 +510,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
+    paddingVertical: SPACING.MD,
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.BORDER.PRIMARY,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   backButton: {
     padding: SPACING.SM,
     marginRight: SPACING.SM,
+    borderRadius: BORDER_RADIUS.MD,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
   searchBarContainer: {
     flex: 1,
@@ -374,7 +535,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.MD,
     paddingVertical: SPACING.SM,
     borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
+    borderColor: COLORS.PRIMARY.LIGHT,
+    shadowColor: COLORS.PRIMARY.MAIN,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   searchInput: {
     flex: 1,
@@ -382,6 +548,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
+  },
+  filterButton: {
+    padding: SPACING.SM,
+    marginLeft: SPACING.SM,
+    borderRadius: BORDER_RADIUS.MD,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
   },
   locationBar: {
     flexDirection: 'row',
@@ -391,6 +563,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
+  locationIconContainer: {
+    marginRight: SPACING.SM,
+    padding: SPACING.SM,
+    borderRadius: SPACING.MD,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
   },
   locationText: {
     flex: 1,
@@ -405,6 +583,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.MD,
     paddingVertical: SPACING.SM,
     backgroundColor: COLORS.PRIMARY.LIGHT,
+  },
+  dateIconContainer: {
+    marginRight: SPACING.SM,
+    padding: SPACING.SM,
+    borderRadius: SPACING.MD,
+    backgroundColor: COLORS.PRIMARY.MAIN,
   },
   dateRangeText: {
     marginLeft: SPACING.SM,
@@ -460,9 +644,11 @@ const styles = StyleSheet.create({
   gridContainer: {
     paddingHorizontal: SPACING.MD,
     paddingBottom: SPACING.XL,
+    paddingTop: SPACING.SM,
   },
   row: {
     justifyContent: 'space-between',
+    marginBottom: SPACING.MD,
   },
   // Removed categoryCard, categoryIconWrapper, categoryIcon, categoryName, categoryCount
   // as they are now handled by ListingCard
@@ -470,6 +656,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: SPACING['4XL'],
   },
   loadingText: {
     marginTop: SPACING.MD,
@@ -482,12 +669,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: SPACING['4XL'],
+    paddingHorizontal: SPACING.LG,
   },
-  emptyText: {
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.SECONDARY,
+  emptyIconContainer: {
+    marginBottom: SPACING.MD,
+    padding: SPACING.LG,
+    borderRadius: BORDER_RADIUS.XL,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
+  emptyTitle: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.SM,
     textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginBottom: SPACING.LG,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    paddingVertical: SPACING.MD,
+    paddingHorizontal: SPACING.LG,
+    borderRadius: BORDER_RADIUS.MD,
+    shadowColor: COLORS.PRIMARY.MAIN,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  retryButtonText: {
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
   },
   // Modal styles
   modalOverlay: {
@@ -547,6 +766,129 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
+  },
+  // New styles for filter modal
+  filterContent: {
+    padding: SPACING.MD,
+  },
+  filterSection: {
+    marginBottom: SPACING.MD,
+  },
+  filterSectionTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.SM,
+  },
+  priceInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: BORDER_RADIUS.MD,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS,
+  },
+  priceInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  priceLabel: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginRight: SPACING.XS,
+  },
+  priceInputField: {
+    flex: 1,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    textAlign: 'center',
+  },
+  priceSeparator: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginHorizontal: SPACING.SM,
+  },
+
+  toggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: SPACING.SM,
+  },
+  toggleButton: {
+    width: 40,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.BACKGROUND.CARD,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    padding: SPACING.XS,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  toggleThumb: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+  },
+  toggleThumbActive: {
+    transform: [{ translateX: 18 }], // Move thumb to the right
+  },
+  nearbyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    paddingVertical: SPACING.MD,
+    borderRadius: BORDER_RADIUS.MD,
+    marginTop: SPACING.MD,
+  },
+  nearbyButtonText: {
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    marginLeft: SPACING.SM,
+  },
+  filterActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: SPACING.MD,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+  },
+  clearButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: SPACING.SM,
+    borderRadius: BORDER_RADIUS.MD,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  clearButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  applyButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: SPACING.SM,
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderRadius: BORDER_RADIUS.MD,
+  },
+  applyButtonText: {
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
   },
 });
 

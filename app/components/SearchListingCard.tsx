@@ -6,11 +6,10 @@ import {
   Image,
 } from 'react-native';
 import Text from './Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS, SUCCESS } from '../utils';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { Listing, PopulatedListing } from '../services/ListingService';
-import categoryHierarchy from '../../docs/category hierarchy.json';
 
 interface SearchListingCardProps {
   listing: Listing | PopulatedListing;
@@ -18,6 +17,15 @@ interface SearchListingCardProps {
 
 const SearchListingCard = ({ listing }: SearchListingCardProps) => {
   const navigation = useNavigation<any>();
+
+  // Add null check for listing
+  if (!listing) {
+    return (
+      <View style={[styles.cardContainer, { alignItems: 'center', justifyContent: 'center', height: 200 }]}>
+        <Text style={{ color: COLORS.TEXT.SECONDARY }}>Loading...</Text>
+      </View>
+    );
+  }
 
   // Helper functions to safely access category/subcategory names
   const getSubCategoryName = () => {
@@ -79,7 +87,7 @@ const SearchListingCard = ({ listing }: SearchListingCardProps) => {
       {/* Primary Image */}
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: listing.photos[0] || 'https://via.placeholder.com/150' }}
+          source={{ uri: (listing.photos && listing.photos.length > 0 && listing.photos[0]) || 'https://via.placeholder.com/150' }}
           style={styles.cardImage}
         />
       </View>
@@ -124,19 +132,22 @@ const SearchListingCard = ({ listing }: SearchListingCardProps) => {
 
 const styles = StyleSheet.create({
   cardContainer: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: BORDER_RADIUS.LG,
     marginBottom: SPACING.MD,
     overflow: 'hidden',
-    ...SHADOWS.SM,
+    ...SHADOWS.MD,
     width: '100%',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
   },
   imageContainer: {
     width: '100%',
-    height: 150, // Approximately 40% of a typical card height
+    height: 150,
     overflow: 'hidden',
     borderTopLeftRadius: BORDER_RADIUS.LG,
     borderTopRightRadius: BORDER_RADIUS.LG,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
   cardImage: {
     width: '100%',
@@ -147,16 +158,17 @@ const styles = StyleSheet.create({
     padding: SPACING.MD,
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: SPACING.SM,
+    lineHeight: 22,
   },
   coreInfoBlock: {
     marginBottom: SPACING.MD,
   },
   priceText: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: FONTS.POPPINS.BOLD,
     color: COLORS.PRIMARY.MAIN,
     marginBottom: SPACING.XS,
@@ -165,11 +177,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: SPACING.XS,
   },
   keySpecsText: {
     fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
+    flex: 1,
   },
   distanceText: {
     fontSize: 12,
@@ -181,32 +195,34 @@ const styles = StyleSheet.create({
   separator: {
     height: 1,
     backgroundColor: COLORS.BORDER.PRIMARY,
-    marginVertical: SPACING.MD,
+    marginVertical: SPACING.SM,
   },
   providerBlock: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: SPACING.XS,
   },
   providerName: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
+    color: COLORS.TEXT.SECONDARY,
     marginLeft: SPACING.XS,
+    flex: 1,
   },
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.SUCCESS.LIGHT,
-    borderRadius: BORDER_RADIUS.FULL,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: SPACING.XS,
-    marginLeft: SPACING.SM,
+    backgroundColor: '#d4edda',
+    paddingHorizontal: SPACING.XS,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.SM,
+    marginLeft: SPACING.XS,
   },
   verifiedText: {
     fontSize: 10,
     fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.SUCCESS.DARK,
-    marginLeft: SPACING.XS,
+    color: '#155724',
+    marginLeft: 2,
   },
 });
 

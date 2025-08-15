@@ -1,9 +1,8 @@
 import axios from 'axios';
-
-
 import { API_BASE_URL } from '../config/api';
 import { Category, SubCategory } from './CatalogueService';
 import { ImagePickerResult } from './ImagePickerService';
+import apiInterceptor from './apiInterceptor';
 
 const BASE_URL = API_BASE_URL;
 
@@ -87,18 +86,16 @@ class ListingService {
         availableTo: payload.availableTo,
         tags: payload.tags,
         isActive: payload.isActive,
-        viewCount: payload.viewCount,
-        bookingCount: payload.bookingCount,
         isVerified: payload.isVerified,
       };
 
       formData.append('data', JSON.stringify(listingData));
 
-      console.log('ListingService: Sending FormData with files:', payload.photos.length);
+      console.log('ListingService: Sending FormData with files:', payload.photos?.length || 0);
       console.log('ListingService: FormData structure:', {
-        hasPhotos: payload.photos.length > 0,
-        photoCount: payload.photos.length,
-        firstPhotoUri: payload.photos[0]?.uri || 'none'
+        hasPhotos: (payload.photos?.length || 0) > 0,
+        photoCount: payload.photos?.length || 0,
+        firstPhotoUri: payload.photos?.[0]?.uri || 'none'
       });
 
       const response = await axios.post(`${BASE_URL}/listings`, formData, {
@@ -171,9 +168,9 @@ class ListingService {
       formData.append('data', JSON.stringify(listingData));
       
       console.log('ListingService.updateListing - FormData structure:', {
-        hasPhotos: payload.photos?.length > 0,
+        hasPhotos: (payload.photos?.length || 0) > 0,
         photoCount: payload.photos?.length || 0,
-        firstPhotoUri: payload.photos && payload.photos[0]?.uri || 'none'
+        firstPhotoUri: payload.photos?.[0]?.uri || 'none'
       });
       
       // Use FormData with multipart/form-data
@@ -231,23 +228,72 @@ class ListingService {
     latitude?: number;
     longitude?: number;
     radius?: number;
-  }, token?: string): Promise<Listing[]> {
+    priceMin?: number;
+    priceMax?: number;
+    providerId?: string;
+    isActive?: boolean;
+  }, _token?: string): Promise<Listing[]> {
     try {
       const queryParams = new URLSearchParams();
-      for (const key in params) {
-        if (params[key as keyof typeof params] !== undefined) {
-          queryParams.append(key, String(params[key as keyof typeof params]));
-        }
+      
+      // Map parameters to API endpoint format
+      if (params.text) queryParams.append('searchText', params.text);
+      if (params.categoryId) queryParams.append('categoryId', params.categoryId);
+      if (params.subCategoryId) queryParams.append('subCategoryId', params.subCategoryId);
+      if (params.location) queryParams.append('location', params.location);
+      if (params.date) queryParams.append('date', params.date);
+      if (params.priceMin) queryParams.append('priceMin', String(params.priceMin));
+      if (params.priceMax) queryParams.append('priceMax', String(params.priceMax));
+      if (params.providerId) queryParams.append('providerId', params.providerId);
+      if (params.isActive !== undefined) queryParams.append('isActive', String(params.isActive));
+      
+      // Handle coordinates for location-based search
+      if (params.latitude && params.longitude) {
+        queryParams.append('coordinates', `[${params.longitude},${params.latitude}]`);
+        if (params.radius) queryParams.append('distance', String(params.radius));
       }
-      const url = `${BASE_URL}/listings/search?${queryParams.toString()}`;
-      console.log('ListingService: Search Request URL:', url);
+
+      const endpoint = `/listings/search?${queryParams.toString()}`;
+      console.log('ListingService: Search Request URL:', `${BASE_URL}${endpoint}`);
       console.log('ListingService: Search Request Payload (params):', params);
-      const response = await axios.get(url, this.getAuthHeaders(token));
-      console.log('ListingService: Search Response:', response.data);
-      return response.data;
+      
+      const response = await apiInterceptor.makeAuthenticatedRequest<Listing[]>(endpoint, {
+        method: 'GET',
+      });
+      
+      if (response.success && response.data) {
+        console.log('ListingService: Search Response:', response.data);
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to search listings');
+      }
     } catch (error: any) {
       console.error('Error searching listings:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to search listings');
+    }
+  }
+
+  // Add new method for nearby listings search
+  async getNearbyListings(params: {
+    lat: number;
+    lng: number;
+    distance: number;
+  }, token?: string): Promise<Listing[]> {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.append('lat', String(params.lat));
+      queryParams.append('lng', String(params.lng));
+      queryParams.append('distance', String(params.distance));
+
+      const url = `${BASE_URL}/listings/nearby?${queryParams.toString()}`;
+      console.log('ListingService: Nearby Search Request URL:', url);
+      
+      const response = await axios.get(url, this.getAuthHeaders(token));
+      console.log('ListingService: Nearby Search Response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching nearby listings:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || 'Failed to fetch nearby listings');
     }
   }
 

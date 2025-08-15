@@ -428,15 +428,7 @@ export default function HomeScreen() {
             <Ionicons name="search" size={20} color="#94a3b8" />
             <TextInput
               value={searchText}
-              onChangeText={(text) => {
-                setSearchText(text);
-                if (text.length > 0) {
-                  navigation.navigate('SearchResults', {
-                    searchQuery: text,
-                    dateRange: { startDate, endDate },
-                  });
-                }
-              }}
+              onChangeText={setSearchText}
               placeholder=" "
               placeholderTextColor="#94a3b8"
               style={styles.searchInput}
