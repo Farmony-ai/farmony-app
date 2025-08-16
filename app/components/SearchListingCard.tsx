@@ -1,15 +1,20 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   Image,
+  Dimensions,
+  ScrollView,
 } from 'react-native';
 import Text from './Text';
 import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
 import { Listing, PopulatedListing } from '../services/ListingService';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 interface SearchListingCardProps {
   listing: Listing | PopulatedListing;
@@ -17,22 +22,50 @@ interface SearchListingCardProps {
 
 const SearchListingCard = ({ listing }: SearchListingCardProps) => {
   const navigation = useNavigation<any>();
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const autoScrollTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Add null check for listing
+  // Default images if none provided
+  const images = listing?.photos && listing.photos.length > 0 
+    ? listing.photos 
+    : ['https://via.placeholder.com/400x200'];
+
+  // Auto-scroll images
+  useEffect(() => {
+    if (images.length > 1) {
+      autoScrollTimer.current = setInterval(() => {
+        setCurrentImageIndex((prevIndex) => {
+          const nextIndex = (prevIndex + 1) % images.length;
+          scrollViewRef.current?.scrollTo({
+            x: (screenWidth - SPACING.MD * 2) * nextIndex,
+            animated: true,
+          });
+          return nextIndex;
+        });
+      }, 3000); // Change image every 3 seconds
+
+      return () => {
+        if (autoScrollTimer.current) {
+          clearInterval(autoScrollTimer.current);
+        }
+      };
+    }
+  }, [images.length]);
+
   if (!listing) {
     return (
-      <View style={[styles.cardContainer, { alignItems: 'center', justifyContent: 'center', height: 200 }]}>
-        <Text style={{ color: COLORS.TEXT.SECONDARY }}>Loading...</Text>
+      <View style={styles.cardContainer}>
+        <View style={styles.skeleton} />
       </View>
     );
   }
 
-  // Helper functions to safely access category/subcategory names
+  // Helper functions
   const getSubCategoryName = () => {
     if (typeof listing.subCategoryId === 'object' && listing.subCategoryId?.name) {
       return listing.subCategoryId.name;
     }
-    // Fallback to a generic name if subCategory is not populated or name is missing
     return 'Service';
   };
 
@@ -45,86 +78,168 @@ const SearchListingCard = ({ listing }: SearchListingCardProps) => {
       per_unit: '/unit',
       per_piece: '/piece',
     };
-    return unitLabels[unit] || unit;
+    return unitLabels[unit] || '';
   };
 
   const getProviderName = () => {
-    // Assuming providerId is populated with a name field
     if (typeof listing.providerId === 'object' && listing.providerId?.name) {
       return listing.providerId.name;
     }
-    return 'Unknown Provider';
+    return 'Service Provider';
   };
 
   const isProviderVerified = () => {
-    // Assuming providerId is populated with an isVerified field
     if (typeof listing.providerId === 'object' && listing.providerId?.isVerified !== undefined) {
       return listing.providerId.isVerified;
     }
     return false;
   };
 
-  const getKeySpecs = () => {
-    // This is a placeholder. In a real app, you'd parse listing.tags or other specific fields.
-    // For now, let's use a dummy array or part of the description.
-    if (listing.tags && listing.tags.length > 0) {
-      return listing.tags.map(tag => `[ ${tag} ]`).join(' ');
-    }
-    return listing.description ? `[ ${listing.description.substring(0, 20)}... ]` : '';
-  };
-
   const getDistance = () => {
     // This would typically come from a location service calculation
-    return '5 km away';
+    return '2.5 km';
+  };
+
+  const getRating = () => {
+    // This would come from listing data if available
+    return listing.rating || 4.2;
+  };
+
+  const getReviewCount = () => {
+    return listing.reviewCount || Math.floor(Math.random() * 100) + 10;
+  };
+
+  const handleScroll = (event: any) => {
+    const slideSize = screenWidth - SPACING.MD * 2;
+    const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
+    setCurrentImageIndex(index);
   };
 
   return (
     <TouchableOpacity
       style={styles.cardContainer}
       onPress={() => navigation.navigate('ListingDetail', { listingId: listing._id })}
-      activeOpacity={0.8}
+      activeOpacity={0.95}
     >
-      {/* Primary Image */}
+      {/* Image Carousel */}
       <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: (listing.photos && listing.photos.length > 0 && listing.photos[0]) || 'https://via.placeholder.com/150' }}
-          style={styles.cardImage}
-        />
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onTouchStart={() => {
+            if (autoScrollTimer.current) {
+              clearInterval(autoScrollTimer.current);
+            }
+          }}
+          onTouchEnd={() => {
+            if (images.length > 1) {
+              autoScrollTimer.current = setInterval(() => {
+                setCurrentImageIndex((prevIndex) => {
+                  const nextIndex = (prevIndex + 1) % images.length;
+                  scrollViewRef.current?.scrollTo({
+                    x: (screenWidth - SPACING.MD * 2) * nextIndex,
+                    animated: true,
+                  });
+                  return nextIndex;
+                });
+              }, 3000);
+            }
+          }}
+        >
+          {images.map((image, index) => (
+            <Image
+              key={index}
+              source={{ uri: image }}
+              style={styles.cardImage}
+              resizeMode="cover"
+            />
+          ))}
+        </ScrollView>
+
+        {/* Image Dots Indicator */}
+        {images.length > 1 && (
+          <View style={styles.dotsContainer}>
+            {images.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  index === currentImageIndex && styles.activeDot
+                ]}
+              />
+            ))}
+          </View>
+        )}
+
+        {/* Discount Badge (if applicable) */}
+        {listing.discount && (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountText}>FLAT {listing.discount}% OFF</Text>
+          </View>
+        )}
+
+        {/* Ad Badge (if sponsored) */}
+        {listing.isSponsored && (
+          <View style={styles.adBadge}>
+            <Text style={styles.adText}>Ad</Text>
+          </View>
+        )}
       </View>
 
+      {/* Content */}
       <View style={styles.contentContainer}>
-        {/* Title */}
-        <Text style={styles.title} numberOfLines={2}>
-          {listing.title || getSubCategoryName()}
-        </Text>
-
-        {/* Core Information Block */}
-        <View style={styles.coreInfoBlock}>
-          <Text style={styles.priceText}>
-            ₹{listing.price} {getUnitLabel(listing.unitOfMeasure)}
-          </Text>
-          <View style={styles.specsDistanceContainer}>
-            <Text style={styles.keySpecsText}>{getKeySpecs()}</Text>
-            <Text style={styles.distanceText}>
-              <Ionicons name="location-outline" size={14} color={COLORS.TEXT.SECONDARY} /> {getDistance()}
+        {/* Title and Rating Row */}
+        <View style={styles.titleRow}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title} numberOfLines={1}>
+              {listing.title || getSubCategoryName()}
             </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {getProviderName()}
+            </Text>
+          </View>
+          <View style={styles.ratingBadge}>
+            <Text style={styles.ratingText}>{getRating()}</Text>
+            <Ionicons name="star" size={12} color={COLORS.NEUTRAL.WHITE} />
           </View>
         </View>
 
-        {/* Separator */}
-        <View style={styles.separator} />
-
-        {/* Trust & Provider Block */}
-        <View style={styles.providerBlock}>
-          <Ionicons name="person-circle-outline" size={18} color={COLORS.TEXT.SECONDARY} />
-          <Text style={styles.providerName}>{getProviderName()}</Text>
+        {/* Info Row */}
+        <View style={styles.infoRow}>
+          <View style={styles.infoItem}>
+            <Ionicons name="location-outline" size={14} color={COLORS.TEXT.SECONDARY} />
+            <Text style={styles.infoText}>{getDistance()}</Text>
+          </View>
+          <View style={styles.separator} />
+          <View style={styles.infoItem}>
+            <Ionicons name="time-outline" size={14} color={COLORS.TEXT.SECONDARY} />
+            <Text style={styles.infoText}>Available now</Text>
+          </View>
           {isProviderVerified() && (
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color={COLORS.SUCCESS.MAIN} />
-              <Text style={styles.verifiedText}>Verified</Text>
-            </View>
+            <>
+              <View style={styles.separator} />
+              <View style={styles.infoItem}>
+                <MaterialIcons name="verified" size={14} color={COLORS.SUCCESS.MAIN} />
+                <Text style={[styles.infoText, { color: COLORS.SUCCESS.MAIN }]}>Verified</Text>
+              </View>
+            </>
           )}
         </View>
+
+        {/* Price Row */}
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Starting from</Text>
+          <Text style={styles.priceText}>
+            ₹{listing.price}
+            <Text style={styles.priceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
+          </Text>
+        </View>
+
+
       </View>
     </TouchableOpacity>
   );
@@ -133,96 +248,159 @@ const SearchListingCard = ({ listing }: SearchListingCardProps) => {
 const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: BORDER_RADIUS.LG,
+    borderRadius: BORDER_RADIUS.XL,
     marginBottom: SPACING.MD,
     overflow: 'hidden',
-    ...SHADOWS.MD,
-    width: '100%',
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
+    ...SHADOWS.LG,
+    width: screenWidth - SPACING.MD * 2,
+    alignSelf: 'center',
+  },
+  skeleton: {
+    height: 300,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
   imageContainer: {
     width: '100%',
-    height: 150,
-    overflow: 'hidden',
-    borderTopLeftRadius: BORDER_RADIUS.LG,
-    borderTopRightRadius: BORDER_RADIUS.LG,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    height: 200,
+    position: 'relative',
   },
   cardImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+    width: screenWidth - SPACING.MD * 2,
+    height: 200,
+  },
+  dotsContainer: {
+    position: 'absolute',
+    bottom: SPACING.SM,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS,
+    borderRadius: BORDER_RADIUS.LG,
+    left: '50%',
+    transform: [{ translateX: -30 }], // Approximate centering
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginHorizontal: 3,
+  },
+  activeDot: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  discountBadge: {
+    position: 'absolute',
+    top: SPACING.MD,
+    left: SPACING.MD,
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS,
+    borderRadius: BORDER_RADIUS.SM,
+  },
+  discountText: {
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: 10,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  adBadge: {
+    position: 'absolute',
+    top: SPACING.MD,
+    right: SPACING.MD,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.SM,
+  },
+  adText: {
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: 10,
+    fontFamily: FONTS.POPPINS.MEDIUM,
   },
   contentContainer: {
     padding: SPACING.MD,
   },
-  title: {
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: SPACING.SM,
-    lineHeight: 22,
-  },
-  coreInfoBlock: {
-    marginBottom: SPACING.MD,
-  },
-  priceText: {
-    fontSize: 18,
-    fontFamily: FONTS.POPPINS.BOLD,
-    color: COLORS.PRIMARY.MAIN,
-    marginBottom: SPACING.XS,
-  },
-  specsDistanceContainer: {
+  titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: SPACING.XS,
+    alignItems: 'flex-start',
+    marginBottom: SPACING.SM,
   },
-  keySpecsText: {
-    fontSize: 12,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
+  titleContainer: {
     flex: 1,
+    marginRight: SPACING.SM,
   },
-  distanceText: {
-    fontSize: 12,
+  title: {
+    fontSize: 17,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 2,
+  },
+  subtitle: {
+    fontSize: 13,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
+  },
+  ratingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS.MAIN,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.SM,
+    gap: 2,
+  },
+  ratingText: {
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.MD,
+    flexWrap: 'wrap',
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  infoText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
   },
   separator: {
-    height: 1,
+    width: 1,
+    height: 12,
     backgroundColor: COLORS.BORDER.PRIMARY,
-    marginVertical: SPACING.SM,
+    marginHorizontal: SPACING.SM,
   },
-  providerBlock: {
+  priceRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: SPACING.XS,
+    alignItems: 'baseline',
+    gap: SPACING.SM,
+    marginBottom: SPACING.SM,
   },
-  providerName: {
+  priceLabel: {
     fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
-    marginLeft: SPACING.XS,
-    flex: 1,
   },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#d4edda',
-    paddingHorizontal: SPACING.XS,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.SM,
-    marginLeft: SPACING.XS,
+  priceText: {
+    fontSize: 19,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
   },
-  verifiedText: {
-    fontSize: 10,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#155724',
-    marginLeft: 2,
+  priceUnit: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
   },
 });
 
