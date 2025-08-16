@@ -3,6 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
 import apiInterceptor from '../../services/apiInterceptor';
 
+// Storage keys constants - matching apiInterceptor
+const STORAGE_KEYS = {
+  ACCESS_TOKEN: 'access_token',
+  REFRESH_TOKEN: 'refresh_token',
+  USER: 'user',
+  TOKEN_EXPIRY: 'token_expiry',
+};
+
 // Helper to decode JWT token
 const decodeJwt = (token: string) => {
   try {
@@ -15,6 +23,41 @@ const decodeJwt = (token: string) => {
   } catch (e) {
     console.error('Error decoding JWT:', e);
     return null;
+  }
+};
+
+// Helper functions for auth data persistence
+const saveAuthData = async (accessToken: string, refreshToken: string, user: any, expiresIn: number = 900) => {
+  try {
+    const expiryTime = new Date().getTime() + (expiresIn * 1000);
+    await AsyncStorage.multiSet([
+      [STORAGE_KEYS.ACCESS_TOKEN, accessToken],
+      [STORAGE_KEYS.REFRESH_TOKEN, refreshToken],
+      [STORAGE_KEYS.USER, JSON.stringify(user)],
+      [STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString()],
+      ['token', accessToken], // Legacy key for backward compatibility
+      ['user', JSON.stringify(user)], // Legacy key
+    ]);
+    
+    console.log('✅ Auth data saved successfully');
+  } catch (error) {
+    console.error('❌ Error saving auth data:', error);
+  }
+};
+
+const clearAuthData = async () => {
+  try {
+    await AsyncStorage.multiRemove([
+      STORAGE_KEYS.ACCESS_TOKEN,
+      STORAGE_KEYS.REFRESH_TOKEN,
+      STORAGE_KEYS.USER,
+      STORAGE_KEYS.TOKEN_EXPIRY,
+      'token', // Legacy key
+      'user',  // Legacy key
+    ]);
+    console.log('✅ Auth data cleared');
+  } catch (error) {
+    console.error('❌ Error clearing auth data:', error);
   }
 };
 
@@ -34,6 +77,7 @@ interface AuthState {
   isAuthenticated: boolean;
   user: User | null; 
   token: string | null;
+  refreshToken: string | null;
   
   // Loading states for better UX
   isLoading: boolean;
@@ -63,13 +107,14 @@ const initialState: AuthState = {
   isAuthenticated: false,
   user: null,
   token: null,
+  refreshToken: null,
   
   isLoading: true, // Start with loading true to check auth
   isSigningIn: false,
   isSigningUp: false,
   isVerifyingOTP: false,
   isUpdatingUserVerification: false,
-  isCreatingProfile: false, // Initialize the new state
+  isCreatingProfile: false,
   
   error: null,
   
@@ -79,48 +124,144 @@ const initialState: AuthState = {
   isForgotPassword: false,
   
   currentScreen: 'signIn',
-  otpChannel: null, // Initialize new state
+  otpChannel: null,
+};
+
+// Debug helper
+const debugAsyncStorage = async () => {
+  try {
+    const keys = [
+      STORAGE_KEYS.ACCESS_TOKEN,
+      STORAGE_KEYS.REFRESH_TOKEN,
+      STORAGE_KEYS.USER,
+      STORAGE_KEYS.TOKEN_EXPIRY,
+      'token',
+      'user'
+    ];
+    const values = await AsyncStorage.multiGet(keys);
+    
+    console.log('=== AsyncStorage Debug ===');
+    values.forEach(([key, value]) => {
+      console.log(`${key}: ${value ? value.substring(0, 50) + '...' : 'null'}`);
+    });
+    console.log('========================');
+  } catch (error) {
+    console.error('Debug error:', error);
+  }
 };
 
 // Async action to check auth status from storage
 export const checkAuth = createAsyncThunk('auth/checkAuth', async () => {
   console.log('🔄 checkAuth: Attempting to retrieve auth data from AsyncStorage...');
-  const token = await AsyncStorage.getItem('token');
-  let userJson = await AsyncStorage.getItem('user');
-  let user = userJson ? JSON.parse(userJson) : null;
-
-  console.log('🔄 checkAuth: Retrieved token:', token ? 'exists' : 'null');
-  console.log('🔄 checkAuth: Retrieved userJson:', userJson ? 'exists' : 'null');
-
-  if (token) {
-    if (!user) {
-      console.log('⚠️ checkAuth: Token found but user data missing. Attempting to fetch user profile...');
-      const decodedToken = decodeJwt(token);
-      if (decodedToken && decodedToken.sub) {
-        const userId = decodedToken.sub;
-        const userProfileResponse = await apiInterceptor.getProfile(userId);
-        if (userProfileResponse.success && userProfileResponse.data) {
-          user = userProfileResponse.data;
-          await AsyncStorage.setItem('user', JSON.stringify(user));
-          console.log('✅ checkAuth: Successfully fetched and stored user profile.', user);
-        } else {
-          console.error('❌ checkAuth: Failed to fetch user profile:', userProfileResponse.error);
-          await AsyncStorage.removeItem('token');
-          await AsyncStorage.removeItem('user');
-          return null;
+  
+  try {
+    // Get all auth data at once
+    const [[, accessToken], [, refreshToken], [, userJson], [, tokenExpiry], [, legacyToken]] = await AsyncStorage.multiGet([
+      STORAGE_KEYS.ACCESS_TOKEN,
+      STORAGE_KEYS.REFRESH_TOKEN,
+      STORAGE_KEYS.USER,
+      STORAGE_KEYS.TOKEN_EXPIRY,
+      'token', // Check legacy token too
+    ]);
+    
+    // Use new token first, fall back to legacy
+    const token = accessToken || legacyToken;
+    
+    console.log('🔄 checkAuth: Retrieved token:', token ? 'exists' : 'null');
+    console.log('🔄 checkAuth: Retrieved refreshToken:', refreshToken ? 'exists' : 'null');
+    console.log('🔄 checkAuth: Retrieved userJson:', userJson ? 'exists' : 'null');
+    
+    if (!token || !userJson) {
+      console.log('❌ checkAuth: No valid auth data found in AsyncStorage.');
+      await debugAsyncStorage(); // Debug what's actually stored
+      return null;
+    }
+    
+    let user = JSON.parse(userJson);
+    
+    // Check if token is expired
+    const isExpired = tokenExpiry ? new Date().getTime() >= parseInt(tokenExpiry) : false;
+    
+    if (isExpired && refreshToken) {
+      console.log('🔄 checkAuth: Token expired, attempting refresh...');
+      try {
+        // Use the apiInterceptor to validate and refresh if needed
+        const validationResult = await apiInterceptor.validateToken();
+        if (validationResult.valid && validationResult.user) {
+          // Token was refreshed successfully by apiInterceptor
+          const newAccessToken = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+          const newRefreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+          return { 
+            token: newAccessToken || token, 
+            refreshToken: newRefreshToken || refreshToken, 
+            user: validationResult.user || user 
+          };
         }
-      } else {
-        console.error('❌ checkAuth: Invalid token, cannot decode user ID.');
-        await AsyncStorage.removeItem('token');
-        await AsyncStorage.removeItem('user');
-        return null;
+      } catch (error) {
+        console.error('❌ Token validation/refresh failed:', error);
       }
     }
-    console.log('✅ checkAuth: Successfully retrieved and parsed user:', user);
-    return { token, user };
+    
+    // For non-expired tokens, validate with backend
+    if (!isExpired) {
+      try {
+        const validationResult = await apiInterceptor.validateToken();
+        if (validationResult.valid) {
+          console.log('✅ checkAuth: Token validated successfully');
+          // Get potentially updated tokens after validation
+          const currentAccessToken = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+          const currentRefreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+          return { 
+            token: currentAccessToken || token, 
+            refreshToken: currentRefreshToken || refreshToken, 
+            user: validationResult.user || user 
+          };
+        } else {
+          console.log('❌ checkAuth: Token validation failed');
+          // Try to refresh if we have refresh token
+          if (refreshToken) {
+            try {
+              const refreshResult = await apiInterceptor.makeAuthenticatedRequest('/auth/refresh', {
+                method: 'POST',
+                body: JSON.stringify({ refreshToken }),
+              });
+              
+              if (refreshResult.success && refreshResult.data) {
+                const { access_token, refresh_token, user: refreshedUser } = refreshResult.data as any;
+                await saveAuthData(access_token, refresh_token || refreshToken, refreshedUser || user, 900);
+                return { 
+                  token: access_token, 
+                  refreshToken: refresh_token || refreshToken, 
+                  user: refreshedUser || user 
+                };
+              }
+            } catch (refreshError) {
+              console.error('❌ Refresh attempt failed:', refreshError);
+            }
+          }
+          
+          await clearAuthData();
+          return null;
+        }
+      } catch (error) {
+        console.error('❌ checkAuth: Validation error:', error);
+        // If validation fails but we have tokens, still return them
+        // The apiInterceptor will handle refresh on next API call
+        if (token && user && !isExpired) {
+          return { token, refreshToken, user };
+        }
+        return null;
+      }
+    } else {
+      // Token is expired and no refresh token
+      console.log('❌ checkAuth: Token expired and no refresh token available');
+      await clearAuthData();
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ checkAuth: Error:', error);
+    return null;
   }
-  console.log('❌ checkAuth: No valid auth data found in AsyncStorage.');
-  return null;
 });
 
 export const registerUser = createAsyncThunk(
@@ -153,13 +294,42 @@ export const registerUser = createAsyncThunk(
 
       const result = await response.json();
       console.log('✅ registerUser: Registration successful, response:', result);
-      // Assuming the registration endpoint returns the user ID as '_id'
-      const userId = result._id || result.id; 
+      
+      // Handle new registration response format with tokens
+      if (result.access_token && result.refresh_token && result.user) {
+        // Use apiInterceptor to handle token storage
+        await apiInterceptor.handleLoginResponse({
+          access_token: result.access_token,
+          refresh_token: result.refresh_token,
+          expires_in: result.expires_in || 900,
+          token_type: result.token_type || 'Bearer',
+          user: result.user
+        });
+        
+        // Also save token expiry
+        const expiryTime = new Date().getTime() + ((result.expires_in || 900) * 1000);
+        await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+        
+        // Save legacy token
+        await AsyncStorage.setItem('token', result.access_token);
+        
+        return { 
+          userId: result.user.id || result.user._id,
+          phone: userData.phone,
+          token: result.access_token,
+          refreshToken: result.refresh_token,
+          user: result.user,
+          autoLoggedIn: true
+        };
+      }
+      
+      // Legacy response format
+      const userId = result._id || result.id;
       if (!userId) {
         console.error('❌ registerUser: User ID not found in registration response.', result);
         return rejectWithValue('User ID not found after registration.');
       }
-      return { userId, phone: userData.phone };
+      return { userId, phone: userData.phone, autoLoggedIn: false };
     } catch (error: any) {
       console.error('🔥 Network error during registration:', error);
       return rejectWithValue(error.message);
@@ -172,7 +342,8 @@ export const loginAndVerifyUser = createAsyncThunk(
   async (credentials: { phone: string; password: string; userId: string }, { rejectWithValue, dispatch }) => {
     try {
       console.log('🔄 loginAndVerifyUser: Attempting login and verification for userId:', credentials.userId);
-      // Step 1: Log in to get a token
+      
+      // Step 1: Log in to get tokens
       const loginResponse = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -189,16 +360,20 @@ export const loginAndVerifyUser = createAsyncThunk(
         console.error('❌ loginAndVerifyUser: Login failed:', errorData);
         return rejectWithValue(errorData.message || 'Login failed after OTP verification');
       }
+      
       const loginResult = await loginResponse.json();
-      const token = loginResult.access_token;
-      console.log('✅ loginAndVerifyUser: Login successful, token received.');
-
-      if (!token) {
+      
+      // Extract tokens based on response format
+      const accessToken = loginResult.access_token || loginResult.token;
+      const refreshToken = loginResult.refresh_token || '';
+      const expiresIn = loginResult.expires_in || 900;
+      
+      if (!accessToken) {
         console.error('❌ loginAndVerifyUser: Login did not return a token.');
         return rejectWithValue('Login did not return a token.');
       }
 
-      // Step 2: Update verification status using the obtained token and userId
+      // Step 2: Update verification status
       console.log('🔄 loginAndVerifyUser: Attempting to verify user phone for userId:', credentials.userId);
       const verifyResponse = await fetch(
         `${API_BASE_URL}/users/${credentials.userId}/verify`,
@@ -206,7 +381,7 @@ export const loginAndVerifyUser = createAsyncThunk(
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${accessToken}`,
           },
         },
       );
@@ -218,23 +393,38 @@ export const loginAndVerifyUser = createAsyncThunk(
         console.error('❌ loginAndVerifyUser: User verification failed:', errorData);
         return rejectWithValue(errorData.message || 'User verification failed');
       }
+      
       console.log('✅ loginAndVerifyUser: User phone verified successfully.');
 
-      // Step 3: Fetch the final user profile with updated verification status
-      console.log('🔄 loginAndVerifyUser: Fetching updated user profile for userId:', credentials.userId);
+      // Step 3: Get updated user profile using apiInterceptor
       const profileResponse = await apiInterceptor.getProfile(credentials.userId);
+      
       if (!profileResponse.success || !profileResponse.data) {
-        console.error('❌ loginAndVerifyUser: Failed to fetch user profile after verification.', profileResponse.error);
-        return rejectWithValue('Failed to fetch user profile after verification.');
+        console.error('❌ Failed to fetch user profile');
+        return rejectWithValue('Failed to fetch user profile');
       }
-      console.log('✅ loginAndVerifyUser: User profile fetched successfully.', profileResponse.data);
+      
+      const userProfile = profileResponse.data;
+      console.log('✅ loginAndVerifyUser: User profile fetched successfully.', userProfile);
 
-      // Dispatch signIn.fulfilled to update auth state and persist data
-      console.log('🔄 loginAndVerifyUser: Dispatching signIn.fulfilled to update auth state.');
-      dispatch(signIn.fulfilled({ access_token: token, refresh_token: '', user: profileResponse.data }, '', { emailOrPhone: credentials.phone, password: credentials.password }));
+      // Use apiInterceptor to handle token storage
+      await apiInterceptor.handleLoginResponse({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: expiresIn,
+        token_type: loginResult.token_type || 'Bearer',
+        user: userProfile
+      });
+      
+      // Also save token expiry
+      const expiryTime = new Date().getTime() + (expiresIn * 1000);
+      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+      
+      // Save legacy token
+      await AsyncStorage.setItem('token', accessToken);
 
       console.log('✅ loginAndVerifyUser: Completed login and verification process.');
-      return { token, user: profileResponse.data };
+      return { token: accessToken, refreshToken, user: userProfile };
     } catch (error: any) {
       console.error('🔥 Network error during login and verification:', error);
       return rejectWithValue(error.message);
@@ -278,19 +468,37 @@ export const signIn = createAsyncThunk(
       const result = await response.json();
       console.log('✅ Login successful:', result);
       
-      // Handle the new login response format with refresh tokens
-      if (result.access_token && result.refresh_token && result.user) {
-        // Use the apiInterceptor to handle token storage
-        await apiInterceptor.handleLoginResponse(result);
-        
-        return {
-          access_token: result.access_token,
-          refresh_token: result.refresh_token,
-          user: result.user,
-        };
-      } else {
+      // Handle both new and legacy response formats
+      const accessToken = result.access_token || result.token;
+      const refreshToken = result.refresh_token || '';
+      const expiresIn = result.expires_in || 900;
+      const user = result.user;
+      
+      if (!accessToken || !user) {
         throw new Error('Invalid login response format');
       }
+      
+      // Use apiInterceptor to handle token storage
+      await apiInterceptor.handleLoginResponse({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: expiresIn,
+        token_type: result.token_type || 'Bearer',
+        user: user
+      });
+      
+      // Also save token expiry for our auth slice
+      const expiryTime = new Date().getTime() + (expiresIn * 1000);
+      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+      
+      // Save legacy token for backward compatibility
+      await AsyncStorage.setItem('token', accessToken);
+      
+      return {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        user: user,
+      };
     } catch (error) {
       console.error('🔥 Network error during login:', error);
       throw error;
@@ -298,30 +506,25 @@ export const signIn = createAsyncThunk(
   }
 );
 
-// Async action for OTP verification - now handles real verification
+// Async action for OTP verification
 export const verifyOTP = createAsyncThunk(
   'auth/verifyOTP',
   async (otpData: {phone: string; otp: string; password: string; userId: string | null}, { getState, dispatch }) => {
     try {
       console.log('🔄 Verifying OTP for phone:', otpData.phone);
       
-      // Get the current state to access pending user info
       const state = getState() as { auth: AuthState };
-      const pendingUserId = otpData.userId || state.auth.pendingUserId; // Use passed userId first
+      const pendingUserId = otpData.userId || state.auth.pendingUserId;
       
       if (!pendingUserId) {
         throw new Error('No pending user found. Please restart the authentication process.');
       }
       
-      // Since OTP verification is handled by OTPLess service,
-      // we assume OTP is valid if we reach this point
-      // Now we need to mark the user as verified
       console.log('✅ OTP verification successful, marking user as verified');
       
-      // Dispatch loginAndVerifyUser with the pendingUserId from the state
+      // Dispatch loginAndVerifyUser
       dispatch(loginAndVerifyUser({ phone: otpData.phone, password: otpData.password, userId: pendingUserId }));
 
-      // Return success with user verification update
       return {
         success: true,
         userId: pendingUserId,
@@ -330,76 +533,6 @@ export const verifyOTP = createAsyncThunk(
       };
     } catch (error) {
       console.error('❌ OTP verification error:', error);
-      throw error;
-    }
-  }
-);
-
-// Async action to update user verification status
-export const updateUserVerification = createAsyncThunk(
-  'auth/updateUserVerification',
-  async (userData: { userId: string; isVerified: boolean; token: string }) => {
-    try {
-      console.log('🔄 Updating user verification status:', userData.userId);
-      
-      // Method 1: Use the quick verify endpoint from the API guide
-      const endpoint = userData.isVerified 
-        ? `/users/${userData.userId}/verify`
-        : `/users/${userData.userId}/unverify`;
-      
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userData.token}`,
-        },
-      });
-      
-      console.log('📡 User verification response status:', response.status);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ User verification failed:', errorData);
-        throw new Error(errorData.message || 'User verification failed');
-      }
-      
-      const result = await response.json();
-      console.log('✅ User verification updated:', result);
-      return result;
-    } catch (error) {
-      console.error('🔥 Network error during user verification:', error);
-      throw error;
-    }
-  }
-);
-
-// Async action to get user profile
-export const getUserProfile = createAsyncThunk(
-  'auth/getUserProfile',
-  async (userData: { userId: string; token: string }) => {
-    try {
-      console.log('🔄 Getting user profile:', userData.userId);
-      
-      const response = await fetch(`${API_BASE_URL}/users/${userData.userId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${userData.token}`,
-        },
-      });
-      
-      console.log('📡 User profile response status:', response.status);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ Failed to get user profile:', errorData);
-        throw new Error(errorData.message || 'Failed to get user profile');
-      }
-      
-      const result = await response.json();
-      console.log('✅ User profile retrieved:', result);
-      return result;
-    } catch (error) {
-      console.error('🔥 Network error during profile retrieval:', error);
       throw error;
     }
   }
@@ -416,26 +549,48 @@ export const otpLogin = createAsyncThunk(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: payload.phone }),
       });
+      
       console.log('📡 OTP login status:', response.status);
+      
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.message || 'OTP login failed');
       }
+      
       const data = await response.json();
       console.log('✅ OTP login success:', data);
       
-      // Persist auth state
-      console.log('🔄 otpLogin: Saving token to AsyncStorage...');
-      await AsyncStorage.setItem('token', data.token);
-      if (data.user) {
-        console.log('🔄 otpLogin: Saving user to AsyncStorage...', data.user);
-        await AsyncStorage.setItem('user', JSON.stringify(data.user));
-      } else {
-        console.log('⚠️ otpLogin: data.user is undefined, removing user from AsyncStorage.');
-        await AsyncStorage.removeItem('user');
+      // Handle both response formats
+      const accessToken = data.access_token || data.token;
+      const refreshToken = data.refresh_token || '';
+      const expiresIn = data.expires_in || 900;
+      const user = data.user;
+      
+      if (!accessToken || !user) {
+        throw new Error('Invalid OTP login response');
       }
       
-      return data; // expects { token, user }
+      // Use apiInterceptor to handle token storage
+      await apiInterceptor.handleLoginResponse({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: expiresIn,
+        token_type: data.token_type || 'Bearer',
+        user: user
+      });
+      
+      // Also save token expiry
+      const expiryTime = new Date().getTime() + (expiresIn * 1000);
+      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+      
+      // Save legacy token
+      await AsyncStorage.setItem('token', accessToken);
+      
+      return {
+        token: accessToken,
+        refreshToken,
+        user,
+      };
     } catch (error) {
       console.error('❌ OTP login error:', error);
       throw error;
@@ -461,7 +616,7 @@ const authSlice = createSlice({
     // Start forgot-password flow
     startForgotPassword: (state, action) => {
       state.error = null;
-      state.pendingUserPhone = action.payload; // phone number
+      state.pendingUserPhone = action.payload;
       state.isForgotPassword = true;
       state.currentScreen = 'otp';
     },
@@ -477,13 +632,14 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.user = null;
       state.token = null;
+      state.refreshToken = null;
       state.isOTPRequired = false;
       state.pendingUserPhone = null;
       state.pendingUserId = null;
       state.currentScreen = 'signIn';
       state.error = null;
-      AsyncStorage.removeItem('token');
-      AsyncStorage.removeItem('user');
+      // Use apiInterceptor's logout method which handles clearing tokens
+      apiInterceptor.logout();
     },
     
     // Reset all loading states
@@ -499,6 +655,12 @@ const authSlice = createSlice({
     setOtpChannel: (state, action: PayloadAction<'sms' | 'whatsapp'>) => {
       state.otpChannel = action.payload;
     },
+    
+    // Update tokens (useful when refresh happens in background)
+    updateTokens: (state, action: PayloadAction<{ accessToken: string; refreshToken: string }>) => {
+      state.token = action.payload.accessToken;
+      state.refreshToken = action.payload.refreshToken;
+    },
   },
   
   extraReducers: (builder) => {
@@ -512,21 +674,56 @@ const authSlice = createSlice({
         if (action.payload) {
           state.isAuthenticated = true;
           state.token = action.payload.token;
+          state.refreshToken = action.payload.refreshToken || null;
           state.user = action.payload.user;
           state.currentScreen = 'authenticated';
           console.log('✅ checkAuth.fulfilled: Auth state set to authenticated.');
+        } else {
+          state.isAuthenticated = false;
+          state.token = null;
+          state.refreshToken = null;
+          state.user = null;
         }
         state.isLoading = false;
         console.log('✅ checkAuth.fulfilled: isLoading set to false.');
       })
       .addCase(checkAuth.rejected, (state) => {
         state.isLoading = false;
+        state.isAuthenticated = false;
         console.log('❌ checkAuth.rejected: isLoading set to false.');
       });
 
-    
-
-    
+    // Register User reducers
+    builder
+      .addCase(registerUser.pending, (state) => {
+        state.isSigningUp = true;
+        state.error = null;
+      })
+      .addCase(registerUser.fulfilled, (state, action) => {
+        state.isSigningUp = false;
+        
+        if (action.payload.autoLoggedIn && action.payload.token) {
+          // New register endpoint that returns tokens
+          state.isAuthenticated = true;
+          state.token = action.payload.token;
+          state.refreshToken = action.payload.refreshToken || null;
+          state.user = action.payload.user;
+          state.currentScreen = 'authenticated';
+          state.isOTPRequired = false;
+        } else {
+          // Legacy flow - needs OTP
+          state.pendingUserId = action.payload.userId;
+          state.pendingUserPhone = action.payload.phone;
+          state.currentScreen = 'otp';
+          state.isOTPRequired = true;
+        }
+        
+        state.error = null;
+      })
+      .addCase(registerUser.rejected, (state, action) => {
+        state.isSigningUp = false;
+        state.error = action.payload as string || 'Registration failed';
+      });
     
     // Sign In reducers
     builder
@@ -538,10 +735,10 @@ const authSlice = createSlice({
         state.isSigningIn = false;
         console.log('✅ signIn.fulfilled: Payload received:', action.payload);
         
-        // Direct login success with new token format
         state.isAuthenticated = true;
-        state.user = action.payload.user || null;
+        state.user = action.payload.user;
         state.token = action.payload.access_token;
+        state.refreshToken = action.payload.refresh_token || null;
         state.currentScreen = 'authenticated';
         console.log('✅ signIn.fulfilled: Login successful, auth state set.');
         
@@ -562,11 +759,9 @@ const authSlice = createSlice({
         state.isVerifyingOTP = false;
         
         if (action.payload.requiresUserVerification) {
-          // OTP verified, but we need to update user verification status
           state.isUpdatingUserVerification = true;
           console.log('✅ OTP verified, updating user verification status...');
         } else {
-          // Direct success
           state.isAuthenticated = true;
           state.isOTPRequired = false;
           state.pendingUserPhone = null;
@@ -580,33 +775,8 @@ const authSlice = createSlice({
         state.isVerifyingOTP = false;
         state.error = action.error.message || 'OTP verification failed';
       });
-    
-    // Update User Verification reducers
-    builder
-      .addCase(updateUserVerification.pending, (state) => {
-        state.isUpdatingUserVerification = true;
-        state.error = null;
-      })
-      .addCase(updateUserVerification.fulfilled, (state, action) => {
-        state.isUpdatingUserVerification = false;
-        
-        // User verification updated successfully
-        if (action.payload.user) {
-          state.user = action.payload.user;
-          state.isAuthenticated = true;
-          state.isOTPRequired = false;
-          state.pendingUserPhone = null;
-          state.pendingUserId = null;
-          state.currentScreen = 'authenticated';
-        }
-        
-        state.error = null;
-      })
-      .addCase(updateUserVerification.rejected, (state, action) => {
-        state.isUpdatingUserVerification = false;
-        state.error = action.error.message || 'User verification failed';
-      });
 
+    // Login and Verify User reducers
     builder
       .addCase(loginAndVerifyUser.pending, (state) => {
         state.isSigningIn = true;
@@ -615,40 +785,32 @@ const authSlice = createSlice({
       .addCase(loginAndVerifyUser.fulfilled, (state, action) => {
         state.isSigningIn = false;
         state.isAuthenticated = true;
-        state.user = action.payload.user as unknown as User;
+        state.user = action.payload.user as User;
         state.token = action.payload.token;
+        state.refreshToken = action.payload.refreshToken || null;
         state.currentScreen = 'authenticated';
+        state.isOTPRequired = false;
+        state.pendingUserPhone = null;
+        state.pendingUserId = null;
         state.error = null;
-        AsyncStorage.setItem('token', action.payload.token);
-        AsyncStorage.setItem('user', JSON.stringify(action.payload.user));
       })
       .addCase(loginAndVerifyUser.rejected, (state, action) => {
         state.isSigningIn = false;
-        state.error = action.error.message || 'Login and verification failed';
+        state.error = action.payload as string || 'Login and verification failed';
       });
-    
-    // Get User Profile reducers
+
+    // OTP Login reducers
     builder
-      .addCase(getUserProfile.pending, (state) => {
+      .addCase(otpLogin.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(getUserProfile.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.user = action.payload;
-        state.error = null;
-      })
-      .addCase(getUserProfile.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.error.message || 'Failed to get user profile';
-      });
-
-    builder
       .addCase(otpLogin.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isAuthenticated = true;
-        state.user = action.payload.user || null;
+        state.user = action.payload.user;
         state.token = action.payload.token;
+        state.refreshToken = action.payload.refreshToken || null;
         state.currentScreen = 'authenticated';
         state.isForgotPassword = false;
         console.log('✅ otpLogin.fulfilled: OTP login successful, auth state set.');
@@ -661,5 +823,15 @@ const authSlice = createSlice({
   },
 });
 
-export const {clearError, setCurrentScreen, logout, resetLoadingStates, startForgotPassword, finishForgotPassword, setOtpChannel} = authSlice.actions;
+export const {
+  clearError, 
+  setCurrentScreen, 
+  logout, 
+  resetLoadingStates, 
+  startForgotPassword, 
+  finishForgotPassword, 
+  setOtpChannel,
+  updateTokens
+} = authSlice.actions;
+
 export default authSlice.reducer;

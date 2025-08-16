@@ -7,6 +7,8 @@ interface LoginResponse {
   expires_in: number;
   token_type: string;
   user: any;
+  // Legacy fields
+  token?: string;
 }
 
 class ApiInterceptor {
@@ -31,6 +33,13 @@ class ApiInterceptor {
         AsyncStorage.getItem('access_token'),
         AsyncStorage.getItem('refresh_token')
       ]);
+      
+      // Fallback to legacy token if new one doesn't exist
+      if (!accessToken) {
+        const legacyToken = await AsyncStorage.getItem('token');
+        return { accessToken: legacyToken, refreshToken };
+      }
+      
       return { accessToken, refreshToken };
     } catch (error) {
       console.error('Failed to get stored tokens:', error);
@@ -39,12 +48,21 @@ class ApiInterceptor {
   }
 
   // Save tokens to storage
-  private async saveTokens(accessToken: string, refreshToken: string): Promise<void> {
+  private async saveTokens(accessToken: string, refreshToken: string, expiresIn?: number): Promise<void> {
     try {
-      await Promise.all([
+      const promises = [
         AsyncStorage.setItem('access_token', accessToken),
-        AsyncStorage.setItem('refresh_token', refreshToken)
-      ]);
+        AsyncStorage.setItem('refresh_token', refreshToken),
+        AsyncStorage.setItem('token', accessToken), // Legacy support
+      ];
+      
+      if (expiresIn) {
+        const expiryTime = new Date().getTime() + (expiresIn * 1000);
+        promises.push(AsyncStorage.setItem('token_expiry', expiryTime.toString()));
+      }
+      
+      await Promise.all(promises);
+      console.log('✅ Tokens saved successfully');
     } catch (error) {
       console.error('Failed to save tokens:', error);
     }
@@ -56,8 +74,11 @@ class ApiInterceptor {
       await Promise.all([
         AsyncStorage.removeItem('access_token'),
         AsyncStorage.removeItem('refresh_token'),
-        AsyncStorage.removeItem('user')
+        AsyncStorage.removeItem('user'),
+        AsyncStorage.removeItem('token'), // Legacy
+        AsyncStorage.removeItem('token_expiry'),
       ]);
+      console.log('✅ Tokens cleared');
     } catch (error) {
       console.error('Failed to clear tokens:', error);
     }
@@ -74,6 +95,7 @@ class ApiInterceptor {
     this.isRefreshing = true;
 
     try {
+      console.log('🔄 Attempting token refresh...');
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         headers: {
@@ -85,13 +107,15 @@ class ApiInterceptor {
       const data = await response.json();
 
       if (response.ok && data.access_token) {
-        const { access_token, refresh_token } = data;
-        await this.saveTokens(access_token, refresh_token);
+        const { access_token, refresh_token, expires_in } = data;
+        await this.saveTokens(access_token, refresh_token || refreshToken, expires_in);
         this.notifyRefreshSubscribers(access_token);
         this.isRefreshing = false;
+        console.log('✅ Token refreshed successfully');
         return access_token;
       } else {
         // Refresh failed, clear tokens
+        console.error('❌ Token refresh failed:', data);
         await this.clearTokens();
         this.isRefreshing = false;
         return null;
@@ -114,11 +138,17 @@ class ApiInterceptor {
       const { accessToken } = await this.getStoredTokens();
       const url = `${API_BASE_URL}${endpoint}`;
 
+      console.log(`🔄 API Request: ${options.method || 'GET'} ${endpoint}`);
+
       // Default headers
       const headers: any = {
-        'Content-Type': 'application/json',
         ...options.headers,
       };
+
+      // Only set Content-Type if not already set and not FormData
+      if (!headers['Content-Type'] && !(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+      }
 
       // Add auth token if available
       if (accessToken) {
@@ -131,16 +161,25 @@ class ApiInterceptor {
       });
 
       // Check for new token in headers
-      const newToken = response.headers.get('X-New-Token');
+      const newToken = response.headers.get('x-new-token') || response.headers.get('X-New-Token');
+      const tokenExpiresIn = response.headers.get('x-token-expires-in') || response.headers.get('X-Token-Expires-In');
+      
       if (newToken) {
         console.log('🔄 New token received in headers');
         const { refreshToken } = await this.getStoredTokens();
         if (refreshToken) {
-          await this.saveTokens(newToken, refreshToken);
+          await this.saveTokens(newToken, refreshToken, tokenExpiresIn ? parseInt(tokenExpiresIn) : undefined);
         }
       }
 
-      const data = await response.json();
+      // Handle response based on content type
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = await response.text();
+      }
 
       if (response.ok) {
         return { success: true, data };
@@ -161,7 +200,7 @@ class ApiInterceptor {
         // Refresh failed, return error
         return { success: false, error: 'Authentication failed' };
       } else {
-        return { success: false, error: data.message || 'An error occurred' };
+        return { success: false, error: data?.message || data || 'An error occurred' };
       }
     } catch (error) {
       console.error('Network error:', error);
@@ -171,24 +210,37 @@ class ApiInterceptor {
 
   // Handle login response
   async handleLoginResponse(response: LoginResponse): Promise<void> {
-    const { access_token, refresh_token, user } = response;
-    await this.saveTokens(access_token, refresh_token);
-    await AsyncStorage.setItem('user', JSON.stringify(user));
+    const access_token = response.access_token || response.token;
+    const refresh_token = response.refresh_token || '';
+    const expires_in = response.expires_in || 900;
+    const { user } = response;
+    
+    if (access_token && refresh_token) {
+      await this.saveTokens(access_token, refresh_token, expires_in);
+      await AsyncStorage.setItem('user', JSON.stringify(user));
+      console.log('✅ Login response handled successfully');
+    } else {
+      console.error('❌ Invalid login response - missing tokens');
+    }
   }
 
-  // Validate token
+  // Validate token - Fixed endpoint
   async validateToken(): Promise<{ valid: boolean; user?: any }> {
     try {
-      const result = await this.makeAuthenticatedRequest('/auth/validate-token', {
-        method: 'POST',
+      const result = await this.makeAuthenticatedRequest<any>('/auth/verify-token', {
+        method: 'GET', // Changed to GET based on your backend
       });
 
       if (result.success && result.data) {
-        return { valid: true, user: result.data.user };
+        return { 
+          valid: result.data.valid || true, 
+          user: result.data.user || result.data 
+        };
       } else {
         return { valid: false };
       }
     } catch (error) {
+      console.error('Token validation error:', error);
       return { valid: false };
     }
   }
