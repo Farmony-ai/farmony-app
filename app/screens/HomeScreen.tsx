@@ -25,7 +25,7 @@ import CatalogueService from '../services/CatalogueService';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { setDate } from '../store/slices/dateRangeSlice';
-import { setLocation } from '../store/slices/locationSlice'; // Import setLocation action
+import { setLocation } from '../store/slices/locationSlice';
 
 import categoryIcons from '../utils/icons';
 
@@ -89,12 +89,7 @@ export default function HomeScreen() {
   const [isWeatherExpanded, setIsWeatherExpanded] = useState(false);
   const [weeklyForecast, setWeeklyForecast] = useState<any[]>([]);
   
-  // Weather animations
-  const weatherIconAnim = useRef(new Animated.Value(1)).current;
-  const cardGlowAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const backgroundAnim = useRef(new Animated.Value(0)).current;
-  const gradientAnim = useRef(new Animated.Value(0)).current;
+  // Only keep the expand animation for weekly forecast
   const expandAnim = useRef(new Animated.Value(0)).current;
   
   const dispatch = useDispatch();
@@ -125,180 +120,6 @@ export default function HomeScreen() {
     fetchCategories();
   }, []);
 
-  // Weather animation functions
-  const startWeatherAnimation = (weatherCondition: string) => {
-    const condition = weatherCondition.toLowerCase();
-    
-    // Reset animations
-    weatherIconAnim.setValue(1);
-    cardGlowAnim.setValue(0);
-    pulseAnim.setValue(1);
-    backgroundAnim.setValue(0);
-    gradientAnim.setValue(0);
-    
-    if (condition.includes('rain') || condition.includes('drizzle')) {
-      // Rain animation - gentle pulsing with blue tint
-      Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(pulseAnim, {
-              toValue: 1.1,
-              duration: 2000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(backgroundAnim, {
-              toValue: 1,
-              duration: 2000,
-              useNativeDriver: false,
-            }),
-          ]),
-          Animated.parallel([
-            Animated.timing(pulseAnim, {
-              toValue: 1,
-              duration: 2000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(backgroundAnim, {
-              toValue: 0,
-              duration: 2000,
-              useNativeDriver: false,
-            }),
-          ]),
-        ])
-      ).start();
-    } else if (condition.includes('storm') || condition.includes('thunder')) {
-      // Storm animation - intense pulsing with dark glow
-      Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(pulseAnim, {
-              toValue: 1.2,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-            Animated.timing(cardGlowAnim, {
-              toValue: 1,
-              duration: 800,
-              useNativeDriver: false,
-            }),
-            Animated.timing(backgroundAnim, {
-              toValue: 1,
-              duration: 800,
-              useNativeDriver: false,
-            }),
-          ]),
-          Animated.parallel([
-            Animated.timing(pulseAnim, {
-              toValue: 1,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-            Animated.timing(cardGlowAnim, {
-              toValue: 0,
-              duration: 800,
-              useNativeDriver: false,
-            }),
-            Animated.timing(backgroundAnim, {
-              toValue: 0,
-              duration: 800,
-              useNativeDriver: false,
-            }),
-          ]),
-        ])
-      ).start();
-    } else if (condition.includes('clear') || condition.includes('sunny')) {
-      // Sunny animation - gentle rotation with warm gradient
-      Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(weatherIconAnim, {
-              toValue: 1.1,
-              duration: 3000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(gradientAnim, {
-              toValue: 1,
-              duration: 3000,
-              useNativeDriver: false,
-            }),
-          ]),
-          Animated.parallel([
-            Animated.timing(weatherIconAnim, {
-              toValue: 1,
-              duration: 3000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(gradientAnim, {
-              toValue: 0,
-              duration: 3000,
-              useNativeDriver: false,
-            }),
-          ]),
-        ])
-      ).start();
-    } else if (condition.includes('cloudy') || condition.includes('overcast')) {
-      // Cloudy animation - slow fade with gray tint
-      Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(weatherIconAnim, {
-              toValue: 0.8,
-              duration: 4000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(backgroundAnim, {
-              toValue: 0.5,
-              duration: 4000,
-              useNativeDriver: false,
-            }),
-          ]),
-          Animated.parallel([
-            Animated.timing(weatherIconAnim, {
-              toValue: 1,
-              duration: 4000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(backgroundAnim, {
-              toValue: 0,
-              duration: 4000,
-              useNativeDriver: false,
-            }),
-          ]),
-        ])
-      ).start();
-    } else if (condition.includes('snow')) {
-      // Snow animation - gentle floating with white shimmer
-      Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(pulseAnim, {
-              toValue: 1.05,
-              duration: 3000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(gradientAnim, {
-              toValue: 1,
-              duration: 3000,
-              useNativeDriver: false,
-            }),
-          ]),
-          Animated.parallel([
-            Animated.timing(pulseAnim, {
-              toValue: 1,
-              duration: 3000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(gradientAnim, {
-              toValue: 0,
-              duration: 3000,
-              useNativeDriver: false,
-            }),
-          ]),
-        ])
-      ).start();
-    }
-  };
-
   useEffect(() => {
     const fetchWeatherData = async () => {
       if (latitude && longitude) {
@@ -306,8 +127,6 @@ export default function HomeScreen() {
         try {
           const data = await ClimateService.getWeatherData(latitude, longitude);
           setWeatherData(data);
-          // Start weather-specific animation
-          startWeatherAnimation(data.condition);
         } catch (error) {
           console.error('Error fetching weather data:', error);
         } finally {
@@ -329,10 +148,6 @@ export default function HomeScreen() {
       useNativeDriver: false,
     }).start();
   };
-
-
-
-  
 
   const searchBarTop = headerHeightAnim.interpolate({
     inputRange: [INITIAL_HEADER_HEIGHT, 1000],
@@ -386,6 +201,24 @@ export default function HomeScreen() {
       duration: 300,
       useNativeDriver: false,
     }).start();
+  };
+
+  // Get weather-based background color (static)
+  const getWeatherBackground = () => {
+    if (!weatherData) return 'white';
+    const condition = weatherData.condition.toLowerCase();
+    if (condition.includes('rain') || condition.includes('drizzle')) {
+      return '#e3f2fd'; // Light blue
+    } else if (condition.includes('storm') || condition.includes('thunder')) {
+      return '#f3e5f5'; // Light purple
+    } else if (condition.includes('clear') || condition.includes('sunny')) {
+      return '#fff9c4'; // Light yellow
+    } else if (condition.includes('cloudy') || condition.includes('overcast')) {
+      return '#f5f5f5'; // Light gray
+    } else if (condition.includes('snow')) {
+      return '#f0f4ff'; // Very light blue
+    }
+    return 'white';
   };
 
   return (
@@ -477,7 +310,7 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        {/* Climate Card */}
+        {/* Climate Card - Simplified without animations */}
         <View style={styles.climateSection}>
           <Text style={styles.sectionTitle}>Weather & Climate</Text>
           <TouchableOpacity 
@@ -485,32 +318,10 @@ export default function HomeScreen() {
             onPress={handleWeatherCardPress}
             style={styles.climateCardWrapper}
           >
-            <Animated.View 
+            <View 
               style={[
                 styles.climateCard,
-                {
-                  transform: [{ scale: pulseAnim }],
-                  shadowOpacity: cardGlowAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.1, 0.3],
-                  }),
-                  shadowRadius: cardGlowAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [4, 12],
-                  }),
-                  backgroundColor: backgroundAnim.interpolate({
-                    inputRange: [0, 0.5, 1],
-                    outputRange: ['white', '#f0f0f0', '#e3f2fd'],
-                  }),
-                  borderColor: gradientAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['transparent', COLORS.PRIMARY.LIGHT],
-                  }),
-                  borderWidth: gradientAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 1],
-                  }),
-                }
+                { backgroundColor: getWeatherBackground() }
               ]}
             >
               {weatherLoading ? (
@@ -520,26 +331,13 @@ export default function HomeScreen() {
               ) : weatherData ? (
                 <View style={styles.climateContent}>
                   <View style={styles.climateHeader}>
-                    <Animated.View 
-                      style={[
-                        styles.weatherIconContainer,
-                        {
-                          transform: [
-                            { scale: weatherIconAnim },
-                            { rotate: weatherIconAnim.interpolate({
-                              inputRange: [0.8, 1.1],
-                              outputRange: ['0deg', '360deg'],
-                            })}
-                          ],
-                        }
-                      ]}
-                    >
-                    <Ionicons 
-                      name={ClimateService.getWeatherIcon(weatherData.icon)} 
-                      size={32} 
-                      color={COLORS.PRIMARY.MAIN} 
-                    />
-                    </Animated.View>
+                    <View style={styles.weatherIconContainer}>
+                      <Ionicons 
+                        name={ClimateService.getWeatherIcon(weatherData.icon)} 
+                        size={32} 
+                        color={COLORS.PRIMARY.MAIN} 
+                      />
+                    </View>
                     <View style={styles.mainWeatherInfo}>
                       <Text style={styles.temperatureText}>{weatherData.temperature}°</Text>
                       <Text style={styles.conditionText}>{weatherData.condition}</Text>
@@ -567,7 +365,7 @@ export default function HomeScreen() {
                   <Text style={styles.climateErrorText}>Weather data unavailable</Text>
                 </View>
               )}
-            </Animated.View>
+            </View>
             
             {/* Weekly Forecast */}
             <Animated.View 
@@ -646,7 +444,6 @@ export default function HomeScreen() {
     </SafeAreaWrapper>
   );
 }
-
 
 const styles = StyleSheet.create({
   scrollContent: {
@@ -884,16 +681,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.SECONDARY.LIGHT,
     borderRadius: BORDER_RADIUS.LG,
   },
-  // Climate Card Styles
+  // Climate Card Styles - Simplified without animations
   climateSection: {
     paddingHorizontal: SPACING.MD,
     marginTop: SPACING.LG,
+  },
+  climateCardWrapper: {
+    overflow: 'hidden',
+    borderRadius: BORDER_RADIUS.XL,
+    ...SHADOWS.MD,
   },
   climateCard: {
     backgroundColor: 'white',
     borderRadius: BORDER_RADIUS.XL,
     padding: SPACING.SM,
-    ...SHADOWS.MD,
   },
   climateLoading: {
     alignItems: 'center',
@@ -958,7 +759,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.SECONDARY,
   },
-  
   climateError: {
     alignItems: 'center',
     paddingVertical: SPACING.SM,
@@ -970,11 +770,6 @@ const styles = StyleSheet.create({
     marginTop: SPACING.XS,
   },
   // Weekly Forecast Styles
-  climateCardWrapper: {
-    overflow: 'hidden',
-    borderRadius: BORDER_RADIUS.XL,
-    ...SHADOWS.MD,
-  },
   weeklyForecastContainer: {
     backgroundColor: COLORS.BACKGROUND.CARD,
     borderTopWidth: 0.5,

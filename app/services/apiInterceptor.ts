@@ -84,8 +84,7 @@ class ApiInterceptor {
     }
   }
 
-  // Refresh token logic
-  private async refreshAuthToken(refreshToken: string): Promise<string | null> {
+   private async refreshAuthToken(refreshToken: string): Promise<string | null> {
     if (this.isRefreshing) {
       return new Promise((resolve) => {
         this.subscribeToRefresh((token) => resolve(token));
@@ -114,10 +113,10 @@ class ApiInterceptor {
         console.log('✅ Token refreshed successfully');
         return access_token;
       } else {
-        // Refresh failed, clear tokens
         console.error('❌ Token refresh failed:', data);
         await this.clearTokens();
         this.isRefreshing = false;
+        // IMPORTANT: Propagate logout or redirect to login screen from here in your app
         return null;
       }
     } catch (error) {
@@ -128,7 +127,6 @@ class ApiInterceptor {
     }
   }
 
-  // Make authenticated request with auto-refresh
   async makeAuthenticatedRequest<T>(
     endpoint: string,
     options: RequestInit = {},
@@ -140,39 +138,20 @@ class ApiInterceptor {
 
       console.log(`🔄 API Request: ${options.method || 'GET'} ${endpoint}`);
 
-      // Default headers
-      const headers: any = {
-        ...options.headers,
-      };
+      const headers: any = { ...options.headers };
 
-      // Only set Content-Type if not already set and not FormData
       if (!headers['Content-Type'] && !(options.body instanceof FormData)) {
         headers['Content-Type'] = 'application/json';
       }
 
-      // Add auth token if available
       if (accessToken) {
         headers.Authorization = `Bearer ${accessToken}`;
       }
 
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
+      const response = await fetch(url, { ...options, headers });
 
-      // Check for new token in headers
-      const newToken = response.headers.get('x-new-token') || response.headers.get('X-New-Token');
-      const tokenExpiresIn = response.headers.get('x-token-expires-in') || response.headers.get('X-Token-Expires-In');
-      
-      if (newToken) {
-        console.log('🔄 New token received in headers');
-        const { refreshToken } = await this.getStoredTokens();
-        if (refreshToken) {
-          await this.saveTokens(newToken, refreshToken, tokenExpiresIn ? parseInt(tokenExpiresIn) : undefined);
-        }
-      }
+      // REMOVED HEADER CHECK LOGIC - This part is no longer needed.
 
-      // Handle response based on content type
       let data;
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
@@ -184,23 +163,23 @@ class ApiInterceptor {
       if (response.ok) {
         return { success: true, data };
       } else if (response.status === 401 && retryCount === 0) {
-        // Token expired, try to refresh
         console.log('🔄 Token expired, attempting refresh...');
         const { refreshToken } = await this.getStoredTokens();
-        
+
         if (refreshToken) {
-          const newToken = await this.refreshAuthToken(refreshToken);
-          
-          if (newToken) {
+          const newAccessToken = await this.refreshAuthToken(refreshToken);
+
+          if (newAccessToken) {
             // Retry the request with new token
-            return this.makeAuthenticatedRequest<T>(endpoint, options, retryCount + 1);
+            return this.makeAuthenticatedRequest<T>(endpoint, options, 1); // Increment retryCount
           }
         }
-        
-        // Refresh failed, return error
+
+        // Refresh failed or no refresh token, return error
         return { success: false, error: 'Authentication failed' };
       } else {
-        return { success: false, error: data?.message || data || 'An error occurred' };
+        const errorMessage = data?.message || (typeof data === 'string' ? data : 'An error occurred');
+        return { success: false, error: errorMessage };
       }
     } catch (error) {
       console.error('Network error:', error);

@@ -96,6 +96,7 @@ const MyListingsScreen = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>My Listings</Text>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => navigation.navigate('CreateListing')}
@@ -104,37 +105,41 @@ const MyListingsScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Stats Summary Cards */}
+      {/* Compact Stats Bar */}
       {listings.length > 0 && !loading && (
-        <View style={styles.statsContainer}>
-          <View style={styles.statsHeader}>
-            <Text style={styles.statsTitle}>OVERVIEW</Text>
-            <View style={styles.headerLine} />
+        <View style={styles.compactStatsContainer}>
+          <View style={styles.statItem}>
+            <View style={[styles.statDot, { backgroundColor: COLORS.PRIMARY.MAIN }]} />
+            <Text style={styles.statNumber}>{listings.length}</Text>
+            <Text style={styles.statText}>Total</Text>
           </View>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <View style={styles.statIconContainer}>
-                <Ionicons name="list-outline" size={20} color={COLORS.PRIMARY.MAIN} />
-              </View>
-              <Text style={styles.statValue}>{listings.length}</Text>
-              <Text style={styles.statLabel}>Total Listings</Text>
-            </View>
-            <View style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: COLORS.SUCCESS.LIGHT }]}>
-                <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.SUCCESS.MAIN} />
-              </View>
-              <Text style={styles.statValue}>{listings.filter(l => l.isActive).length}</Text>
-              <Text style={styles.statLabel}>Active</Text>
-            </View>
-            <View style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="calendar-outline" size={20} color="#F59E0B" />
-              </View>
-              <Text style={styles.statValue}>
-                {listings.reduce((sum, l) => sum + l.bookingCount, 0)}
-              </Text>
-              <Text style={styles.statLabel}>Bookings</Text>
-            </View>
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <View style={[styles.statDot, { backgroundColor: COLORS.SUCCESS.MAIN }]} />
+            <Text style={styles.statNumber}>{listings.filter(l => l.isActive).length}</Text>
+            <Text style={styles.statText}>Active</Text>
+          </View>
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <View style={[styles.statDot, { backgroundColor: '#F59E0B' }]} />
+            <Text style={styles.statNumber}>
+              {listings.reduce((sum, l) => sum + l.bookingCount, 0)}
+            </Text>
+            <Text style={styles.statText}>Bookings</Text>
+          </View>
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <View style={[styles.statDot, { backgroundColor: '#8B5CF6' }]} />
+            <Text style={styles.statNumber}>
+              {listings.reduce((sum, l) => sum + l.viewCount, 0)}
+            </Text>
+            <Text style={styles.statText}>Views</Text>
           </View>
         </View>
       )}
@@ -148,33 +153,37 @@ const MyListingsScreen = () => {
       ) : listings.length === 0 ? (
         <EmptyState />
       ) : (
-        <>
-          {/* Listings Header */}
-          <View style={styles.listingsHeader}>
-            <Text style={styles.listingsTitle}>MY LISTINGS</Text>
-            <View style={styles.headerLine} />
-            <Text style={styles.listingsCount}>{listings.length}</Text>
-          </View>
-          
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={[COLORS.PRIMARY.MAIN]}
-                tintColor={COLORS.PRIMARY.MAIN}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.PRIMARY.MAIN]}
+              tintColor={COLORS.PRIMARY.MAIN}
+            />
+          }
+        >
+          {listings.map((listing) => (
+            <View key={listing._id} style={styles.cardWrapper}>
+              <ListingCard 
+                listing={listing} 
+                onStatusChange={(listingId, newStatus) => {
+                  // Update local state to reflect status change
+                  setListings(prevListings => 
+                    prevListings.map(l => 
+                      l._id === listingId ? { ...l, isActive: newStatus } : l
+                    )
+                  );
+                }}
+                onEdit={(listingId) => {
+                  navigation.navigate('CreateListing', { listingId });
+                }}
               />
-            }
-          >
-            {listings.map((listing) => (
-              <View key={listing._id} style={styles.cardWrapper}>
-                <ListingCard listing={listing} onListingUpdate={onRefresh} />
-              </View>
-            ))}
-          </ScrollView>
-        </>
+            </View>
+          ))}
+        </ScrollView>
       )}
     </SafeAreaWrapper>
   );
@@ -189,87 +198,53 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.MD,
     backgroundColor: COLORS.NEUTRAL.WHITE,
   },
+  headerTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
   backButton: {
     padding: SPACING.XS,
   },
   addButton: {
     padding: SPACING.XS,
   },
-  statsContainer: {
+  // Compact stats bar styles
+  compactStatsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingTop: SPACING.MD,
-    paddingBottom: SPACING.LG,
+    paddingVertical: SPACING.SM,
+    paddingHorizontal: SPACING.SM,
+    marginTop: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
   },
-  statsHeader: {
+  statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    marginBottom: SPACING.MD,
+    gap: 6,
   },
-  statsTitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.SECONDARY,
-    letterSpacing: 1.2,
-    marginRight: SPACING.MD,
+  statDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  headerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.BORDER.PRIMARY,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: SPACING.MD,
-    gap: SPACING.SM,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    borderRadius: BORDER_RADIUS.LG,
-    padding: SPACING.MD,
-    alignItems: 'center',
-  },
-  statIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.SM,
-  },
-  statValue: {
-    fontSize: FONT_SIZES.XL,
+  statNumber: {
+    fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    marginBottom: 2,
   },
-  statLabel: {
+  statText: {
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
-  listingsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    marginTop: SPACING.XS,
-  },
-  listingsTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.SECONDARY,
-    letterSpacing: 1.5,
-    marginRight: SPACING.MD,
-  },
-  listingsCount: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.SECONDARY,
-    marginLeft: SPACING.MD,
+  statDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: COLORS.BORDER.PRIMARY,
   },
   scrollContent: {
     padding: SPACING.MD,

@@ -1,6 +1,4 @@
-
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,8 +6,8 @@ import {
   Image,
   Modal,
   Pressable,
-  ImageSourcePropType,
   Dimensions,
+  ScrollView,
 } from 'react-native';
 import Text from './Text';
 import { SPACING, BORDER_RADIUS, SHADOWS } from '../utils/spacing';
@@ -21,9 +19,10 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
 import { Listing, PopulatedListing } from '../services/ListingService';
 import ListingService from '../services/ListingService';
-import { LinearGradient } from 'react-native-linear-gradient';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 interface ListingCardProps {
   listing: Listing | PopulatedListing;
@@ -37,11 +36,43 @@ interface ListingCardProps {
 
 type ListingCardNavigationProp = StackNavigationProp<RootStackParamList, 'ListingDetail'>;
 
+const { width: screenWidth } = Dimensions.get('window');
+
 const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onStatusChange, style }: ListingCardProps) => {
   const navigation = useNavigation<ListingCardNavigationProp>();
   const [showMenu, setShowMenu] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const autoScrollTimer = useRef<NodeJS.Timeout | null>(null);
   const { token } = useSelector((state: RootState) => state.auth);
+
+  // Get images array
+  const images = listing.photoUrls && listing.photoUrls.length > 0 
+    ? listing.photoUrls 
+    : ['https://via.placeholder.com/400x200'];
+
+  // Auto-scroll images
+  useEffect(() => {
+    if (images.length > 1) {
+      autoScrollTimer.current = setInterval(() => {
+        setCurrentImageIndex((prevIndex) => {
+          const nextIndex = (prevIndex + 1) % images.length;
+          scrollViewRef.current?.scrollTo({
+            x: (screenWidth - SPACING.LG * 2) * nextIndex,
+            animated: true,
+          });
+          return nextIndex;
+        });
+      }, 3000);
+
+      return () => {
+        if (autoScrollTimer.current) {
+          clearInterval(autoScrollTimer.current);
+        }
+      };
+    }
+  }, [images.length]);
 
   const getSubCategoryName = () => {
     if (typeof listing.subCategoryId === 'object' && listing.subCategoryId?.name) {
@@ -56,6 +87,24 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
     return 'Service';
   };
 
+  const getProviderName = () => {
+    if (typeof listing.providerId === 'object' && listing.providerId?.name) {
+      return listing.providerId.name;
+    }
+    return 'Service Provider';
+  };
+
+  const isProviderVerified = () => {
+    if (typeof listing.providerId === 'object' && listing.providerId?.isVerified !== undefined) {
+      return listing.providerId.isVerified;
+    }
+    return false;
+  };
+
+  const getRating = () => {
+    return listing.rating || 4.5;
+  };
+
   const handleCardPress = () => {
     if (onPress) {
       onPress(listing._id);
@@ -65,7 +114,7 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
   };
 
   const handleMenuPress = (event: any) => {
-    event.stopPropagation(); // Prevent card press from triggering
+    event.stopPropagation();
     setShowMenu(true);
   };
 
@@ -76,7 +125,6 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
       if (onEdit) {
         onEdit(listing._id);
       } else {
-        // Navigate to edit screen
         (navigation as any).navigate('CreateListing', { listingId: listing._id });
       }
     } else if (action === 'activate' || action === 'deactivate') {
@@ -86,96 +134,178 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
         setIsToggling(true);
         const newStatus = action === 'activate';
         
-        // Call the appropriate callback if provided
         if (action === 'activate' && onActivate) {
           onActivate(listing._id);
         } else if (action === 'deactivate' && onDeactivate) {
           onDeactivate(listing._id);
         } else {
-          // Default behavior: toggle status directly
           await ListingService.toggleListingStatus(listing._id, newStatus, token);
           
-          // Notify parent component of status change
           if (onStatusChange) {
             onStatusChange(listing._id, newStatus);
           }
         }
       } catch (error) {
         console.error('Error toggling listing status:', error);
-        // You might want to show an error toast here
       } finally {
         setIsToggling(false);
       }
     }
   };
 
-  const getStatusBadge = (isActive: boolean | undefined) => {
-    if (isActive === undefined) {
-      return null;
-    }
-    const statusText = isActive ? 'Active' : 'Inactive';
-    const backgroundColor = isActive ? COLORS.SUCCESS.LIGHT : COLORS.NEUTRAL.GRAY[200];
-    const textColor = isActive ? COLORS.SUCCESS.DARK : COLORS.NEUTRAL.GRAY[700];
-    const iconText = isActive ? '●' : '○';
-    const iconColor = isActive ? COLORS.SUCCESS.MAIN : COLORS.NEUTRAL.GRAY[400];
+  const handleScroll = (event: any) => {
+    const slideSize = screenWidth - SPACING.LG * 2;
+    const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
+    setCurrentImageIndex(index);
+  };
 
-    return (
-      <View style={[styles.statusBadge, { backgroundColor }]}>
-        <Text style={[styles.statusIcon, { color: iconColor }]}>{iconText}</Text>
-        <Text style={[styles.statusText, { color: textColor }]}>{statusText}</Text>
-      </View>
-    );
+  const getUnitLabel = (unit: string) => {
+    const unitLabels: { [key: string]: string } = {
+      per_hour: '/hr',
+      per_day: '/day',
+      per_hectare: '/ha',
+      per_kg: '/kg',
+      per_unit: '/unit',
+      per_piece: '/piece',
     };
-
-    const getUnitLabel = (unit: string) => {
-      const unitLabels: { [key: string]: string } = {
-        per_hour: '/hr',
-        per_day: '/day',
-        per_hectare: '/ha',
-        per_kg: '/kg',
-        per_unit: '/unit',
-        per_piece: '/piece',
-      };
-      return unitLabels[unit] || unit;
-    };
+    return unitLabels[unit] || '';
+  };
 
   return (
-    <TouchableOpacity style={[styles.card, style]} onPress={handleCardPress}>
+    <TouchableOpacity 
+      style={[styles.card, style]} 
+      onPress={handleCardPress}
+      activeOpacity={0.95}
+    >
+      {/* Image Carousel */}
       <View style={styles.imageContainer}>
-        <Image 
-          source={{ uri: typeof listing.photoUrls[0] === 'string' ? listing.photoUrls[0] : 'https://via.placeholder.com/100' }} 
-          style={styles.image} 
-        />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
-          style={styles.imageOverlay}
-        />
-        <View style={styles.badgesContainer}>
-          {getStatusBadge(listing.isActive)}
-        </View>
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onTouchStart={() => {
+            if (autoScrollTimer.current) {
+              clearInterval(autoScrollTimer.current);
+            }
+          }}
+          onTouchEnd={() => {
+            if (images.length > 1) {
+              autoScrollTimer.current = setInterval(() => {
+                setCurrentImageIndex((prevIndex) => {
+                  const nextIndex = (prevIndex + 1) % images.length;
+                  scrollViewRef.current?.scrollTo({
+                    x: (screenWidth - SPACING.LG * 2) * nextIndex,
+                    animated: true,
+                  });
+                  return nextIndex;
+                });
+              }, 3000);
+            }
+          }}
+        >
+          {images.map((image, index) => (
+            <Image
+              key={index}
+              source={{ uri: typeof image === 'string' ? image : 'https://via.placeholder.com/400x200' }}
+              style={styles.image}
+              resizeMode="cover"
+            />
+          ))}
+        </ScrollView>
+
+        {/* Image Dots Indicator */}
+        {images.length > 1 && (
+          <View style={styles.dotsContainer}>
+            {images.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  index === currentImageIndex && styles.activeDot
+                ]}
+              />
+            ))}
+          </View>
+        )}
+
+        {/* Status Badge */}
+        {listing.isActive !== undefined && (
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: listing.isActive ? COLORS.SUCCESS.MAIN : COLORS.NEUTRAL.GRAY[700] }
+          ]}>
+            <Text style={styles.statusText}>
+              {listing.isActive ? 'Active' : 'Inactive'}
+            </Text>
+          </View>
+        )}
+
+        {/* Menu Button */}
+        <TouchableOpacity 
+          onPress={handleMenuPress} 
+          style={styles.menuButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <View style={styles.menuIconContainer}>
+            <Ionicons name="ellipsis-vertical" size={16} color={COLORS.NEUTRAL.GRAY[700]} />
+          </View>
+        </TouchableOpacity>
       </View>
-      <View style={styles.infoContainer}>
-        <Text style={styles.title}>{getSubCategoryName()}</Text>
-        <View style={styles.metricsContainer}>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricIcon}>👁️</Text>
-            <Text style={styles.metricText}>{listing.viewCount || 0} Views</Text>
+
+      {/* Content */}
+      <View style={styles.contentContainer}>
+        {/* Title and Rating Row */}
+        <View style={styles.titleRow}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title} numberOfLines={1}>
+              {listing.title || getSubCategoryName()}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {getProviderName()}
+            </Text>
           </View>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricIcon}>🗓️</Text>
-            <Text style={styles.metricText}>{listing.bookingCount || 0} Bookings</Text>
+          <View style={styles.ratingBadge}>
+            <Text style={styles.ratingText}>{getRating()}</Text>
+            <Ionicons name="star" size={12} color={COLORS.NEUTRAL.WHITE} />
           </View>
         </View>
-        <View style={styles.actionBar}>
-          <Text style={styles.price}>₹{listing.price} {getUnitLabel(listing.unitOfMeasure)}</Text>
-          <TouchableOpacity onPress={handleMenuPress} style={styles.menuButton}>
-            <View style={styles.menuIconContainer}>
-              <Text style={styles.menuIcon}>•••</Text>
-            </View>
-          </TouchableOpacity>
+
+        {/* Info Row */}
+        <View style={styles.infoRow}>
+          <View style={styles.infoItem}>
+            <Ionicons name="eye-outline" size={14} color={COLORS.TEXT.SECONDARY} />
+            <Text style={styles.infoText}>{listing.viewCount || 0} views</Text>
+          </View>
+          <View style={styles.separator} />
+          <View style={styles.infoItem}>
+            <Ionicons name="calendar-outline" size={14} color={COLORS.TEXT.SECONDARY} />
+            <Text style={styles.infoText}>{listing.bookingCount || 0} bookings</Text>
+          </View>
+          {isProviderVerified() && (
+            <>
+              <View style={styles.separator} />
+              <View style={styles.infoItem}>
+                <MaterialIcons name="verified" size={14} color={COLORS.SUCCESS.MAIN} />
+                <Text style={[styles.infoText, { color: COLORS.SUCCESS.MAIN }]}>Verified</Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Price Row */}
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Starting from</Text>
+          <Text style={styles.priceText}>
+            ₹{listing.price}
+            <Text style={styles.priceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
+          </Text>
         </View>
       </View>
 
+      {/* Menu Modal */}
       <Modal
         transparent={true}
         visible={showMenu}
@@ -185,7 +315,8 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
         <Pressable style={styles.modalOverlay} onPress={() => setShowMenu(false)}>
           <View style={styles.menuContainer}>
             <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuItemPress('edit')}>
-              <Text style={styles.menuItemText}>✏️ Edit Listing</Text>
+              <Ionicons name="create-outline" size={18} color={COLORS.TEXT.PRIMARY} />
+              <Text style={styles.menuItemText}>Edit Listing</Text>
             </TouchableOpacity>
             {listing.isActive ? (
               <TouchableOpacity 
@@ -193,8 +324,9 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
                 onPress={() => handleMenuItemPress('deactivate')}
                 disabled={isToggling}
               >
+                <Ionicons name="pause-circle-outline" size={18} color={COLORS.TEXT.PRIMARY} />
                 <Text style={styles.menuItemText}>
-                  {isToggling ? '⏳ Processing...' : '⏸️ Deactivate'}
+                  {isToggling ? 'Processing...' : 'Deactivate'}
                 </Text>
               </TouchableOpacity>
             ) : (
@@ -203,8 +335,9 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
                 onPress={() => handleMenuItemPress('activate')}
                 disabled={isToggling}
               >
+                <Ionicons name="play-circle-outline" size={18} color={COLORS.TEXT.PRIMARY} />
                 <Text style={styles.menuItemText}>
-                  {isToggling ? '⏳ Processing...' : '▶️ Activate'}
+                  {isToggling ? 'Processing...' : 'Activate'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -215,118 +348,158 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
   );
 };
 
-const { width } = Dimensions.get('window');
-
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: BORDER_RADIUS.LG,
+    borderRadius: BORDER_RADIUS.XL,
     overflow: 'hidden',
     marginBottom: SPACING.MD,
-    ...SHADOWS.MD,
-    width: width - SPACING.LG * 2,
+    ...SHADOWS.LG,
+    width: screenWidth - SPACING.LG * 2,
     alignSelf: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.NEUTRAL.GRAY[200],
   },
   imageContainer: {
-    position: 'relative',
     width: '100%',
     height: 200,
+    position: 'relative',
   },
   image: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+    width: screenWidth - SPACING.LG * 2,
+    height: 200,
   },
-  imageOverlay: {
+  dotsContainer: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 60,
-  },
-  badgesContainer: {
-    position: 'absolute',
-    top: SPACING.SM,
-    right: SPACING.SM,
+    bottom: SPACING.SM,
+    alignSelf: 'center',
     flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS,
+    borderRadius: BORDER_RADIUS.LG,
+    left: '50%',
+    transform: [{ translateX: -30 }],
   },
-  infoContainer: {
-    padding: SPACING.MD,
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginHorizontal: 3,
+  },
+  activeDot: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
-  },
-  title: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: getFontFamily('BOLD'),
-    marginBottom: SPACING.SM,
-    color: COLORS.TEXT.PRIMARY,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   statusBadge: {
-    paddingVertical: SPACING.XS,
+    position: 'absolute',
+    top: SPACING.MD,
+    left: SPACING.MD,
     paddingHorizontal: SPACING.SM,
-    borderRadius: BORDER_RADIUS.FULL,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: SPACING.XS,
-  },
-  statusIcon: {
-    fontSize: FONT_SIZES.SM,
-    marginRight: 4,
+    paddingVertical: SPACING.XS,
+    borderRadius: BORDER_RADIUS.SM,
   },
   statusText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: getFontFamily('MEDIUM'),
-  },
-  metricsContainer: {
-    flexDirection: 'row',
-    marginBottom: SPACING.MD,
-    marginTop: SPACING.XS,
-  },
-  metricItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: SPACING.MD,
-  },
-  metricIcon: {
-    fontSize: FONT_SIZES.SM,
-    marginRight: 4,
-  },
-  metricText: {
-    fontSize: FONT_SIZES.SM,
-    color: COLORS.NEUTRAL.GRAY[600],
-    fontFamily: getFontFamily('REGULAR'),
-  },
-  actionBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: SPACING.SM,
-    paddingTop: SPACING.SM,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.NEUTRAL.GRAY[200],
-  },
-  price: {
-    fontSize: FONT_SIZES.XL,
-    fontFamily: getFontFamily('BOLD'),
-    color: COLORS.PRIMARY.MAIN,
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: 10,
+    fontFamily: getFontFamily('SEMIBOLD'),
   },
   menuButton: {
-    padding: SPACING.XS,
+    position: 'absolute',
+    top: SPACING.MD,
+    right: SPACING.MD,
   },
   menuIconContainer: {
-    backgroundColor: COLORS.NEUTRAL.GRAY[100],
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: BORDER_RADIUS.FULL,
     width: 32,
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  menuIcon: {
-    fontSize: FONT_SIZES.SM,
-    fontWeight: 'bold',
-    color: COLORS.NEUTRAL.GRAY[700],
-    letterSpacing: -1,
+  contentContainer: {
+    padding: SPACING.MD,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.SM,
+  },
+  titleContainer: {
+    flex: 1,
+    marginRight: SPACING.SM,
+  },
+  title: {
+    fontSize: 17,
+    fontFamily: getFontFamily('SEMIBOLD'),
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 2,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: getFontFamily('REGULAR'),
+    color: COLORS.TEXT.SECONDARY,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS.MAIN,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.SM,
+    gap: 2,
+  },
+  ratingText: {
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: 12,
+    fontFamily: getFontFamily('SEMIBOLD'),
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.MD,
+    flexWrap: 'wrap',
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  infoText: {
+    fontSize: 12,
+    fontFamily: getFontFamily('REGULAR'),
+    color: COLORS.TEXT.SECONDARY,
+  },
+  separator: {
+    width: 1,
+    height: 12,
+    backgroundColor: COLORS.BORDER.PRIMARY,
+    marginHorizontal: SPACING.SM,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: SPACING.SM,
+    paddingTop: SPACING.SM,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.NEUTRAL.GRAY[200],
+  },
+  priceLabel: {
+    fontSize: 12,
+    fontFamily: getFontFamily('REGULAR'),
+    color: COLORS.TEXT.SECONDARY,
+  },
+  priceText: {
+    fontSize: 19,
+    fontFamily: getFontFamily('SEMIBOLD'),
+    color: COLORS.PRIMARY.MAIN,
+  },
+  priceUnit: {
+    fontSize: 14,
+    fontFamily: getFontFamily('REGULAR'),
+    color: COLORS.TEXT.SECONDARY,
   },
   modalOverlay: {
     flex: 1,
@@ -338,17 +511,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: BORDER_RADIUS.LG,
     padding: SPACING.SM,
-    minWidth: 180,
+    minWidth: 200,
     ...SHADOWS.LG,
   },
   menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: SPACING.SM,
     paddingHorizontal: SPACING.MD,
     borderRadius: BORDER_RADIUS.MD,
+    gap: SPACING.SM,
   },
   menuItemText: {
     fontSize: FONT_SIZES.BASE,
-    color: COLORS.NEUTRAL.GRAY[800],
+    color: COLORS.TEXT.PRIMARY,
     fontFamily: getFontFamily('MEDIUM'),
   },
   menuItemDisabled: {

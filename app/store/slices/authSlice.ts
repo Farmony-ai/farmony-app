@@ -150,119 +150,33 @@ const debugAsyncStorage = async () => {
   }
 };
 
-// Async action to check auth status from storage
-export const checkAuth = createAsyncThunk('auth/checkAuth', async () => {
-  console.log('🔄 checkAuth: Attempting to retrieve auth data from AsyncStorage...');
-  
+export const checkAuth = createAsyncThunk('auth/checkAuth', async (_, { rejectWithValue }) => {
+  console.log('🔄 checkAuth: Checking authentication status...');
   try {
-    // Get all auth data at once
-    const [[, accessToken], [, refreshToken], [, userJson], [, tokenExpiry], [, legacyToken]] = await AsyncStorage.multiGet([
+    const [[, accessToken], [, refreshToken], [, userJson]] = await AsyncStorage.multiGet([
       STORAGE_KEYS.ACCESS_TOKEN,
       STORAGE_KEYS.REFRESH_TOKEN,
       STORAGE_KEYS.USER,
-      STORAGE_KEYS.TOKEN_EXPIRY,
-      'token', // Check legacy token too
     ]);
-    
-    // Use new token first, fall back to legacy
-    const token = accessToken || legacyToken;
-    
-    console.log('🔄 checkAuth: Retrieved token:', token ? 'exists' : 'null');
-    console.log('🔄 checkAuth: Retrieved refreshToken:', refreshToken ? 'exists' : 'null');
-    console.log('🔄 checkAuth: Retrieved userJson:', userJson ? 'exists' : 'null');
-    
-    if (!token || !userJson) {
-      console.log('❌ checkAuth: No valid auth data found in AsyncStorage.');
-      await debugAsyncStorage(); // Debug what's actually stored
-      return null;
+
+    if (!accessToken || !userJson) {
+      console.log('❌ checkAuth: No token or user found.');
+      return rejectWithValue('No token or user found.');
     }
-    
-    let user = JSON.parse(userJson);
-    
-    // Check if token is expired
-    const isExpired = tokenExpiry ? new Date().getTime() >= parseInt(tokenExpiry) : false;
-    
-    if (isExpired && refreshToken) {
-      console.log('🔄 checkAuth: Token expired, attempting refresh...');
-      try {
-        // Use the apiInterceptor to validate and refresh if needed
-        const validationResult = await apiInterceptor.validateToken();
-        if (validationResult.valid && validationResult.user) {
-          // Token was refreshed successfully by apiInterceptor
-          const newAccessToken = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-          const newRefreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-          return { 
-            token: newAccessToken || token, 
-            refreshToken: newRefreshToken || refreshToken, 
-            user: validationResult.user || user 
-          };
-        }
-      } catch (error) {
-        console.error('❌ Token validation/refresh failed:', error);
-      }
-    }
-    
-    // For non-expired tokens, validate with backend
-    if (!isExpired) {
-      try {
-        const validationResult = await apiInterceptor.validateToken();
-        if (validationResult.valid) {
-          console.log('✅ checkAuth: Token validated successfully');
-          // Get potentially updated tokens after validation
-          const currentAccessToken = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-          const currentRefreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-          return { 
-            token: currentAccessToken || token, 
-            refreshToken: currentRefreshToken || refreshToken, 
-            user: validationResult.user || user 
-          };
-        } else {
-          console.log('❌ checkAuth: Token validation failed');
-          // Try to refresh if we have refresh token
-          if (refreshToken) {
-            try {
-              const refreshResult = await apiInterceptor.makeAuthenticatedRequest('/auth/refresh', {
-                method: 'POST',
-                body: JSON.stringify({ refreshToken }),
-              });
-              
-              if (refreshResult.success && refreshResult.data) {
-                const { access_token, refresh_token, user: refreshedUser } = refreshResult.data as any;
-                await saveAuthData(access_token, refresh_token || refreshToken, refreshedUser || user, 900);
-                return { 
-                  token: access_token, 
-                  refreshToken: refresh_token || refreshToken, 
-                  user: refreshedUser || user 
-                };
-              }
-            } catch (refreshError) {
-              console.error('❌ Refresh attempt failed:', refreshError);
-            }
-          }
-          
-          await clearAuthData();
-          return null;
-        }
-      } catch (error) {
-        console.error('❌ checkAuth: Validation error:', error);
-        // If validation fails but we have tokens, still return them
-        // The apiInterceptor will handle refresh on next API call
-        if (token && user && !isExpired) {
-          return { token, refreshToken, user };
-        }
-        return null;
-      }
-    } else {
-      // Token is expired and no refresh token
-      console.log('❌ checkAuth: Token expired and no refresh token available');
-      await clearAuthData();
-      return null;
-    }
-  } catch (error) {
-    console.error('❌ checkAuth: Error:', error);
-    return null;
+
+    // At this point, we assume the user is "authenticated" from the client's perspective.
+    // We will let the apiInterceptor handle refreshing the token when the first
+    // authenticated API call is made. This avoids making a network request on every app start.
+
+    const user = JSON.parse(userJson);
+    return { token: accessToken, refreshToken, user };
+
+  } catch (error: any) {
+    console.error('❌ checkAuth: Error reading from AsyncStorage:', error);
+    return rejectWithValue(error.message || 'Failed to check auth status');
   }
 });
+
 
 export const registerUser = createAsyncThunk(
   'auth/registerUser',
