@@ -54,7 +54,7 @@ const RootNavigator = () => {
             
             <Stack.Screen name="CategoryBrowser" component={CategoryBrowserScreen} />
             <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
-            <Stack.Screen name="Listings" component={ListingsScreen} />
+            {/* <Stack.Screen name="Listings" component={ListingsScreen} /> */}
             <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
             
             <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />

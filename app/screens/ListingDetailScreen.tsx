@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/rules-of-hooks */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,15 +8,20 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Dimensions,
+  Animated,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ListingService, { PopulatedListing } from '../services/ListingService';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 const ListingDetailScreen = () => {
   const navigation = useNavigation<any>();
@@ -29,12 +34,13 @@ const ListingDetailScreen = () => {
   const [showMenu, setShowMenu] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isToggling, setIsToggling] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const autoScrollTimer = useRef<NodeJS.Timeout | null>(null);
 
   const fetchListingDetail = useCallback(async () => {
     try {
       setLoading(true);
       const response = await ListingService.getListingById(listingId, token || undefined);
-      console.log("This is the response", response);
       setListing(response);
     } catch (error) {
       console.error('Error fetching listing detail:', error);
@@ -50,6 +56,28 @@ const ListingDetailScreen = () => {
       fetchListingDetail();
     }, [fetchListingDetail])
   );
+
+  // Auto-scroll images
+  useEffect(() => {
+    if (listing?.photoUrls && listing.photoUrls.length > 1) {
+      autoScrollTimer.current = setInterval(() => {
+        setCurrentImageIndex((prevIndex) => {
+          const nextIndex = (prevIndex + 1) % listing.photoUrls.length;
+          scrollViewRef.current?.scrollTo({
+            x: screenWidth * nextIndex,
+            animated: true,
+          });
+          return nextIndex;
+        });
+      }, 3000);
+
+      return () => {
+        if (autoScrollTimer.current) {
+          clearInterval(autoScrollTimer.current);
+        }
+      };
+    }
+  }, [listing?.photoUrls]);
 
   const handleDelete = () => {
     Alert.alert(
@@ -95,7 +123,6 @@ const ListingDetailScreen = () => {
       const newStatus = !listing.isActive;
       await ListingService.toggleListingStatus(listing._id, newStatus, token);
       
-      // Update the local state
       setListing(prevListing => 
         prevListing ? { ...prevListing, isActive: newStatus } : null
       );
@@ -114,14 +141,20 @@ const ListingDetailScreen = () => {
 
   const getUnitLabel = (unit: string) => {
     const unitLabels: { [key: string]: string } = {
-        per_hour: '/hr',
-        per_day: '/day',
-        per_hectare: '/ha',
-        per_kg: '/kg',
-        per_unit: '/unit',
-        per_piece: '/piece',
+      per_hour: '/hr',
+      per_day: '/day',
+      per_hectare: '/ha',
+      per_kg: '/kg',
+      per_unit: '/unit',
+      per_piece: '/piece',
     };
-    return unitLabels[unit] || unit;
+    return unitLabels[unit] || '';
+  };
+
+  const handleScroll = (event: any) => {
+    const slideSize = screenWidth;
+    const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
+    setCurrentImageIndex(index);
   };
 
   if (loading) {
@@ -129,6 +162,7 @@ const ListingDetailScreen = () => {
       <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+          <Text style={styles.loadingText}>Loading details...</Text>
         </View>
       </SafeAreaWrapper>
     );
@@ -138,15 +172,13 @@ const ListingDetailScreen = () => {
 
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+      {/* Clean Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
         </TouchableOpacity>
-        <Text variant="h4" weight="semibold" style={styles.headerTitle}>
-          Listing Details
-        </Text>
         <TouchableOpacity style={styles.menuButton} onPress={() => setShowMenu(!showMenu)}>
-          <Ionicons name="ellipsis-vertical" size={24} color={COLORS.TEXT.PRIMARY} />
+          <Ionicons name="ellipsis-vertical" size={20} color={COLORS.TEXT.PRIMARY} />
         </TouchableOpacity>
         {showMenu && (
           <View style={styles.menuDropdown}>
@@ -167,10 +199,7 @@ const ListingDetailScreen = () => {
               <Text style={[styles.menuText, { 
                 color: listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN 
               }]}>
-                {isToggling 
-                  ? 'Processing...' 
-                  : (listing?.isActive ? 'Deactivate' : 'Activate')
-                }
+                {isToggling ? 'Processing...' : (listing?.isActive ? 'Deactivate' : 'Activate')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={handleDelete}>
@@ -185,16 +214,34 @@ const ListingDetailScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Image Carousel */}
         {listing.photoUrls && listing.photoUrls.length > 0 ? (
-          <View style={styles.imageGalleryContainer}>
+          <View style={styles.imageContainer}>
             <ScrollView
+              ref={scrollViewRef}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              style={styles.imageGallery}
-              onMomentumScrollEnd={(event) => {
-                const index = Math.round(event.nativeEvent.contentOffset.x / 400);
-                setCurrentImageIndex(index);
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              onTouchStart={() => {
+                if (autoScrollTimer.current) {
+                  clearInterval(autoScrollTimer.current);
+                }
+              }}
+              onTouchEnd={() => {
+                if (listing.photoUrls && listing.photoUrls.length > 1) {
+                  autoScrollTimer.current = setInterval(() => {
+                    setCurrentImageIndex((prevIndex) => {
+                      const nextIndex = (prevIndex + 1) % listing.photoUrls.length;
+                      scrollViewRef.current?.scrollTo({
+                        x: screenWidth * nextIndex,
+                        animated: true,
+                      });
+                      return nextIndex;
+                    });
+                  }, 3000);
+                }
               }}
             >
               {listing.photoUrls.map((photo, index) => (
@@ -206,13 +253,13 @@ const ListingDetailScreen = () => {
               ))}
             </ScrollView>
             {listing.photoUrls.length > 1 && (
-              <View style={styles.paginationContainer}>
+              <View style={styles.dotsContainer}>
                 {listing.photoUrls.map((_, index) => (
                   <View
                     key={index}
                     style={[
-                      styles.paginationDot,
-                      index === currentImageIndex && styles.paginationDotActive,
+                      styles.dot,
+                      index === currentImageIndex && styles.activeDot
                     ]}
                   />
                 ))}
@@ -221,76 +268,63 @@ const ListingDetailScreen = () => {
           </View>
         ) : (
           <View style={styles.noImageContainer}>
-            <Ionicons name="image-outline" size={64} color={COLORS.TEXT.SECONDARY} />
+            <Ionicons name="image-outline" size={48} color={COLORS.TEXT.SECONDARY} />
             <Text style={styles.noImageText}>No images available</Text>
           </View>
         )}
-       
 
-        <View style={styles.section}>
-          <Text variant="h4" weight="bold" style={styles.title}>
-            {listing.subCategoryId.name}
-          </Text>
-          <View style={styles.metaContainer}>
-            <View style={styles.categoryBadge}>
-              <Ionicons name="pricetag-outline" size={16} color={COLORS.PRIMARY.MAIN} />
-              <Text variant="caption" color={COLORS.PRIMARY.MAIN} style={{ marginLeft: 4 }}>
-                {listing.categoryId.name}
-              </Text>
+        {/* Main Info Card */}
+        <View style={styles.mainCard}>
+          {/* Title Section */}
+          <View style={styles.titleSection}>
+            <View style={styles.titleRow}>
+              <View style={styles.titleContainer}>
+                <Text style={styles.title}>{listing.subCategoryId.name}</Text>
+                <Text style={styles.category}>{listing.categoryId.name}</Text>
+              </View>
+              <View style={[styles.statusBadge, !listing.isActive && styles.inactiveBadge]}>
+                <Text style={[styles.statusText, !listing.isActive && styles.inactiveText]}>
+                  {listing.isActive ? 'Active' : 'Inactive'}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.statusBadge, !listing.isActive && styles.statusBadgeInactive]}>
-              <Text variant="caption" weight="medium" color={listing.isActive ? COLORS.PRIMARY.MAIN : '#6B7280'}>
-                {listing.isActive ? 'Active' : 'Inactive'}
-              </Text>
-            </View>
+            
+            {/* Description */}
+            <Text style={styles.description}>{listing.description}</Text>
           </View>
-          <Text variant="body" color={COLORS.TEXT.SECONDARY} style={styles.description}>
-            {listing.description}
-          </Text>
-        </View>
 
-        <View style={styles.section}>
-          <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-            Pricing Details
-          </Text>
-          <View style={styles.pricingContainer}>
-            <View style={styles.priceItem}>
-              <Text variant="body" color={COLORS.TEXT.SECONDARY}>Price</Text>
-              <Text variant="h4" weight="bold" color={COLORS.PRIMARY.MAIN}>
-                ₹{listing.price}{getUnitLabel(listing.unitOfMeasure)}
-              </Text>
+          {/* Price Section */}
+          <View style={styles.priceSection}>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Starting from</Text>
+              <View style={styles.minOrderContainer}>
+                <Text style={styles.minOrderLabel}>Min. Order</Text>
+                <Text style={styles.minOrderValue}>
+                  {listing.minimumOrder} {listing.unitOfMeasure.replace('per_', '')}
+                </Text>
+              </View>
             </View>
-            <View style={styles.priceItem}>
-              <Text variant="body" color={COLORS.TEXT.SECONDARY}>Minimum Order</Text>
-              <Text variant="h4" weight="semibold">
-                {listing.minimumOrder} {listing.unitOfMeasure.replace('per_', '')}(s)
-              </Text>
-            </View>
+            <Text style={styles.price}>
+              ₹{listing.price}
+              <Text style={styles.priceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
+            </Text>
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-            Statistics
-          </Text>
+          {/* Stats Cards */}
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <Ionicons name="eye-outline" size={24} color={COLORS.PRIMARY.MAIN} />
-              <Text variant="h3" weight="bold" style={styles.statValue}>
-                {listing.viewCount}
-              </Text>
-              <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-                Views
-              </Text>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="eye-outline" size={20} color={COLORS.PRIMARY.MAIN} />
+              </View>
+              <Text style={styles.statValue}>{listing.viewCount}</Text>
+              <Text style={styles.statLabel}>Views</Text>
             </View>
             <View style={styles.statCard}>
-              <Ionicons name="calendar-check-outline" size={24} color={COLORS.PRIMARY.MAIN} />
-              <Text variant="h3" weight="bold" style={styles.statValue}>
-                {listing.bookingCount}
-              </Text>
-              <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-                Bookings
-              </Text>
+              <View style={styles.statIconContainer}>
+                <MaterialIcons name="event-available" size={20} color={COLORS.SUCCESS.MAIN} />
+              </View>
+              <Text style={styles.statValue}>{listing.bookingCount}</Text>
+              <Text style={styles.statLabel}>Bookings</Text>
             </View>
           </View>
         </View>
@@ -300,170 +334,232 @@ const ListingDetailScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-      },
-      header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: SPACING.MD,
-        paddingVertical: SPACING.MD,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.BORDER.PRIMARY,
-        position: 'relative',
-      },
-      backButton: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-      },
-      headerTitle: {
-        flex: 1,
-        textAlign: 'center',
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.TEXT.PRIMARY,
-      },
-      menuButton: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-      },
-      menuDropdown: {
-        position: 'absolute',
-        top: 60,
-        right: SPACING.MD,
-        backgroundColor: COLORS.BACKGROUND.CARD,
-        borderRadius: BORDER_RADIUS.MD,
-        padding: SPACING.XS,
-        ...SHADOWS.MD,
-        zIndex: 1000,
-        width: 120,
-      },
-      menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: SPACING.SM,
-      },
-      menuText: {
-        marginLeft: SPACING.SM,
-        fontSize: 14,
-        fontFamily: FONTS.POPPINS.MEDIUM,
-      },
-      menuItemDisabled: {
-        opacity: 0.5,
-      },
-      scrollContent: {
-        paddingBottom: 100,
-      },
-      imageGallery: {
-        height: 250,
-        backgroundColor: COLORS.BACKGROUND.CARD,
-      },
-      listingImage: {
-        width: 400,
-        height: 250,
-        resizeMode: 'cover',
-      },
-      section: {
-        padding: SPACING.MD,
-        backgroundColor: '#fff',
-        marginBottom: SPACING.SM,
-      },
-      title: {
-        marginBottom: SPACING.SM,
-        fontSize: 20,
-      },
-      metaContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.MD,
-      },
-      categoryBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.PRIMARY.LIGHT,
-        paddingHorizontal: SPACING.SM,
-        paddingVertical: 4,
-        borderRadius: BORDER_RADIUS.SM,
-      },
-      statusBadge: {
-        backgroundColor: COLORS.PRIMARY.LIGHT,
-        paddingHorizontal: SPACING.SM,
-        paddingVertical: 4,
-        borderRadius: BORDER_RADIUS.SM,
-      },
-      statusBadgeInactive: {
-        backgroundColor: COLORS.BACKGROUND.CARD,
-      },
-      description: {
-        lineHeight: 22,
-        fontSize: 14,
-        color: COLORS.TEXT.SECONDARY,
-      },
-      sectionTitle: {
-        marginBottom: SPACING.MD,
-        fontSize: 16,
-      },
-      pricingContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-      },
-      priceItem: {
-        flex: 1,
-      },
-      statsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-      },
-      statCard: {
-        alignItems: 'center',
-        flex: 1,
-      },
-      statValue: {
-        marginVertical: SPACING.XS,
-      },
-      noImageContainer: {
-        height: 250,
-        backgroundColor: COLORS.BACKGROUND.CARD,
-        justifyContent: 'center',
-        alignItems: 'center',
-      },
-      noImageText: {
-        marginTop: SPACING.SM,
-        fontSize: 16,
-        fontFamily: FONTS.POPPINS.MEDIUM,
-        color: COLORS.TEXT.SECONDARY,
-      },
-      imageGalleryContainer: {
-        position: 'relative',
-      },
-      paginationContainer: {
-        position: 'absolute',
-        bottom: SPACING.MD,
-        left: 0,
-        right: 0,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-      },
-      paginationDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-        marginHorizontal: 4,
-      },
-      paginationDotActive: {
-        backgroundColor: COLORS.PRIMARY.MAIN,
-      },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: SPACING.MD,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    position: 'relative',
+  },
+  backButton: {
+    padding: SPACING.XS,
+  },
+  menuButton: {
+    padding: SPACING.XS,
+  },
+  menuDropdown: {
+    position: 'absolute',
+    top: 50,
+    right: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: BORDER_RADIUS.MD,
+    padding: SPACING.XS,
+    ...SHADOWS.LG,
+    zIndex: 1000,
+    minWidth: 140,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.SM,
+  },
+  menuText: {
+    marginLeft: SPACING.SM,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  menuItemDisabled: {
+    opacity: 0.5,
+  },
+  scrollContent: {
+    paddingBottom: SPACING['4XL'],
+  },
+  imageContainer: {
+    width: screenWidth,
+    height: 280,
+    position: 'relative',
+  },
+  listingImage: {
+    width: screenWidth,
+    height: 280,
+    resizeMode: 'cover',
+  },
+  dotsContainer: {
+    position: 'absolute',
+    bottom: SPACING.MD,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS,
+    borderRadius: BORDER_RADIUS.LG,
+    left: '50%',
+    transform: [{ translateX: -40 }],
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginHorizontal: 3,
+  },
+  activeDot: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  noImageContainer: {
+    height: 280,
+    backgroundColor: COLORS.BACKGROUND.CARD,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noImageText: {
+    marginTop: SPACING.SM,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  mainCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginTop: -SPACING.LG,
+    marginHorizontal: SPACING.MD,
+    borderRadius: BORDER_RADIUS.XL,
+    padding: SPACING.LG,
+    ...SHADOWS.LG,
+  },
+  titleSection: {
+    marginBottom: SPACING.LG,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.SM,
+  },
+  titleContainer: {
+    flex: 1,
+    marginRight: SPACING.SM,
+  },
+  title: {
+    fontSize: 20,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 4,
+  },
+  category: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  statusBadge: {
+    backgroundColor: COLORS.SUCCESS.LIGHT,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.XS,
+    borderRadius: BORDER_RADIUS.LG,
+  },
+  inactiveBadge: {
+    backgroundColor: COLORS.BACKGROUND.CARD,
+  },
+  statusText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.SUCCESS.MAIN,
+  },
+  inactiveText: {
+    color: COLORS.TEXT.SECONDARY,
+  },
+  description: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    lineHeight: 20,
+  },
+  priceSection: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+    paddingTop: SPACING.MD,
+    marginBottom: SPACING.LG,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.SM,
+  },
+  priceLabel: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  minOrderContainer: {
+    alignItems: 'flex-end',
+  },
+  minOrderLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  minOrderValue: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  price: {
+    fontSize: 24,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  priceUnit: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    gap: SPACING.MD,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: BORDER_RADIUS.MD,
+    padding: SPACING.MD,
+    alignItems: 'center',
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.SM,
+  },
+  statValue: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
 });
 
 export default ListingDetailScreen;
