@@ -25,6 +25,9 @@ import { COLORS } from '../utils';
 import ProfileScreen from '../screens/ProfileScreen';
 import CreateListingScreen from '../screens/CreateListingScreen';
 import MyListingsScreen from '../screens/MyListingsScreen';
+import CheckoutScreen from '../screens/CheckoutScreen';
+import AddressSelectionScreen from '../screens/AddressSelectionScreen';
+import AddAddressScreen from '../screens/AddAddressScreen';
 
 const Stack = createStackNavigator();
 
@@ -54,7 +57,7 @@ const RootNavigator = () => {
             
             <Stack.Screen name="CategoryBrowser" component={CategoryBrowserScreen} />
             <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
-            <Stack.Screen name="Listings" component={ListingsScreen} />
+            {/* <Stack.Screen name="Listings" component={ListingsScreen} /> */}
             <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
             
             <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
@@ -62,6 +65,9 @@ const RootNavigator = () => {
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="CreateListing" component={CreateListingScreen} />
             <Stack.Screen name="MyListings" component={MyListingsScreen} />
+            <Stack.Screen name="Checkout" component={CheckoutScreen} />
+            <Stack.Screen name="AddressSelection" component={AddressSelectionScreen} />
+            <Stack.Screen name="AddAddress" component={AddAddressScreen} />
           </>
         ) : (
           <>

@@ -11,7 +11,7 @@ const initialState: LocationState = {
   latitude: null,
   longitude: null,
   city: null,
-  radius: 50, // Default radius in kilometers
+  radius: null, // Default radius in kilometers
 };
 
 const locationSlice = createSlice({

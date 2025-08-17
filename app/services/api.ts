@@ -3,14 +3,7 @@
 // Built with clean, readable code that feels like plain english
 
 import { API_BASE_URL } from '../config/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
+import apiInterceptor from './apiInterceptor';
 
 interface RegisterRequest {
   name: string;
@@ -21,7 +14,8 @@ interface RegisterRequest {
 }
 
 interface LoginRequest {
-  emailOrPhone: string;
+  email?: string;
+  phone?: string;
   password: string;
 }
 
@@ -32,37 +26,9 @@ interface User {
   phone: string;
   role: 'individual' | 'SHG' | 'FPO' | 'admin';
   isVerified: boolean;
-  kycStatus: 'pending' | 'approved' | 'rejected';
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-  token_type: string;
-  user: User;
-}
-
-interface RefreshTokenRequest {
-  refreshToken: string;
-}
-
-interface TokenValidationResponse {
-  valid: boolean;
-  user?: User;
-}
-
-interface UserVerificationResponse {
-  message: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    isVerified: boolean;
-  };
+  kycStatus: 'pending' | 'approved' | 'rejected' | 'none';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface UserUpdateRequest {
@@ -72,396 +38,393 @@ interface UserUpdateRequest {
   kycStatus?: 'pending' | 'approved' | 'rejected';
 }
 
-// 🏗️ API Configuration
-class ApiService {
-  private baseURL: string;
-  private authToken: string | null = null;
-  private refreshToken: string | null = null;
-  private isRefreshing: boolean = false;
-  private refreshSubscribers: Array<(token: string) => void> = [];
-  
-  constructor() {
-    this.baseURL = API_BASE_URL;
-    this.initializeTokens();
-  }
-
-  // Initialize tokens from storage
-  private async initializeTokens() {
-    try {
-      const [accessToken, refreshToken] = await Promise.all([
-        AsyncStorage.getItem('access_token'),
-        AsyncStorage.getItem('refresh_token')
-      ]);
-      
-      if (accessToken) this.authToken = accessToken;
-      if (refreshToken) this.refreshToken = refreshToken;
-    } catch (error) {
-      console.error('Failed to initialize tokens:', error);
-    }
-  }
-  
-  // 🔑 Set authentication tokens
-  async setAuthTokens(accessToken: string, refreshToken: string) {
-    this.authToken = accessToken;
-    this.refreshToken = refreshToken;
-    
-    try {
-      await Promise.all([
-        AsyncStorage.setItem('access_token', accessToken),
-        AsyncStorage.setItem('refresh_token', refreshToken)
-      ]);
-    } catch (error) {
-      console.error('Failed to save tokens:', error);
-    }
-  }
-  
-  // 🚫 Clear authentication tokens
-  async clearAuthTokens() {
-    this.authToken = null;
-    this.refreshToken = null;
-    this.isRefreshing = false;
-    this.refreshSubscribers = [];
-    
-    try {
-      await Promise.all([
-        AsyncStorage.removeItem('access_token'),
-        AsyncStorage.removeItem('refresh_token'),
-        AsyncStorage.removeItem('user')
-      ]);
-    } catch (error) {
-      console.error('Failed to clear tokens:', error);
-    }
-  }
-
-  // Subscribe to token refresh
-  private subscribeToRefresh(callback: (token: string) => void) {
-    this.refreshSubscribers.push(callback);
-  }
-
-  // Notify subscribers of new token
-  private notifyRefreshSubscribers(token: string) {
-    this.refreshSubscribers.forEach(callback => callback(token));
-    this.refreshSubscribers = [];
-  }
-
-  // Refresh token logic
-  private async refreshAuthToken(): Promise<string | null> {
-    if (!this.refreshToken) {
-      return null;
-    }
-
-    if (this.isRefreshing) {
-      return new Promise((resolve) => {
-        this.subscribeToRefresh((token) => resolve(token));
-      });
-    }
-
-    this.isRefreshing = true;
-
-    try {
-      const response = await this.makeRequest<LoginResponse>('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken: this.refreshToken }),
-      });
-
-      if (response.success && response.data) {
-        const { access_token, refresh_token } = response.data;
-        await this.setAuthTokens(access_token, refresh_token);
-        this.notifyRefreshSubscribers(access_token);
-        this.isRefreshing = false;
-        return access_token;
-      } else {
-        // Refresh failed, clear tokens
-        await this.clearAuthTokens();
-        this.isRefreshing = false;
-        return null;
-      }
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      await this.clearAuthTokens();
-      this.isRefreshing = false;
-      return null;
-    }
-  }
-  
-  // 📡 Generic API request handler with auto-refresh
-  private async makeRequest<T>(
-    endpoint: string,
-    options: RequestInit = {},
-    retryCount: number = 0
-  ): Promise<ApiResponse<T>> {
-    try {
-      const url = `${this.baseURL}${endpoint}`;
-      console.log('📡 Making API request to:', url);
-      
-      // Default headers
-      const headers: any = {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      };
-      
-      // Add auth token if available
-      if (this.authToken) {
-        headers.Authorization = `Bearer ${this.authToken}`;
-      }
-      
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
-      
-      console.log('📡 Response status:', response.status);
-      
-      // Check for new token in headers
-      const newToken = response.headers.get('X-New-Token');
-      if (newToken) {
-        console.log('🔄 New token received in headers');
-        this.authToken = newToken;
-        await AsyncStorage.setItem('access_token', newToken);
-      }
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        console.log('✅ API request successful:', data);
-        return {
-          success: true,
-          data,
-        };
-      } else if (response.status === 401 && retryCount === 0) {
-        // Token expired, try to refresh
-        console.log('🔄 Token expired, attempting refresh...');
-        const newToken = await this.refreshAuthToken();
-        
-        if (newToken) {
-          // Retry the request with new token
-          return this.makeRequest<T>(endpoint, options, retryCount + 1);
-        } else {
-          // Refresh failed, return error
-          return {
-            success: false,
-            error: 'Authentication failed',
-          };
-        }
-      } else {
-        console.error('❌ API request failed:', data);
-        return {
-          success: false,
-          error: data.message || 'An error occurred',
-        };
-      }
-    } catch (error) {
-      console.error('🔥 Network error in API request:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Network error',
-      };
-    }
-  }
-  
-  // 📝 Register new user (now with phone number)
-  async registerUser(userData: RegisterRequest): Promise<ApiResponse<User>> {
-    return this.makeRequest<User>('/auth/register', {
+// 📧 Helper functions for easier usage
+export const authAPI = {
+  // 📝 Register new user
+  register: async (userData: RegisterRequest) => {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
     });
-  }
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Registration failed');
+    }
+    
+    const data = await response.json();
+    
+    // Handle auto-login response
+    if (data.access_token && data.refresh_token && data.user) {
+      await apiInterceptor.handleLoginResponse(data);
+    }
+    
+    return data;
+  },
   
-  // 🔐 Login user with email and password
-  async loginUser(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
-    return this.makeRequest<LoginResponse>('/auth/login', {
+  // 🔐 Login user
+  login: async (credentials: LoginRequest) => {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
     });
-  }
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Login failed');
+    }
+    
+    const data = await response.json();
+    await apiInterceptor.handleLoginResponse(data);
+    return data;
+  },
   
-  // 👤 Get user profile by ID (now includes phone number)
-  async getUserProfile(userId: string): Promise<ApiResponse<User>> {
-    return this.makeRequest<User>(`/users/${userId}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.authToken}`,
-      },
+  // 📱 OTP Login
+  otpLogin: async (phone: string) => {
+    const response = await fetch(`${API_BASE_URL}/auth/otp-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
     });
-  }
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'OTP login failed');
+    }
+    
+    const data = await response.json();
+    await apiInterceptor.handleLoginResponse(data);
+    return data;
+  },
   
-  // ✅ Verify user (set isVerified to true) - Method 1 from guide
-  async verifyUser(userId: string): Promise<ApiResponse<UserVerificationResponse>> {
-    return this.makeRequest<UserVerificationResponse>(`/users/${userId}/verify`, {
-      method: 'PATCH',
+  // 🔄 Refresh token
+  refreshToken: async (refreshToken: string) => {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
     });
-  }
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Token refresh failed');
+    }
+    
+    const data = await response.json();
+    await apiInterceptor.handleLoginResponse(data);
+    return data;
+  },
   
-  // ❌ Unverify user (set isVerified to false) - Method 2 from guide
-  async unverifyUser(userId: string): Promise<ApiResponse<UserVerificationResponse>> {
-    return this.makeRequest<UserVerificationResponse>(`/users/${userId}/unverify`, {
-      method: 'PATCH',
-    });
-  }
+  // ✅ Validate token
+  validateToken: () => apiInterceptor.validateToken(),
   
-  // 🔄 Update user fields (including isVerified) - Method 3 from guide
-  async updateUser(userId: string, updates: UserUpdateRequest): Promise<ApiResponse<User>> {
-    return this.makeRequest<User>(`/users/${userId}`, {
+  // 🚪 Logout
+  logout: () => apiInterceptor.logout(),
+};
+
+// 👤 User API
+export const usersAPI = {
+  // Get user profile
+  getProfile: (userId: string) => apiInterceptor.getProfile(userId),
+  
+  // Update user
+  updateUser: async (userId: string, updates: UserUpdateRequest) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
-  }
+  },
   
-  // 🔓 Refresh authentication token
-  async refreshToken(refreshToken: string): Promise<ApiResponse<LoginResponse>> {
-    return this.makeRequest<LoginResponse>('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken }),
+  // Verify user
+  verifyUser: async (userId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/verify`, {
+      method: 'PATCH',
     });
-  }
-
-  // ✅ Validate token
-  async validateToken(): Promise<ApiResponse<TokenValidationResponse>> {
-    return this.makeRequest<TokenValidationResponse>('/auth/validate-token', {
-      method: 'POST',
+  },
+  
+  // Unverify user
+  unverifyUser: async (userId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/unverify`, {
+      method: 'PATCH',
     });
-  }
+  },
   
-  // 📱 Send OTP for verification
-  async sendOTP(email: string): Promise<ApiResponse<{message: string}>> {
-    return this.makeRequest<{message: string}>('/auth/send-otp', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-  }
-  
-  // ✅ Verify OTP
-  async verifyOTP(email: string, otp: string): Promise<ApiResponse<{message: string}>> {
-    return this.makeRequest<{message: string}>('/auth/verify-otp', {
-      method: 'POST',
-      body: JSON.stringify({ email, otp }),
-    });
-  }
-  
-  // 🔒 Change password (protected route)
-  async changePassword(
-    currentPassword: string,
-    newPassword: string
-  ): Promise<ApiResponse<{message: string}>> {
-    return this.makeRequest<{message: string}>('/auth/change-password', {
-      method: 'POST',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-  }
-  
-  // 📧 Request password reset
-  async requestPasswordReset(email: string): Promise<ApiResponse<{message: string}>> {
-    return this.makeRequest<{message: string}>('/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-  }
-  
-  // 🔄 Reset password with token
-  async resetPassword(
-    token: string,
-    newPassword: string
-  ): Promise<ApiResponse<{message: string}>> {
-    return this.makeRequest<{message: string}>('/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token, newPassword }),
-    });
-  }
-  
-  // 🚪 Logout user (optional server-side logout)
-  async logoutUser(): Promise<ApiResponse<{message: string}>> {
-    return this.makeRequest<{message: string}>('/auth/logout', {
-      method: 'POST',
-    });
-  }
-}
-
-// 🎯 Create singleton instance
-const apiService = new ApiService();
-
-// 🔧 Helper functions for easier usage
-export const authAPI = {
-  // 📝 Register new user (now with phone number)
-  register: (userData: RegisterRequest) => apiService.registerUser(userData),
-  
-  // 🔐 Login user
-  login: (credentials: LoginRequest) => apiService.loginUser(credentials),
-  
-  // 👤 Get user profile by ID
-  getProfile: (userId: string) => apiService.getUserProfile(userId),
-  
-  // ✅ Verify user (Method 1 from guide)
-  verifyUser: (userId: string) => apiService.verifyUser(userId),
-  
-  // ❌ Unverify user (Method 2 from guide)
-  unverifyUser: (userId: string) => apiService.unverifyUser(userId),
-  
-  // 🔄 Update user fields (Method 3 from guide)
-  updateUser: (userId: string, updates: UserUpdateRequest) => apiService.updateUser(userId, updates),
-  
-  // 📱 Send OTP
-  sendOTP: (email: string) => apiService.sendOTP(email),
-  
-  // ✅ Verify OTP
-  verifyOTP: (email: string, otp: string) => apiService.verifyOTP(email, otp),
-  
-  // 🔒 Change password
-  changePassword: (currentPassword: string, newPassword: string) =>
-    apiService.changePassword(currentPassword, newPassword),
-  
-  // 📧 Request password reset
-  requestPasswordReset: (email: string) => apiService.requestPasswordReset(email),
-  
-  // 🔄 Reset password
-  resetPassword: (token: string, newPassword: string) =>
-    apiService.resetPassword(token, newPassword),
-  
-  // 🚪 Logout
-  logout: () => apiService.logoutUser(),
-  
-  // 🔑 Set auth tokens
-  setTokens: (accessToken: string, refreshToken: string) => apiService.setAuthTokens(accessToken, refreshToken),
-  
-  // 🚫 Clear auth tokens
-  clearTokens: () => apiService.clearAuthTokens(),
-  
-  // ✅ Validate token
-  validateToken: () => apiService.validateToken(),
-  
-  // 🔓 Refresh token
-  refreshToken: (refreshToken: string) => apiService.refreshToken(refreshToken),
-};
-
-// 📱 Check if phone number exists in database
-export const checkPhoneExists = async (phone: string): Promise<{ exists: boolean; message: string }> => {
-  try {
-    console.log('🔍 Checking phone existence:', phone);
-    
+  // Check if phone exists
+  checkPhone: async (phone: string) => {
     const response = await fetch(`${API_BASE_URL}/users/check-phone/${phone}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
     });
-    
-    console.log('📡 Phone check response status:', response.status);
     
     if (!response.ok) {
       throw new Error(`Phone check failed: ${response.status}`);
     }
     
-    const result = await response.json();
-    console.log('✅ Phone check result:', result);
-    
-    return {
-      exists: result.exists,
-      message: result.message,
-    };
-  } catch (error) {
-    console.error('❌ Phone check error:', error);
-    throw error;
-  }
+    return response.json();
+  },
 };
 
-// Export the main service and helper functions
-export default apiService;
+// 📦 Listings API
+export const listingsAPI = {
+  // Search listings
+  search: async (params: any) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiInterceptor.makeAuthenticatedRequest(`/listings/search?${queryString}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Get all listings
+  getAll: async (params: any) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiInterceptor.makeAuthenticatedRequest(`/listings?${queryString}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Get listing by ID
+  getById: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/listings/${id}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Create listing
+  create: async (formData: FormData) => {
+    return apiInterceptor.makeAuthenticatedRequest('/listings', {
+      method: 'POST',
+      body: formData,
+      // Don't set Content-Type for FormData
+    });
+  },
+  
+  // Update listing
+  update: async (id: string, data: any) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/listings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  
+  // Delete listing
+  delete: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/listings/${id}`, {
+      method: 'DELETE',
+    });
+  },
+  
+  // Get listings by provider
+  getByProvider: async (providerId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/listings/provider/${providerId}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Refresh URLs
+  refreshUrls: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/listings/${id}/refresh-urls`, {
+      method: 'POST',
+    });
+  },
+  
+  // Get nearby listings
+  nearby: async (lat: number, lng: number, distance: number) => {
+    const params = { lat, lng, distance };
+    const queryString = new URLSearchParams(params as any).toString();
+    return apiInterceptor.makeAuthenticatedRequest(`/listings/nearby?${queryString}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Public listings (no auth required)
+  public: async (params: any) => {
+    const queryString = new URLSearchParams(params).toString();
+    const response = await fetch(`${API_BASE_URL}/listings/public?${queryString}`);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to fetch listings');
+    }
+    
+    return response.json();
+  },
+};
+
+// 📋 Orders API
+export const ordersAPI = {
+  // Create order
+  create: async (data: any) => {
+    return apiInterceptor.makeAuthenticatedRequest('/orders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  
+  // Get all orders
+  getAll: async () => {
+    return apiInterceptor.makeAuthenticatedRequest('/orders', {
+      method: 'GET',
+    });
+  },
+  
+  // Get order by ID
+  getById: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/orders/${id}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Get orders by seeker
+  getBySeeker: async (seekerId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/orders/seeker/${seekerId}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Get orders by provider
+  getByProvider: async (providerId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/orders/provider/${providerId}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Update order status
+  updateStatus: async (id: string, status: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/orders/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+  
+  // Get provider summary
+  getProviderSummary: async (providerId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/orders/provider/${providerId}/summary`, {
+      method: 'GET',
+    });
+  },
+};
+
+// 📚 Catalogue API
+export const catalogueAPI = {
+  // Get all catalogue items
+  getAll: async (category?: string) => {
+    const params = category ? `?category=${category}` : '';
+    return apiInterceptor.makeAuthenticatedRequest(`/catalogue${params}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Get categories
+  getCategories: async (category?: string) => {
+    const params = category ? `?category=${category}` : '';
+    return apiInterceptor.makeAuthenticatedRequest(`/catalogue/categories${params}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Get hierarchy
+  getHierarchy: async () => {
+    return apiInterceptor.makeAuthenticatedRequest('/catalogue/hierarchy', {
+      method: 'GET',
+    });
+  },
+  
+  // Get by ID
+  getById: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/catalogue/${id}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Get subcategories
+  getSubcategories: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/catalogue/${id}/subcategories`, {
+      method: 'GET',
+    });
+  },
+};
+
+// 📍 Addresses API
+export const addressesAPI = {
+  // Create address
+  create: async (data: any) => {
+    return apiInterceptor.makeAuthenticatedRequest('/addresses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  
+  // Get addresses by user
+  getByUser: async (userId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/addresses/user/${userId}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Get address by ID
+  getById: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/addresses/${id}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Update address
+  update: async (id: string, data: any) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/addresses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  
+  // Delete address
+  delete: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/addresses/${id}`, {
+      method: 'DELETE',
+    });
+  },
+  
+  // Set default address
+  setDefault: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/addresses/${id}/set-default`, {
+      method: 'PATCH',
+    });
+  },
+};
+
+// 💬 Chat API
+export const chatAPI = {
+  // Get all chats
+  getAll: async () => {
+    return apiInterceptor.makeAuthenticatedRequest('/chat', {
+      method: 'GET',
+    });
+  },
+  
+  // Get chat by ID
+  getById: async (id: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/chat/${id}`, {
+      method: 'GET',
+    });
+  },
+  
+  // Send message
+  sendMessage: async (chatId: string, message: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/chat/${chatId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+};
+
+// 🎯 Export all APIs
+export default {
+  auth: authAPI,
+  users: usersAPI,
+  listings: listingsAPI,
+  orders: ordersAPI,
+  catalogue: catalogueAPI,
+  addresses: addressesAPI,
+  chat: chatAPI,
+};
