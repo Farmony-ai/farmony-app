@@ -26,11 +26,13 @@ const SearchListingCard = ({ listing }: SearchListingCardProps) => {
   const scrollViewRef = useRef<ScrollView>(null);
   const autoScrollTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Default images if none provided
-  const images = listing?.photos && listing.photos.length > 0 
-    ? listing.photos 
-    : ['https://via.placeholder.com/400x200'];
-
+    // Use photoUrls if available, otherwise fallback to photos, otherwise placeholder
+    const images =
+      (listing as any)?.photoUrls && Array.isArray((listing as any).photoUrls) && (listing as any).photoUrls.length > 0
+        ? (listing as any).photoUrls
+        : listing?.photos && listing.photos.length > 0
+        ? listing.photos
+        : ['https://via.placeholder.com/400x200'];
   // Auto-scroll images
   useEffect(() => {
     if (images.length > 1) {
