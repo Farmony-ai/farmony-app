@@ -10,6 +10,7 @@ import {
   Alert,
   Dimensions,
   Animated,
+  Platform,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -26,22 +27,39 @@ const { width: screenWidth } = Dimensions.get('window');
 const ListingDetailScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { listingId } = route.params;
-  const { token } = useSelector((state: RootState) => state.auth);
+  const { listingId, fromSearch } = route.params; // Added fromSearch param
+  const { token, user } = useSelector((state: RootState) => state.auth);
 
   const [listing, setListing] = useState<PopulatedListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isToggling, setIsToggling] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const autoScrollTimer = useRef<NodeJS.Timeout | null>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const fetchListingDetail = useCallback(async () => {
     try {
       setLoading(true);
       const response = await ListingService.getListingById(listingId, token || undefined);
       setListing(response);
+      
+      // Check if current user is the owner
+      if (user && response.providerId) {
+        const providerId = typeof response.providerId === 'object' 
+          ? response.providerId._id 
+          : response.providerId;
+        setIsOwner(user.id === providerId);
+      }
+      
+      // Fade in animation
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     } catch (error) {
       console.error('Error fetching listing detail:', error);
       Alert.alert('Error', 'Failed to load listing details.');
@@ -49,7 +67,7 @@ const ListingDetailScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [listingId, token, navigation]);
+  }, [listingId, token, navigation, user, fadeAnim]);
 
   useFocusEffect(
     useCallback(() => {
@@ -139,6 +157,17 @@ const ListingDetailScreen = () => {
     }
   };
 
+  const handleProceedToCheckout = () => {
+    if (!listing) return;
+    
+    const bookingData = {
+      listing: listing,
+      listingId: listing._id,
+    };
+    
+    navigation.navigate('Checkout', bookingData);
+  };
+
   const getUnitLabel = (unit: string) => {
     const unitLabels: { [key: string]: string } = {
       per_hour: '/hr',
@@ -172,163 +201,216 @@ const ListingDetailScreen = () => {
 
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      {/* Clean Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuButton} onPress={() => setShowMenu(!showMenu)}>
-          <Ionicons name="ellipsis-vertical" size={20} color={COLORS.TEXT.PRIMARY} />
-        </TouchableOpacity>
-        {showMenu && (
-          <View style={styles.menuDropdown}>
-            <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
-              <Ionicons name="create-outline" size={18} color={COLORS.TEXT.PRIMARY} />
-              <Text style={styles.menuText}>Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.menuItem, isToggling && styles.menuItemDisabled]} 
-              onPress={handleToggleStatus}
-              disabled={isToggling}
-            >
-              <Ionicons 
-                name={listing?.isActive ? "pause-outline" : "play-outline"} 
-                size={18} 
-                color={listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN} 
-              />
-              <Text style={[styles.menuText, { 
-                color: listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN 
-              }]}>
-                {isToggling ? 'Processing...' : (listing?.isActive ? 'Deactivate' : 'Activate')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={handleDelete}>
-              <Ionicons name="trash-outline" size={18} color="#EF4444" />
-              <Text style={[styles.menuText, { color: "#EF4444" }]}>Delete</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        {/* Clean Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
+          </TouchableOpacity>
+          
+          {isOwner && (
+            <>
+              <TouchableOpacity style={styles.menuButton} onPress={() => setShowMenu(!showMenu)}>
+                <Ionicons name="ellipsis-vertical" size={20} color={COLORS.TEXT.PRIMARY} />
+              </TouchableOpacity>
+              {showMenu && (
+                <View style={styles.menuDropdown}>
+                  <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
+                    <Ionicons name="create-outline" size={18} color={COLORS.TEXT.PRIMARY} />
+                    <Text style={styles.menuText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.menuItem, isToggling && styles.menuItemDisabled]} 
+                    onPress={handleToggleStatus}
+                    disabled={isToggling}
+                  >
+                    <Ionicons 
+                      name={listing?.isActive ? "pause-outline" : "play-outline"} 
+                      size={18} 
+                      color={listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN} 
+                    />
+                    <Text style={[styles.menuText, { 
+                      color: listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN 
+                    }]}>
+                      {isToggling ? 'Processing...' : (listing?.isActive ? 'Deactivate' : 'Activate')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.menuItem} onPress={handleDelete}>
+                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <Text style={[styles.menuText, { color: "#EF4444" }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
+        </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Image Carousel */}
-        {listing.photoUrls && listing.photoUrls.length > 0 ? (
-          <View style={styles.imageContainer}>
-            <ScrollView
-              ref={scrollViewRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              onTouchStart={() => {
-                if (autoScrollTimer.current) {
-                  clearInterval(autoScrollTimer.current);
-                }
-              }}
-              onTouchEnd={() => {
-                if (listing.photoUrls && listing.photoUrls.length > 1) {
-                  autoScrollTimer.current = setInterval(() => {
-                    setCurrentImageIndex((prevIndex) => {
-                      const nextIndex = (prevIndex + 1) % listing.photoUrls.length;
-                      scrollViewRef.current?.scrollTo({
-                        x: screenWidth * nextIndex,
-                        animated: true,
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            !isOwner && { paddingBottom: 100 } // Extra padding for bottom button
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Image Carousel */}
+          {listing.photoUrls && listing.photoUrls.length > 0 ? (
+            <View style={styles.imageContainer}>
+              <ScrollView
+                ref={scrollViewRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+                onTouchStart={() => {
+                  if (autoScrollTimer.current) {
+                    clearInterval(autoScrollTimer.current);
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (listing.photoUrls && listing.photoUrls.length > 1) {
+                    autoScrollTimer.current = setInterval(() => {
+                      setCurrentImageIndex((prevIndex) => {
+                        const nextIndex = (prevIndex + 1) % listing.photoUrls.length;
+                        scrollViewRef.current?.scrollTo({
+                          x: screenWidth * nextIndex,
+                          animated: true,
+                        });
+                        return nextIndex;
                       });
-                      return nextIndex;
-                    });
-                  }, 3000);
-                }
-              }}
-            >
-              {listing.photoUrls.map((photo, index) => (
-                <Image 
-                  key={index} 
-                  source={{ uri: typeof photo === 'string' ? photo : photo.uri }} 
-                  style={styles.listingImage} 
-                />
-              ))}
-            </ScrollView>
-            {listing.photoUrls.length > 1 && (
-              <View style={styles.dotsContainer}>
-                {listing.photoUrls.map((_, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.dot,
-                      index === currentImageIndex && styles.activeDot
-                    ]}
+                    }, 3000);
+                  }
+                }}
+              >
+                {listing.photoUrls.map((photo, index) => (
+                  <Image 
+                    key={index} 
+                    source={{ uri: typeof photo === 'string' ? photo : photo.uri }} 
+                    style={styles.listingImage} 
                   />
                 ))}
+              </ScrollView>
+              {listing.photoUrls.length > 1 && (
+                <View style={styles.dotsContainer}>
+                  {listing.photoUrls.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.dot,
+                        index === currentImageIndex && styles.activeDot
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={styles.noImageContainer}>
+              <Ionicons name="image-outline" size={48} color={COLORS.TEXT.SECONDARY} />
+              <Text style={styles.noImageText}>No images available</Text>
+            </View>
+          )}
+
+          {/* Main Info Card */}
+          <View style={styles.mainCard}>
+            {/* Title Section */}
+            <View style={styles.titleSection}>
+              <View style={styles.titleRow}>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.title}>{listing.subCategoryId.name}</Text>
+                  <Text style={styles.category}>{listing.categoryId.name}</Text>
+                </View>
+                <View style={[styles.statusBadge, !listing.isActive && styles.inactiveBadge]}>
+                  <Text style={[styles.statusText, !listing.isActive && styles.inactiveText]}>
+                    {listing.isActive ? 'Available' : 'Unavailable'}
+                  </Text>
+                </View>
+              </View>
+              
+              {/* Description */}
+              <Text style={styles.description}>{listing.description}</Text>
+            </View>
+
+            {/* Price Section */}
+            <View style={styles.priceSection}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Price</Text>
+                <View style={styles.minOrderContainer}>
+                  <Text style={styles.minOrderLabel}>Min. Order</Text>
+                  <Text style={styles.minOrderValue}>
+                    {listing.minimumOrder} {listing.unitOfMeasure.replace('per_', '')}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.price}>
+                ₹{listing.price}
+                <Text style={styles.priceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
+              </Text>
+            </View>
+
+            {/* Stats Cards - Only for Owners */}
+            {isOwner && (
+              <View style={styles.statsContainer}>
+                <View style={styles.statCard}>
+                  <View style={styles.statIconContainer}>
+                    <Ionicons name="eye-outline" size={20} color={COLORS.PRIMARY.MAIN} />
+                  </View>
+                  <Text style={styles.statValue}>{listing.viewCount}</Text>
+                  <Text style={styles.statLabel}>Views</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <View style={styles.statIconContainer}>
+                    <MaterialIcons name="event-available" size={20} color={COLORS.SUCCESS.MAIN} />
+                  </View>
+                  <Text style={styles.statValue}>{listing.bookingCount}</Text>
+                  <Text style={styles.statLabel}>Bookings</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Provider Info for Non-Owners */}
+            {!isOwner && (
+              <View style={styles.providerSection}>
+                <View style={styles.providerHeader}>
+                  <View style={styles.providerAvatar}>
+                    <Ionicons name="person" size={24} color={COLORS.PRIMARY.MAIN} />
+                  </View>
+                  <View style={styles.providerInfo}>
+                    <Text style={styles.providerName}>
+                      {typeof listing.providerId === 'object' ? listing.providerId.name : 'Service Provider'}
+                    </Text>
+                    {typeof listing.providerId === 'object' && listing.providerId.isVerified && (
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcons name="verified" size={14} color={COLORS.SUCCESS.MAIN} />
+                        <Text style={styles.verifiedText}>Verified Provider</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
               </View>
             )}
           </View>
-        ) : (
-          <View style={styles.noImageContainer}>
-            <Ionicons name="image-outline" size={48} color={COLORS.TEXT.SECONDARY} />
-            <Text style={styles.noImageText}>No images available</Text>
+        </ScrollView>
+
+        {/* Bottom Button for Non-Owners - Simplified */}
+        {!isOwner && listing.isActive && (
+          <View style={styles.bottomButtonContainer}>
+            <View style={styles.bottomButtonContent}>
+              <View style={styles.bottomPriceInfo}>
+                <Text style={styles.bottomPriceLabel}>Starting from</Text>
+                <Text style={styles.bottomPriceValue}>
+                  ₹{listing.price}
+                  <Text style={styles.bottomPriceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.proceedButton} onPress={handleProceedToCheckout}>
+                <Text style={styles.proceedButtonText}>Proceed</Text>
+                <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
-
-        {/* Main Info Card */}
-        <View style={styles.mainCard}>
-          {/* Title Section */}
-          <View style={styles.titleSection}>
-            <View style={styles.titleRow}>
-              <View style={styles.titleContainer}>
-                <Text style={styles.title}>{listing.subCategoryId.name}</Text>
-                <Text style={styles.category}>{listing.categoryId.name}</Text>
-              </View>
-              <View style={[styles.statusBadge, !listing.isActive && styles.inactiveBadge]}>
-                <Text style={[styles.statusText, !listing.isActive && styles.inactiveText]}>
-                  {listing.isActive ? 'Active' : 'Inactive'}
-                </Text>
-              </View>
-            </View>
-            
-            {/* Description */}
-            <Text style={styles.description}>{listing.description}</Text>
-          </View>
-
-          {/* Price Section */}
-          <View style={styles.priceSection}>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Starting from</Text>
-              <View style={styles.minOrderContainer}>
-                <Text style={styles.minOrderLabel}>Min. Order</Text>
-                <Text style={styles.minOrderValue}>
-                  {listing.minimumOrder} {listing.unitOfMeasure.replace('per_', '')}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.price}>
-              ₹{listing.price}
-              <Text style={styles.priceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
-            </Text>
-          </View>
-
-          {/* Stats Cards */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <View style={styles.statIconContainer}>
-                <Ionicons name="eye-outline" size={20} color={COLORS.PRIMARY.MAIN} />
-              </View>
-              <Text style={styles.statValue}>{listing.viewCount}</Text>
-              <Text style={styles.statLabel}>Views</Text>
-            </View>
-            <View style={styles.statCard}>
-              <View style={styles.statIconContainer}>
-                <MaterialIcons name="event-available" size={20} color={COLORS.SUCCESS.MAIN} />
-              </View>
-              <Text style={styles.statValue}>{listing.bookingCount}</Text>
-              <Text style={styles.statLabel}>Bookings</Text>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+      </Animated.View>
     </SafeAreaWrapper>
   );
 };
@@ -559,6 +641,103 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
+  },
+  providerSection: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+    paddingTop: SPACING.MD,
+  },
+  providerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  providerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.BACKGROUND.CARD,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.MD,
+  },
+  providerInfo: {
+    flex: 1,
+  },
+  providerName: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 4,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  verifiedText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.SUCCESS.MAIN,
+  },
+  bottomButtonContainer: {
+    position: 'absolute',
+    bottom: -28,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+    paddingVertical: SPACING.MD,
+    paddingHorizontal: SPACING.MD,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  bottomButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bottomPriceInfo: {
+    flex: 1,
+  },
+  bottomPriceLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  bottomPriceValue: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.POPPINS.BOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  bottomPriceUnit: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  proceedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    paddingHorizontal: SPACING.XL,
+    paddingVertical: SPACING.MD,
+    borderRadius: BORDER_RADIUS.LG,
+    gap: SPACING.SM,
+    ...SHADOWS.MD,
+  },
+  proceedButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
 });
 

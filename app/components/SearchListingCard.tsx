@@ -120,7 +120,10 @@ const SearchListingCard = ({ listing }: SearchListingCardProps) => {
   return (
     <TouchableOpacity
       style={styles.cardContainer}
-      onPress={() => navigation.navigate('ListingDetail', { listingId: listing._id })}
+      onPress={() => navigation.navigate('ListingDetail', { 
+        listingId: listing._id,
+        fromSearch: true  // Add this flag
+      })}
       activeOpacity={0.95}
     >
       {/* Image Carousel */}
