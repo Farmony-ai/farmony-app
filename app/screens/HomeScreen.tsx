@@ -26,6 +26,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { setDate } from '../store/slices/dateRangeSlice';
 import { setLocation } from '../store/slices/locationSlice';
+import AddressService, { Address } from '../services/AddressService';
 
 import categoryIcons from '../utils/icons';
 
@@ -88,7 +89,9 @@ export default function HomeScreen() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [isWeatherExpanded, setIsWeatherExpanded] = useState(false);
   const [weeklyForecast, setWeeklyForecast] = useState<any[]>([]);
-  
+  const [currentAddress, setCurrentAddress] = useState<Address | null>(null);
+ const { user } = useSelector((state: RootState) => state.auth);
+
   // Only keep the expand animation for weekly forecast
   const expandAnim = useRef(new Animated.Value(0)).current;
   
@@ -136,6 +139,28 @@ export default function HomeScreen() {
     };
     fetchWeatherData();
   }, [latitude, longitude]);
+
+  useEffect(() => {
+    const fetchDefaultAddress = async () => {
+      if (user?.id) {  // Changed from userId to user?.id
+        try {
+          const addresses = await AddressService.getUserAddresses(user.id);  // Use user.id
+          const defaultAddr = addresses.find(addr => addr.isDefault);
+          if (defaultAddr) {
+            setCurrentAddress(defaultAddr);
+            dispatch(setLocation({
+              latitude: defaultAddr.coordinates[1],
+              longitude: defaultAddr.coordinates[0],
+              city: defaultAddr.district || defaultAddr.state,
+            }));
+          }
+        } catch (error) {
+          console.error('Error fetching default address:', error);
+        }
+      }
+    };
+    fetchDefaultAddress();
+  }, [user, dispatch]); 
 
   const handleFilterToggle = (expanded: boolean, filterContentHeight: number) => {
     const targetHeaderHeight = expanded
@@ -240,12 +265,27 @@ export default function HomeScreen() {
           
           <View style={styles.headerContent}>
             <View style={styles.headerTop}>
-              <View style={styles.locationWrapper}>
+              <TouchableOpacity 
+                style={styles.locationWrapper}
+                onPress={() => navigation.navigate('AddressSelection')}
+                activeOpacity={0.7}
+              >
                 <View style={styles.locationInfo}>
-                  <Text style={styles.locationText}>{city?.toUpperCase() || 'LOCATION UNAVAILABLE'}</Text>
-                  <Ionicons name="location" size={16} color="white" style={styles.locationIcon} />
+                  <View style={styles.locationTextContainer}>
+                  
+                    <View style={styles.locationRow}>
+                      <Ionicons name="location" size={16} color="white" />
+                      <Text style={styles.locationText} numberOfLines={1}>
+                        {currentAddress 
+                          ? `${currentAddress.tag.toUpperCase()} - ${currentAddress.district || city}`
+                          : city?.toUpperCase() || 'SELECT LOCATION'
+                        }
+                      </Text>
+                      <Ionicons name="chevron-down" size={14} color="white" style={styles.chevronIcon} />
+                    </View>
+                  </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             </View>
             
           </View>
@@ -446,6 +486,32 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  locationWrapper: {
+    flex: 1,
+  },
+  locationTextContainer: {
+    flex: 1,
+  },
+  locationLabel: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontFamily: FONTS.POPPINS.REGULAR,
+    marginBottom: 2,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 14,
+    color: 'white',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    marginLeft: 4,
+    maxWidth: 200,
+  },
+  chevronIcon: {
+    marginLeft: 4,
+  },
   scrollContent: {
     flexGrow: 1,
     backgroundColor: 'transparent',
@@ -512,17 +578,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  locationWrapper: {
-    flex: 1,
-  },
   locationInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  locationText: {
-    fontSize: 14,
-    color: 'white',
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
   },
   locationIcon: {
     marginLeft: 6,

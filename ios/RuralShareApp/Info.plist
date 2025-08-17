@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>RuralShare</string>
+	<string>Farmony</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -29,7 +29,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>otpless.com.ruralshareapp</string>
+				<string>otpless.com.Farmonyapp</string>
 			</array>
 			<key>CFBundleURLName</key>
 			<string>otpless</string>
@@ -45,7 +45,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>org.reactjs.native.example.RuralShareApp</string>
+				<string>org.reactjs.native.example.FarmonyApp</string>
 			</array>
 		</dict>
 	</array>
@@ -101,19 +101,19 @@
 	
 	<!-- Location Permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>RuralShare needs access to your location to show nearby services</string>
+	<string>Farmony needs access to your location to show nearby services</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>RuralShare needs access to your location to show nearby services and provide better recommendations</string>
+	<string>Farmony needs access to your location to show nearby services and provide better recommendations</string>
 	
 	<!-- Camera Permission (Often needed for authentication) -->
 	<key>NSCameraUsageDescription</key>
-	<string>RuralShare needs camera access to capture photos for profile and service listings</string>
+	<string>Farmony needs camera access to capture photos for profile and service listings</string>
 	
 	<!-- Photo Library Permissions -->
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>RuralShare needs access to your photos to upload profile pictures and service images</string>
+	<string>Farmony needs access to your photos to upload profile pictures and service images</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>RuralShare needs permission to save photos to your library</string>
+	<string>Farmony needs permission to save photos to your library</string>
 	
 	<!-- UI Configuration -->
 	<key>UILaunchStoryboardName</key>

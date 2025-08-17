@@ -30,6 +30,7 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
 
+
         <intent-filter>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
@@ -39,5 +40,10 @@
                 android:scheme="otpless.com.ruralshareapp" />
         </intent-filter>
       </activity>
+    </application>
+    <application>
+      <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="AIzaSyA_dOZ8Oxb5t3Lm5knvuJdDE_sqgEHWctc"/>
     </application>
 </manifest>

@@ -26,6 +26,8 @@ import ProfileScreen from '../screens/ProfileScreen';
 import CreateListingScreen from '../screens/CreateListingScreen';
 import MyListingsScreen from '../screens/MyListingsScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
+import AddressSelectionScreen from '../screens/AddressSelectionScreen';
+import AddAddressScreen from '../screens/AddAddressScreen';
 
 const Stack = createStackNavigator();
 
@@ -64,6 +66,8 @@ const RootNavigator = () => {
             <Stack.Screen name="CreateListing" component={CreateListingScreen} />
             <Stack.Screen name="MyListings" component={MyListingsScreen} />
             <Stack.Screen name="Checkout" component={CheckoutScreen} />
+            <Stack.Screen name="AddressSelection" component={AddressSelectionScreen} />
+            <Stack.Screen name="AddAddress" component={AddAddressScreen} />
           </>
         ) : (
           <>
