@@ -27,7 +27,7 @@ export const API_CONFIG = {
 const getBaseURL = () => {
   // For now, we'll use Android emulator settings
   // You can make this more dynamic based on Platform.OS or __DEV__
-  return API_CONFIG.development.ios;
+  return API_CONFIG.development.android;
 };
 
 // 📡 Export the current base URL

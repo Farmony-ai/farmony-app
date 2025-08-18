@@ -154,7 +154,7 @@ export const registerUser = createAsyncThunk(
       const result = await response.json();
       console.log('✅ registerUser: Registration successful, response:', result);
       // Assuming the registration endpoint returns the user ID as '_id'
-      const userId = result._id || result.id; 
+      const userId = result.user?._id; 
       if (!userId) {
         console.error('❌ registerUser: User ID not found in registration response.', result);
         return rejectWithValue('User ID not found after registration.');
