@@ -1,9 +1,12 @@
 package com.ruralshareapp
 
+import android.os.Bundle;
+
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+// Removed RNGestureHandlerEnabledRootView usage per migration guide
 
 class MainActivity : ReactActivity() {
 
@@ -15,6 +18,17 @@ class MainActivity : ReactActivity() {
   /**
    * Delegate that enables the New Architecture flags.
    */
-  override fun createReactActivityDelegate(): ReactActivityDelegate =
-      DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
+  override fun createReactActivityDelegate(): ReactActivityDelegate {
+    return object : DefaultReactActivityDelegate(
+      this,
+      mainComponentName,
+      fabricEnabled
+    ) {
+      // Use default root view; JS side wraps with GestureHandlerRootView
+    }
+  }
+
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(null)
+  }
 } 

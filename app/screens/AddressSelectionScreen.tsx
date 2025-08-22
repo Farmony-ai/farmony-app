@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,7 +14,7 @@ import Text from '../components/Text';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { setLocation } from '../store/slices/locationSlice';
@@ -24,7 +24,7 @@ import LocationService from '../services/locationService';
 const AddressSelectionScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useDispatch();
-  const { userId } = useSelector((state: RootState) => state.auth);
+  const { user } = useSelector((state: RootState) => state.auth);
   const { latitude, longitude, city } = useSelector((state: RootState) => state.location);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,16 +34,18 @@ const AddressSelectionScreen = () => {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [fetchingCurrentLocation, setFetchingCurrentLocation] = useState(false);
 
-  useEffect(() => {
-    fetchAddresses();
-  }, [userId]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchAddresses();
+    }, [user])
+  );
 
   const fetchAddresses = async () => {
-    if (!userId) return;
+    if (!user) return;
     
     try {
       setLoading(true);
-      const userAddresses = await AddressService.getUserAddresses(userId);
+      const userAddresses = await AddressService.getUserAddresses(user?.id);
       setAddresses(userAddresses);
       
       // Set the default address as selected

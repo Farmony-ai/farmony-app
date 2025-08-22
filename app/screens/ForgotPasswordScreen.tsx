@@ -34,7 +34,9 @@ const ForgotPasswordScreen = () => {
     // Check if phone exists in database
     setIsValidating(true);
     try {
+      console.log('[ForgotPassword] ➜ Validating phone before OTP:', phone);
       const result = await checkPhoneExists(phone);
+      console.log('[ForgotPassword] ⇦ checkPhoneExists:', result);
       setIsValidating(false);
       
       if (!result.exists) {
@@ -43,6 +45,7 @@ const ForgotPasswordScreen = () => {
       }
     } catch (error) {
       setIsValidating(false);
+      console.log('[ForgotPassword] ❌ Phone validation error:', error);
       setPhoneError('Unable to verify phone number. Please try again.');
       return false;
     }

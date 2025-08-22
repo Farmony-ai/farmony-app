@@ -304,7 +304,9 @@ const SignUpScreen = () => {
         else {
           setIsValidatingPhone(true);
           try {
+            console.log('[SignUp] ➜ Checking phone availability:', phone);
             const result = await checkPhoneExists(phone);
+            console.log('[SignUp] ⇦ checkPhoneExists:', result);
             setIsValidatingPhone(false);
             if (result.exists) {
               setPhoneError('Phone number is already registered. Please use a different number.');

@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
@@ -10,8 +9,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  ScrollView,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { PROVIDER_DEFAULT, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import Button from '../components/Button';
@@ -21,10 +22,15 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { GOOGLE_MAPS_API_KEY } from '../config/api';
 import AddressService, { Address, CreateAddressDto } from '../services/AddressService';
 import LocationService from '../services/locationService';
+import debounce from 'lodash.debounce';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// Use the app's configured Google Maps API key for Places queries
+const GOOGLE_API_KEY = GOOGLE_MAPS_API_KEY;
 
 interface RouteParams {
   editAddress?: Address;
@@ -34,27 +40,26 @@ const AddAddressScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { editAddress } = route.params as RouteParams || {};
-  const { userId } = useSelector((state: RootState) => state.auth);
+  const { user } = useSelector((state: RootState) => state.auth);
   const { latitude: currentLat, longitude: currentLng } = useSelector(
     (state: RootState) => state.location
   );
 
   const mapRef = useRef<MapView>(null);
   const [isEditMode] = useState(!!editAddress);
-  
+  const [hasLocationPermission, setHasLocationPermission] = useState(false);
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+
   // Map state
-  const [mapRegion, setMapRegion] = useState({
+  const [mapRegion, setMapRegion] = useState<Region>({
     latitude: editAddress?.coordinates[1] || currentLat || 17.385044,
     longitude: editAddress?.coordinates[0] || currentLng || 78.486671,
     latitudeDelta: 0.005,
     longitudeDelta: 0.005,
   });
-  const [markerCoordinate, setMarkerCoordinate] = useState({
-    latitude: editAddress?.coordinates[1] || currentLat || 17.385044,
-    longitude: editAddress?.coordinates[0] || currentLng || 78.486671,
-  });
 
   // Form state
+  const [addressName, setAddressName] = useState('');
   const [addressLine1, setAddressLine1] = useState(editAddress?.addressLine1 || '');
   const [addressLine2, setAddressLine2] = useState(editAddress?.addressLine2 || '');
   const [village, setVillage] = useState(editAddress?.village || '');
@@ -62,9 +67,8 @@ const AddAddressScreen = () => {
   const [district, setDistrict] = useState(editAddress?.district || '');
   const [state, setState] = useState(editAddress?.state || '');
   const [pincode, setPincode] = useState(editAddress?.pincode || '');
-  const [selectedTag, setSelectedTag] = useState<'home' | 'work' | 'personal' | 'other'>(
-    editAddress?.tag || 'home'
-  );
+  const [addressTag, setAddressTag] = useState(editAddress?.tag || '');
+
 
   // Loading states
   const [loading, setLoading] = useState(false);
@@ -75,33 +79,35 @@ const AddAddressScreen = () => {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
-    if (!editAddress) {
-      getCurrentLocation();
-    }
-  }, []);
+    const requestPermission = async () => {
+      const permission = await LocationService.requestLocationPermission();
+      setHasLocationPermission(permission);
+      if (permission && !editAddress) {
+        getCurrentLocation();
+      } else if (!permission) {
+        Alert.alert(
+          'Location Permission Required',
+          'Please grant location permission to use this feature.'
+        );
+      }
+    };
+
+    requestPermission();
+  }, [editAddress]);
 
   const getCurrentLocation = async () => {
     setFetchingLocation(true);
     try {
       const location = await LocationService.getCurrentLocation();
       if (location) {
-        const newCoordinate = {
+        const newRegion = {
           latitude: location.latitude,
           longitude: location.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
         };
-        setMarkerCoordinate(newCoordinate);
-        setMapRegion({
-          ...newCoordinate,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
-        });
-        mapRef.current?.animateToRegion({
-          ...newCoordinate,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
-        }, 1000);
-        
-        // Reverse geocode to get address details
+        setMapRegion(newRegion);
+        mapRef.current?.animateToRegion(newRegion, 1000);
         await reverseGeocodeLocation(location.latitude, location.longitude);
       }
     } catch (error) {
@@ -120,11 +126,23 @@ const AddAddressScreen = () => {
         const addressComponents = result.results[0].address_components;
         const formattedAddress = result.results[0].formatted_address;
         
-        // Parse address components
+        setAddressName(formattedAddress.split(',').slice(0, 2).join(', '));
+        
+        // Reset fields before populating
+        setAddressLine1('');
+        setAddressLine2('');
+        setVillage('');
+        setTehsil('');
+        setDistrict('');
+        setState('');
+        setPincode('');
+
         addressComponents.forEach((component: any) => {
           const types = component.types;
-          if (types.includes('route')) {
-            setAddressLine1(component.long_name);
+          if (types.includes('premise') || types.includes('street_number')) {
+            setAddressLine1(prev => prev ? `${prev} ${component.long_name}` : component.long_name);
+          } else if (types.includes('route')) {
+            setAddressLine2(component.long_name);
           } else if (types.includes('sublocality_level_2')) {
             setVillage(component.long_name);
           } else if (types.includes('sublocality_level_1')) {
@@ -145,16 +163,35 @@ const AddAddressScreen = () => {
     }
   };
 
-  const handleMapPress = (event: any) => {
-    const { coordinate } = event.nativeEvent;
-    setMarkerCoordinate(coordinate);
-    reverseGeocodeLocation(coordinate.latitude, coordinate.longitude);
+  const debouncedReverseGeocode = useCallback(
+    debounce((region: Region) => {
+      reverseGeocodeLocation(region.latitude, region.longitude);
+    }, 1000),
+    [],
+  );
+
+  const handleRegionChangeComplete = (region: Region) => {
+    setMapRegion(region);
+    debouncedReverseGeocode(region);
   };
 
-  const handleMarkerDragEnd = (event: any) => {
-    const { coordinate } = event.nativeEvent;
-    setMarkerCoordinate(coordinate);
-    reverseGeocodeLocation(coordinate.latitude, coordinate.longitude);
+  const handlePlaceSelected = (data: any, details: any) => {
+    // Gracefully handle cases where details might not be provided
+    const lat = details?.geometry?.location?.lat;
+    const lng = details?.geometry?.location?.lng;
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      Alert.alert('Location not available', 'Could not fetch location details for the selected place. Please try another search.');
+      return;
+    }
+    const newRegion = { 
+      latitude: lat, 
+      longitude: lng, 
+      latitudeDelta: 0.005, 
+      longitudeDelta: 0.005 
+    };
+    setMapRegion(newRegion);
+    mapRef.current?.animateToRegion(newRegion, 1000);
+    reverseGeocodeLocation(lat, lng);
   };
 
   const validateForm = (): boolean => {
@@ -174,6 +211,9 @@ const AddAddressScreen = () => {
     } else if (!/^\d{6}$/.test(pincode)) {
       newErrors.pincode = 'Please enter a valid 6-digit pincode';
     }
+    if (!addressTag.trim()) {
+      newErrors.addressTag = 'An address name is required (e.g., Home, Work)';
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -185,8 +225,8 @@ const AddAddressScreen = () => {
     setLoading(true);
     try {
       const addressData: CreateAddressDto = {
-        userId,
-        tag: selectedTag,
+        userId: user?.id,
+        tag: addressTag,
         addressLine1,
         addressLine2,
         village,
@@ -194,7 +234,7 @@ const AddAddressScreen = () => {
         district,
         state,
         pincode,
-        coordinates: [markerCoordinate.longitude, markerCoordinate.latitude],
+        coordinates: [mapRegion.longitude, mapRegion.latitude],
         isDefault: false,
       };
 
@@ -208,27 +248,12 @@ const AddAddressScreen = () => {
       
       navigation.goBack();
     } catch (error: any) {
+      console.error('Error saving address:', JSON.stringify(error, null, 2));
       Alert.alert('Error', error.message || 'Failed to save address. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-
-  const TagButton = ({ tag, label }: { tag: 'home' | 'work' | 'personal' | 'other'; label: string }) => (
-    <TouchableOpacity
-      style={[styles.tagButton, selectedTag === tag && styles.tagButtonActive]}
-      onPress={() => setSelectedTag(tag)}
-    >
-      <MaterialIcons
-        name={tag === 'home' ? 'home' : tag === 'work' ? 'business' : tag === 'personal' ? 'person' : 'location-on'}
-        size={18}
-        color={selectedTag === tag ? COLORS.NEUTRAL.WHITE : COLORS.TEXT.SECONDARY}
-      />
-      <Text style={[styles.tagButtonText, selectedTag === tag && styles.tagButtonTextActive]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
 
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
@@ -239,184 +264,158 @@ const AddAddressScreen = () => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
+            <Ionicons name="close" size={24} color={COLORS.TEXT.PRIMARY} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {isEditMode ? 'Edit Address' : 'Add New Address'}
-          </Text>
+          <View style={styles.searchContainer}>
+            <GooglePlacesAutocomplete
+              placeholder="Try Sector 75 etc..."
+              onPress={(data, details = null) => handlePlaceSelected(data, details)}
+              query={{
+                key: GOOGLE_API_KEY,
+                language: 'en',
+                components: 'country:in',
+              }}
+              fetchDetails={true}
+              // React 19 removed defaultProps for function components; pass safe defaults explicitly
+              predefinedPlaces={[]}
+              filterReverseGeocodingByTypes={[]}
+              styles={{
+                container: {
+                  flex: 1,
+                  backgroundColor: 'transparent',
+                },
+                textInput: styles.searchInput,
+                listView: styles.listView,
+              }}
+              debounce={200}
+              onFail={(error) => console.error('GPlaces DEBUG: API Error:', error)}
+              onNotFound={() => console.log('GPlaces DEBUG: No results found for query.')}
+              onPress={(data, details = null) => {
+                console.log('GPlaces DEBUG: Place selected:', data.description);
+                handlePlaceSelected(data, details);
+              }}
+            />
+          </View>
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
+        {/* Map View */}
+        <View style={styles.mapContainer}>
+          <MapView
+            ref={mapRef}
+            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+            style={styles.map}
+            initialRegion={mapRegion}
+            onRegionChangeComplete={handleRegionChangeComplete}
+            showsUserLocation={hasLocationPermission}
+            showsMyLocationButton={false}
+          >
+          </MapView>
+          
+          <View style={styles.centerMarkerContainer}>
+            <View style={styles.mapMessage}>
+              <Text style={styles.mapMessageText}>Your order will be delivered here</Text>
+              <Text style={styles.mapInstruction}>Move the map to set your location</Text>
+            </View>
+            <View style={styles.mapMessagePointer} />
+          </View>
+
+          {/* Current Location Button */}
+          <TouchableOpacity
+            style={styles.currentLocationButton}
+            onPress={getCurrentLocation}
+            disabled={fetchingLocation}
+          >
+            {fetchingLocation ? (
+              <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+            ) : (
+              <MaterialIcons name="my-location" size={20} color={COLORS.PRIMARY.MAIN} />
+            )}
+          </TouchableOpacity>
+        </View>
+        
+        {/* Form Section */}
+        <ScrollView 
+          style={styles.formContainer}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Map View */}
-          <View style={styles.mapContainer}>
-            <MapView
-              ref={mapRef}
-              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
-              style={styles.map}
-              initialRegion={mapRegion}
-              onPress={handleMapPress}
-              showsUserLocation={true}
-              showsMyLocationButton={false}
-            >
-              <Marker
-                coordinate={markerCoordinate}
-                draggable
-                onDragEnd={handleMarkerDragEnd}
-              />
-            </MapView>
-            
-            {/* Map Overlay Message */}
-            <View style={styles.mapOverlay}>
-              <View style={styles.mapMessage}>
-                <Ionicons name="location" size={16} color={COLORS.PRIMARY.MAIN} />
-                <Text style={styles.mapMessageText}>Order will be delivered here</Text>
-              </View>
-              <Text style={styles.mapInstruction}>Move the pin to change location</Text>
-            </View>
-
-            {/* Current Location Button */}
-            <TouchableOpacity
-              style={styles.currentLocationButton}
-              onPress={getCurrentLocation}
-              disabled={fetchingLocation}
-            >
-              {fetchingLocation ? (
-                <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
-              ) : (
-                <MaterialIcons name="my-location" size={20} color={COLORS.PRIMARY.MAIN} />
-              )}
-              <Text style={styles.currentLocationText}>Use Current Location</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Address Details Form */}
-          <View style={styles.formContainer}>
-            <Text style={styles.formHint}>
-              A detailed address will help our Delivery Partner reach your doorstep easily
-            </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>HOUSE / FLAT / FLOOR NO.</Text>
-              <TextInput
-                style={[styles.input, errors.addressLine1 && styles.inputError]}
-                value={addressLine1}
-                onChangeText={setAddressLine1}
-                placeholder="e.g., Flat 302, Tower B"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              />
-              {errors.addressLine1 && (
-                <Text style={styles.errorText}>{errors.addressLine1}</Text>
-              )}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>APARTMENT / ROAD / AREA (RECOMMENDED)</Text>
-              <TextInput
-                style={styles.input}
-                value={addressLine2}
-                onChangeText={setAddressLine2}
-                placeholder="e.g., Green Valley Apartments"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              />
-            </View>
-
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.inputLabel}>VILLAGE/LOCALITY</Text>
-                <TextInput
-                  style={styles.input}
-                  value={village}
-                  onChangeText={setVillage}
-                  placeholder="e.g., Kondapur"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                />
-              </View>
-
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.inputLabel}>TEHSIL/TALUK</Text>
-                <TextInput
-                  style={styles.input}
-                  value={tehsil}
-                  onChangeText={setTehsil}
-                  placeholder="e.g., Serilingampally"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.inputLabel}>DISTRICT *</Text>
-                <TextInput
-                  style={[styles.input, errors.district && styles.inputError]}
-                  value={district}
-                  onChangeText={setDistrict}
-                  placeholder="e.g., Hyderabad"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                />
-                {errors.district && (
-                  <Text style={styles.errorText}>{errors.district}</Text>
-                )}
-              </View>
-
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.inputLabel}>STATE *</Text>
-                <TextInput
-                  style={[styles.input, errors.state && styles.inputError]}
-                  value={state}
-                  onChangeText={setState}
-                  placeholder="e.g., Telangana"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                />
-                {errors.state && (
-                  <Text style={styles.errorText}>{errors.state}</Text>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>PINCODE *</Text>
-              <TextInput
-                style={[styles.input, errors.pincode && styles.inputError]}
-                value={pincode}
-                onChangeText={setPincode}
-                placeholder="e.g., 500032"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                keyboardType="numeric"
-                maxLength={6}
-              />
-              {errors.pincode && (
-                <Text style={styles.errorText}>{errors.pincode}</Text>
-              )}
-            </View>
-
-            {/* Save As Tags */}
-            <View style={styles.tagSection}>
-              <Text style={styles.tagSectionTitle}>SAVE AS</Text>
-              <View style={styles.tagContainer}>
-                <TagButton tag="home" label="Home" />
-                <TagButton tag="work" label="Work" />
-                <TagButton tag="personal" label="Personal" />
-                <TagButton tag="other" label="Other" />
-              </View>
+          <View style={styles.locationInfo}>
+            <Ionicons name="location-sharp" size={24} color={COLORS.PRIMARY.MAIN} />
+            <View style={styles.locationTextContainer}>
+              <Text style={styles.locationTitle}>{addressName || 'Fetching...'}</Text>
+              <Text style={styles.locationSubtitle} numberOfLines={2}>
+                {`${addressLine1}, ${addressLine2}, ${village}, ${district}, ${state}, ${pincode}`}
+              </Text>
             </View>
           </View>
+
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={[
+                styles.input, 
+                errors.addressLine1 && styles.inputError,
+                focusedInput === 'addressLine1' && styles.inputFocused
+              ]}
+              value={addressLine1}
+              onChangeText={setAddressLine1}
+              placeholder="Flat, House No, Apartment"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              onFocus={() => setFocusedInput('addressLine1')}
+              onBlur={() => setFocusedInput(null)}
+            />
+            {errors.addressLine1 && (
+              <Text style={styles.errorText}>{errors.addressLine1}</Text>
+            )}
+          </View>
+
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={[
+                styles.input, 
+                errors.addressLine2 && styles.inputError,
+                focusedInput === 'addressLine2' && styles.inputFocused
+              ]}
+              value={addressLine2}
+              onChangeText={setAddressLine2}
+              placeholder="Locality/Area/Landmark"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              onFocus={() => setFocusedInput('addressLine2')}
+              onBlur={() => setFocusedInput(null)}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={[
+                styles.input, 
+                errors.addressTag && styles.inputError,
+                focusedInput === 'addressTag' && styles.inputFocused
+              ]}
+              value={addressTag}
+              onChangeText={setAddressTag}
+              placeholder="Save address as (e.g., Home, Work)"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              onFocus={() => setFocusedInput('addressTag')}
+              onBlur={() => setFocusedInput(null)}
+            />
+            {errors.addressTag && (
+              <Text style={styles.errorText}>{errors.addressTag}</Text>
+            )}
+          </View>
+
+          <Text style={styles.infoText}>
+            This will be your address for all morning and instant deliveries.
+          </Text>
         </ScrollView>
-
-        {/* Save Button */}
-        <View style={styles.footer}>
-          <Button
-            title={isEditMode ? 'UPDATE ADDRESS DETAILS' : 'SAVE ADDRESS DETAILS'}
-            onPress={handleSaveAddress}
-            loading={loading}
-            fullWidth
-            style={styles.saveButton}
-          />
-        </View>
+          <View style={styles.footer}>
+            <Button
+              title="SAVE ADDRESS"
+              onPress={handleSaveAddress}
+              loading={loading}
+              fullWidth
+              style={styles.saveButton}
+            />
+          </View>
       </KeyboardAvoidingView>
     </SafeAreaWrapper>
   );
@@ -430,119 +429,164 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.SM,
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+    zIndex: 10, // Ensure header is above other content
   },
   backButton: {
     padding: SPACING.XS,
-    marginRight: SPACING.MD,
+    marginRight: SPACING.XS,
+    backgroundColor: '#f1f1f1',
+    borderRadius: 20,
   },
-  headerTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  searchContainer: {
+    flex: 1,
+    marginLeft: SPACING.SM,
+    // Allow dropdown to render outside of this container
+    overflow: 'visible',
+  },
+  searchInput: {
+    height: 40,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: BORDER_RADIUS.LG,
+    paddingHorizontal: SPACING.MD,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
   },
-  scrollContent: {
-    paddingBottom: 100,
+  listView: {
+    position: 'absolute',
+    top: 45,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: BORDER_RADIUS.MD,
+    ...SHADOWS.MD,
+    zIndex: 1000,
   },
   mapContainer: {
-    height: 250,
+    height: screenHeight * 0.4,
     position: 'relative',
   },
   map: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
-  mapOverlay: {
+  centerMarkerContainer: {
     position: 'absolute',
-    bottom: SPACING.LG,
-    alignSelf: 'center',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -100 }, { translateY: -70 }],
+    width: 200,
     alignItems: 'center',
   },
   mapMessage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.TEXT.PRIMARY,
+    backgroundColor: COLORS.PRIMARY.MAIN,
     paddingHorizontal: SPACING.MD,
     paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.LG,
+    borderRadius: BORDER_RADIUS.MD,
     ...SHADOWS.MD,
+    alignItems: 'center',
+  },
+  mapMessagePointer: {
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderTopWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: COLORS.PRIMARY.MAIN,
   },
   mapMessageText: {
     color: COLORS.NEUTRAL.WHITE,
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    marginLeft: SPACING.XS,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
   },
   mapInstruction: {
-    color: COLORS.TEXT.SECONDARY,
-    fontSize: FONT_SIZES.XS,
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.POPPINS.REGULAR,
     marginTop: SPACING.XS,
   },
   currentLocationButton: {
     position: 'absolute',
-    bottom: SPACING.MD,
-    left: SPACING.MD,
-    right: SPACING.MD,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    bottom: SPACING.LG,
+    right: SPACING.LG,
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MD,
-    borderWidth: 1,
-    borderColor: COLORS.PRIMARY.MAIN,
-    ...SHADOWS.SM,
-  },
-  currentLocationText: {
-    marginLeft: SPACING.SM,
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.PRIMARY.MAIN,
+    borderRadius: 50,
+    padding: SPACING.SM,
+    ...SHADOWS.MD,
   },
   formContainer: {
+    flex: 1,
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    padding: SPACING.MD,
+    paddingHorizontal: SPACING.MD,
+    paddingTop: SPACING.MD,
   },
-  formHint: {
+  locationInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.LG,
+    paddingBottom: SPACING.MD,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
+  locationTextContainer: {
+    marginLeft: SPACING.MD,
+    flex: 1,
+  },
+  locationTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  locationSubtitle: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.PRIMARY.MAIN,
-    backgroundColor: '#FFF9E6',
-    padding: SPACING.SM,
-    borderRadius: BORDER_RADIUS.SM,
-    marginBottom: SPACING.MD,
+    color: COLORS.TEXT.SECONDARY,
+    marginTop: SPACING.XS,
   },
   inputGroup: {
     marginBottom: SPACING.MD,
   },
-  inputRow: {
-    flexDirection: 'row',
-    gap: SPACING.MD,
-  },
-  inputHalf: {
-    flex: 1,
-  },
   inputLabel: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.SECONDARY,
     marginBottom: SPACING.XS,
-    letterSpacing: 0.5,
   },
   input: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
-    paddingVertical: SPACING.SM,
+    backgroundColor: 'transparent',
+    borderRadius: BORDER_RADIUS.MD,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: Platform.OS === 'ios' ? SPACING.MD : SPACING.SM,
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    height: 50,
+  },
+  inputFocused: {
+    borderColor: COLORS.PRIMARY.MAIN,
+    borderWidth: 1.5,
   },
   inputError: {
-    borderBottomColor: '#EF4444',
+    borderColor: '#EF4444',
   },
   errorText: {
     fontSize: FONT_SIZES.XS,
@@ -550,57 +594,24 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     marginTop: SPACING.XS,
   },
-  tagSection: {
-    marginTop: SPACING.LG,
-  },
-  tagSectionTitle: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.SECONDARY,
-    marginBottom: SPACING.SM,
-    letterSpacing: 0.5,
-  },
-  tagContainer: {
-    flexDirection: 'row',
-    gap: SPACING.SM,
-  },
-  tagButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-  },
-  tagButtonActive: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    borderColor: COLORS.PRIMARY.MAIN,
-  },
-  tagButtonText: {
-    marginLeft: SPACING.XS,
+  infoText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
-  },
-  tagButtonTextActive: {
-    color: COLORS.NEUTRAL.WHITE,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.LG,
+    marginTop: SPACING.MD,
+    paddingBottom: SPACING.LG,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
     padding: SPACING.MD,
     borderTopWidth: 1,
     borderTopColor: COLORS.BORDER.PRIMARY,
-    ...SHADOWS.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
   },
   saveButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
+    borderRadius: BORDER_RADIUS.MD,
   },
 });
 
