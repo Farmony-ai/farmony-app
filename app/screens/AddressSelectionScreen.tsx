@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  NativeSyntheticEvent,
+  TextInputSubmitEditingEventData,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -139,6 +141,13 @@ const AddressSelectionScreen = () => {
     );
   };
 
+  const onSearchSubmit = (e: NativeSyntheticEvent<TextInputSubmitEditingEventData>) => {
+    const query = e.nativeEvent.text?.trim();
+    if (query?.length) {
+      navigation.navigate('AddAddress', { initialQuery: query });
+    }
+  };
+
   const getTagIcon = (tag: string) => {
     switch (tag) {
       case 'home':
@@ -185,6 +194,8 @@ const AddressSelectionScreen = () => {
               placeholderTextColor={COLORS.TEXT.SECONDARY}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onSubmitEditing={onSearchSubmit}
+              returnKeyType="search"
             />
           </View>
         </View>

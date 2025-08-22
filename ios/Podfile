@@ -1,35 +1,44 @@
-# RN helper must be first
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
-  )', __dir__]).strip
+source 'https://cdn.cocoapods.org/'
+platform :ios, '16.0'
 
-platform :ios, '15.1'
-$RNMaps_UseGoogleMaps = true
+require_relative '../node_modules/react-native/scripts/react_native_pods'
 prepare_react_native_project!
 
-# Works well with Firebase + Maps
-use_frameworks! :linkage => :static
+# ⚠️ Do NOT call use_frameworks! in this option (we stay static)
+# ⚠️ Do NOT call use_modular_headers! globally (it can break other pods)
 
 target 'RuralShareApp' do
   config = use_native_modules!
 
   use_react_native!(
     :path => config[:reactNativePath],
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :hermes_enabled => true
   )
 
-  # RN Maps iOS bridge (this will pull GoogleMaps 7.4.0)
-  pod 'Google-Maps-iOS-Utils', :git => 'https://github.com/Simon-TechForm/google-maps-ios-utils.git', :branch => 'feat/support-apple-silicon'
+  rn_maps_path = File.join(__dir__, '../node_modules/react-native-maps')
 
-  pod 'react-native-google-maps', :path => '../node_modules/react-native-maps'
+  # Google provider (no subspec)
+  pod 'react-native-google-maps', :path => rn_maps_path
+
+  # Google SDK pins
+  pod 'GoogleMaps', '7.4.0'
+  pod 'GooglePlaces', '7.4.0'
+
+  # 👇 Only these Firebase-related pods need modular headers
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'FirebaseCoreExtension', :modular_headers => true
+  pod 'FirebaseAuthInterop', :modular_headers => true
+  pod 'FirebaseAppCheckInterop', :modular_headers => true
+  pod 'RecaptchaInterop', :modular_headers => true
+  # If you declare FirebaseAuth here, keep it normal; it will pick up the modular deps above:
+  # pod 'FirebaseAuth'
 
   post_install do |installer|
-    react_native_post_install(installer, config[:reactNativePath], :mac_catalyst_enabled => false)
+    react_native_post_install(installer)
     installer.pods_project.targets.each do |t|
-      t.build_configurations.each do |bc|
-        bc.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      t.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
       end
     end
   end

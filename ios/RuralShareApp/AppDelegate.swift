@@ -5,6 +5,7 @@ import ReactAppDependencyProvider
 import FirebaseCore
 import FirebaseAuth
 import GoogleMaps
+import GooglePlaces
 import UserNotifications
 
 @main
@@ -18,30 +19,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
-    // 1) Google Maps first
-    GMSServices.provideAPIKey("AIzaSyA_dOZ8Oxb5t3Lm5knvuJdDE_sqgEHWctc") // TODO: restrict this key in GCP
+    // 1) Google Maps + Places keys
+    GMSServices.provideAPIKey("AIzaSyA_dOZ8Oxb5t3Lm5knvuJdDE_sqgEHWctc")
+    GMSPlacesClient.provideAPIKey("AIzaSyA_dOZ8Oxb5t3Lm5knvuJdDE_sqgEHWctc")
 
     // 2) Firebase
     FirebaseApp.configure()
 
-    // Helpful debug logs from Firebase (only Debug builds)
     #if DEBUG
     FirebaseConfiguration.shared.setLoggerLevel(.debug)
     #endif
 
-    // Use device language for Auth SMS flows
     Auth.auth().useAppLanguage()
 
-    // Simulator tip: allow testing without real app verification
     #if targetEnvironment(simulator)
     Auth.auth().settings?.isAppVerificationDisabledForTesting = true
     print("⚠️ [Auth] App verification disabled for Simulator testing. Use test phone numbers in Firebase Console.")
     #endif
 
-    // 3) Register for remote notifications (no user prompt required for silent verification)
     UIApplication.shared.registerForRemoteNotifications()
-
-    // Optional: sanity check that URL scheme for reCAPTCHA redirect exists
     self.verifyFirebaseURLScheme()
 
     // 4) React Native bootstrap
@@ -60,7 +56,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     return true
   }
 
-  // APNs device token -> Firebase Auth (sandbox for Debug, prod for Release/TestFlight)
   func application(_ application: UIApplication,
                    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
     #if DEBUG
@@ -80,7 +75,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     print("⚠️ Failed to register for remote notifications: \(error.localizedDescription)")
   }
 
-  // Let Firebase Auth consume the silent push used for phone number verification
   func application(_ application: UIApplication,
                    didReceiveRemoteNotification userInfo: [AnyHashable : Any],
                    fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
@@ -88,11 +82,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       completionHandler(.noData)
       return
     }
-    // Handle your own notifications here if you add any later
     completionHandler(.noData)
   }
 
-  // Fallback handlers for reCAPTCHA / universal links if APNs silent verification can't be used
   func application(_ app: UIApplication,
                    open url: URL,
                    options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
@@ -100,7 +92,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       print("✅ Firebase Auth handled URL redirect.")
       return true
     }
-    // Handle other URL types here (e.g., Google/Facebook sign-in) if needed
     return false
   }
 
@@ -114,9 +105,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     return false
   }
 
-  // MARK: - Helpers
-
-  /// Checks that the app has a URL scheme matching REVERSED_CLIENT_ID from GoogleService-Info.plist.
   private func verifyFirebaseURLScheme() {
     guard
       let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),

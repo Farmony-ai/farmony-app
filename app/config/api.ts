@@ -26,13 +26,13 @@ export const API_CONFIG = {
 // 🔑 Google Maps API Key
 // IMPORTANT: It's recommended to use react-native-config or a similar library 
 // to avoid exposing your API key in the source code.
-export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY; // Replace with your actual key
+export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyA_dOZ8Oxb5t3Lm5knvuJdDE_sqgEHWctc"; // Replace with your actual key
 
 // 🎯 Auto-detect Platform and Environment
 const getBaseURL = () => {
   // For now, we'll use Android emulator settings
   // You can make this more dynamic based on Platform.OS or __DEV__
-  return API_CONFIG.development.android;
+  return API_CONFIG.development.ios;
 };
 
 // 📡 Export the current base URL

@@ -10,8 +10,10 @@ import {
   Platform,
   Dimensions,
   ScrollView,
+  Animated,
+  Easing,
 } from 'react-native';
-import MapView, { PROVIDER_DEFAULT, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -27,28 +29,40 @@ import AddressService, { Address, CreateAddressDto } from '../services/AddressSe
 import LocationService from '../services/locationService';
 import debounce from 'lodash.debounce';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-
-// Use the app's configured Google Maps API key for Places queries
-const GOOGLE_API_KEY = GOOGLE_MAPS_API_KEY;
+const { height: screenHeight } = Dimensions.get('window');
+const GOOGLE_API_KEY = GOOGLE_MAPS_API_KEY as string;
 
 interface RouteParams {
   editAddress?: Address;
 }
 
+const TAGS = ['home', 'work', 'personal', 'other'] as const;
+type TagType = typeof TAGS[number];
+
 const AddAddressScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { editAddress } = route.params as RouteParams || {};
+  const { editAddress } = (route.params as RouteParams) || {};
   const { user } = useSelector((state: RootState) => state.auth);
   const { latitude: currentLat, longitude: currentLng } = useSelector(
     (state: RootState) => state.location
   );
 
   const mapRef = useRef<MapView>(null);
+  const placesRef = useRef<any>(null);
+
   const [isEditMode] = useState(!!editAddress);
   const [hasLocationPermission, setHasLocationPermission] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
+
+  // Pin animation
+  const pinScale = useRef(new Animated.Value(1)).current;
+  const bouncePin = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(pinScale, { toValue: 0.9, duration: 100, useNativeDriver: true, easing: Easing.out(Easing.quad) }),
+      Animated.timing(pinScale, { toValue: 1, duration: 150, useNativeDriver: true, easing: Easing.inOut(Easing.quad) }),
+    ]).start();
+  }, [pinScale]);
 
   // Map state
   const [mapRegion, setMapRegion] = useState<Region>({
@@ -67,8 +81,7 @@ const AddAddressScreen = () => {
   const [district, setDistrict] = useState(editAddress?.district || '');
   const [state, setState] = useState(editAddress?.state || '');
   const [pincode, setPincode] = useState(editAddress?.pincode || '');
-  const [addressTag, setAddressTag] = useState(editAddress?.tag || '');
-
+  const [addressTag, setAddressTag] = useState<TagType | string>((editAddress?.tag as any) || '');
 
   // Loading states
   const [loading, setLoading] = useState(false);
@@ -85,13 +98,9 @@ const AddAddressScreen = () => {
       if (permission && !editAddress) {
         getCurrentLocation();
       } else if (!permission) {
-        Alert.alert(
-          'Location Permission Required',
-          'Please grant location permission to use this feature.'
-        );
+        Alert.alert('Location Permission Required', 'Please grant location permission to use this feature.');
       }
     };
-
     requestPermission();
   }, [editAddress]);
 
@@ -107,7 +116,7 @@ const AddAddressScreen = () => {
           longitudeDelta: 0.005,
         };
         setMapRegion(newRegion);
-        mapRef.current?.animateToRegion(newRegion, 1000);
+        mapRef.current?.animateToRegion(newRegion, 800);
         await reverseGeocodeLocation(location.latitude, location.longitude);
       }
     } catch (error) {
@@ -118,43 +127,65 @@ const AddAddressScreen = () => {
     }
   };
 
+  // --- Parsing helpers (robust to Indian address formats) ---
+  const firstLongName = (components: any[], typesWanted: string[]) => {
+    const c = components.find((x) => (x.types || []).some((t: string) => typesWanted.includes(t)));
+    return c?.long_name || '';
+  };
+
+  const applyAddressComponentsFromPlace = (components: any[] = [], formatted?: string, name?: string) => {
+    // Reset before populate
+    setAddressLine1('');
+    setAddressLine2('');
+    setVillage('');
+    setTehsil('');
+    setDistrict('');
+    setState('');
+    setPincode('');
+
+    // Title
+    if (name) setAddressName(name);
+    else if (formatted) setAddressName(formatted.split(',').slice(0, 2).join(', ').trim());
+
+    // Lines
+    const premise = firstLongName(components, ['premise', 'subpremise', 'street_number']);
+    const route = firstLongName(components, ['route']);
+    if (premise) setAddressLine1((prev) => (prev ? `${prev} ${premise}` : premise));
+    if (route) setAddressLine2((prev) => (prev ? `${prev}, ${route}` : route));
+
+    // Village / locality (multiple fallbacks)
+    const vill =
+      firstLongName(components, ['sublocality_level_2', 'neighborhood', 'administrative_area_level_3']) ||
+      firstLongName(components, ['sublocality', 'sublocality_level_1', 'political']) ||
+      firstLongName(components, ['locality']); // last resort
+    if (vill) setVillage(vill);
+
+    // Tehsil / sub-district
+    const teh = firstLongName(components, ['sublocality', 'sublocality_level_1']);
+    if (teh) setTehsil(teh);
+
+    // District / city
+    const dist =
+      firstLongName(components, ['administrative_area_level_2']) ||
+      firstLongName(components, ['locality']);
+    if (dist) setDistrict(dist);
+
+    // State
+    const st = firstLongName(components, ['administrative_area_level_1']);
+    if (st) setState(st);
+
+    // Pincode
+    const pin = firstLongName(components, ['postal_code']);
+    if (pin) setPincode(pin);
+  };
+
   const reverseGeocodeLocation = async (latitude: number, longitude: number) => {
     setReverseGeocoding(true);
     try {
       const result = await AddressService.reverseGeocode(latitude, longitude);
-      if (result.results && result.results.length > 0) {
-        const addressComponents = result.results[0].address_components;
-        const formattedAddress = result.results[0].formatted_address;
-        
-        setAddressName(formattedAddress.split(',').slice(0, 2).join(', '));
-        
-        // Reset fields before populating
-        setAddressLine1('');
-        setAddressLine2('');
-        setVillage('');
-        setTehsil('');
-        setDistrict('');
-        setState('');
-        setPincode('');
-
-        addressComponents.forEach((component: any) => {
-          const types = component.types;
-          if (types.includes('premise') || types.includes('street_number')) {
-            setAddressLine1(prev => prev ? `${prev} ${component.long_name}` : component.long_name);
-          } else if (types.includes('route')) {
-            setAddressLine2(component.long_name);
-          } else if (types.includes('sublocality_level_2')) {
-            setVillage(component.long_name);
-          } else if (types.includes('sublocality_level_1')) {
-            setTehsil(component.long_name);
-          } else if (types.includes('locality')) {
-            setDistrict(component.long_name);
-          } else if (types.includes('administrative_area_level_1')) {
-            setState(component.long_name);
-          } else if (types.includes('postal_code')) {
-            setPincode(component.long_name);
-          }
-        });
+      const best = result?.results?.[0];
+      if (best) {
+        applyAddressComponentsFromPlace(best.address_components, best.formatted_address);
       }
     } catch (error) {
       console.error('Error reverse geocoding:', error);
@@ -166,67 +197,69 @@ const AddAddressScreen = () => {
   const debouncedReverseGeocode = useCallback(
     debounce((region: Region) => {
       reverseGeocodeLocation(region.latitude, region.longitude);
-    }, 1000),
-    [],
+    }, 800),
+    []
   );
 
   const handleRegionChangeComplete = (region: Region) => {
     setMapRegion(region);
     debouncedReverseGeocode(region);
+    bouncePin();
   };
 
   const handlePlaceSelected = (data: any, details: any) => {
-    // Gracefully handle cases where details might not be provided
     const lat = details?.geometry?.location?.lat;
     const lng = details?.geometry?.location?.lng;
     if (typeof lat !== 'number' || typeof lng !== 'number') {
-      Alert.alert('Location not available', 'Could not fetch location details for the selected place. Please try another search.');
+      Alert.alert('Location not available', 'Could not fetch location details for the selected place.');
       return;
     }
-    const newRegion = { 
-      latitude: lat, 
-      longitude: lng, 
-      latitudeDelta: 0.005, 
-      longitudeDelta: 0.005 
-    };
+    const newRegion = { latitude: lat, longitude: lng, latitudeDelta: 0.005, longitudeDelta: 0.005 };
     setMapRegion(newRegion);
-    mapRef.current?.animateToRegion(newRegion, 1000);
-    reverseGeocodeLocation(lat, lng);
+    mapRef.current?.animateToRegion(newRegion, 800);
+
+    if (details?.address_components) {
+      applyAddressComponentsFromPlace(details.address_components, details.formatted_address, details.name || data?.structured_formatting?.main_text);
+    } else {
+      reverseGeocodeLocation(lat, lng);
+    }
+  };
+
+  // --- Validation & save ---
+  const sanitizeTag = (t: string): TagType => {
+    const v = (t || '').trim().toLowerCase();
+    if ((TAGS as readonly string[]).includes(v)) return v as TagType;
+    if (['office', 'site', 'workplace'].includes(v)) return 'work';
+    if (['house', 'homeaddress', 'flat'].includes(v)) return 'home';
+    if (['personal', 'mine', 'me'].includes(v)) return 'personal';
+    return 'other';
   };
 
   const validateForm = (): boolean => {
     const newErrors: { [key: string]: string } = {};
-    
-    if (!addressLine1.trim()) {
-      newErrors.addressLine1 = 'House/Flat/Floor number is required';
-    }
-    if (!district.trim()) {
-      newErrors.district = 'District is required';
-    }
-    if (!state.trim()) {
-      newErrors.state = 'State is required';
-    }
-    if (!pincode.trim()) {
-      newErrors.pincode = 'Pincode is required';
-    } else if (!/^\d{6}$/.test(pincode)) {
-      newErrors.pincode = 'Please enter a valid 6-digit pincode';
-    }
-    if (!addressTag.trim()) {
-      newErrors.addressTag = 'An address name is required (e.g., Home, Work)';
-    }
-    
+    if (!addressLine1.trim()) newErrors.addressLine1 = 'House/Plot/Building is required';
+    if (!village.trim()) newErrors.village = 'Village/Locality is required';
+    if (!district.trim()) newErrors.district = 'City/District is required';
+    if (!state.trim()) newErrors.state = 'State is required';
+    if (!pincode.trim()) newErrors.pincode = 'Pincode is required';
+    else if (!/^\d{6}$/.test(pincode)) newErrors.pincode = 'Enter a valid 6-digit pincode';
+
+    const normalized = sanitizeTag(String(addressTag));
+    if (!normalized) newErrors.addressTag = 'Please choose a tag';
+    setAddressTag(normalized);
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSaveAddress = async () => {
     if (!validateForm()) return;
-    
+
     setLoading(true);
     try {
       const addressData: CreateAddressDto = {
         userId: user?.id,
-        tag: addressTag,
+        tag: sanitizeTag(String(addressTag)),
         addressLine1,
         addressLine2,
         village,
@@ -240,16 +273,16 @@ const AddAddressScreen = () => {
 
       if (isEditMode && editAddress) {
         await AddressService.updateAddress(editAddress._id, addressData);
-        Alert.alert('Success', 'Address updated successfully');
+        Alert.alert('Success', 'Location updated successfully');
       } else {
         await AddressService.createAddress(addressData);
-        Alert.alert('Success', 'Address saved successfully');
+        Alert.alert('Success', 'Location saved successfully');
       }
-      
       navigation.goBack();
     } catch (error: any) {
       console.error('Error saving address:', JSON.stringify(error, null, 2));
-      Alert.alert('Error', error.message || 'Failed to save address. Please try again.');
+      const msg = error?.response?.data?.message;
+      Alert.alert('Error', Array.isArray(msg) ? msg.join('\n') : (msg || error.message || 'Failed to save location.'));
     } finally {
       setLoading(false);
     }
@@ -257,73 +290,95 @@ const AddAddressScreen = () => {
 
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        {/* Header */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+        {/* Header with search */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="close" size={24} color={COLORS.TEXT.PRIMARY} />
           </TouchableOpacity>
+
           <View style={styles.searchContainer}>
             <GooglePlacesAutocomplete
-              placeholder="Try Sector 75 etc..."
+              ref={placesRef}
+              placeholder="Search service location (e.g., Sector 75)"
+              minLength={2}
               onPress={(data, details = null) => handlePlaceSelected(data, details)}
-              query={{
-                key: GOOGLE_API_KEY,
-                language: 'en',
-                components: 'country:in',
+              query={{ key: GOOGLE_API_KEY, language: 'en', components: 'country:in' }}
+              fetchDetails
+              GooglePlacesDetailsQuery={{
+                // IMPORTANT: request address_components (plural)
+                fields: 'geometry,address_components,formatted_address,name,place_id,types',
               }}
-              fetchDetails={true}
-              // React 19 removed defaultProps for function components; pass safe defaults explicitly
+              enablePoweredByContainer={false}
               predefinedPlaces={[]}
               filterReverseGeocodingByTypes={[]}
+              debounce={200}
+              onFail={(e) => console.error('GPlaces API Error:', e)}
+              onNotFound={() => console.log('GPlaces: No results')}
+              textInputProps={{
+                placeholderTextColor: COLORS.TEXT.PLACEHOLDER,
+                returnKeyType: 'search',
+                autoCorrect: false,
+                autoCapitalize: 'none',
+                style: styles.searchInput,
+                clearButtonMode: 'while-editing',
+              }}
               styles={{
-                container: {
-                  flex: 1,
-                  backgroundColor: 'transparent',
-                },
+                container: { flex: 1, backgroundColor: 'transparent' },
+                textInputContainer: { backgroundColor: 'transparent', padding: 0, margin: 0 },
                 textInput: styles.searchInput,
                 listView: styles.listView,
+                row: styles.resultRow,
+                separator: styles.resultSeparator,
+                description: styles.resultText,
               }}
-              debounce={200}
-              onFail={(error) => console.error('GPlaces DEBUG: API Error:', error)}
-              onNotFound={() => console.log('GPlaces DEBUG: No results found for query.')}
-              onPress={(data, details = null) => {
-                console.log('GPlaces DEBUG: Place selected:', data.description);
-                handlePlaceSelected(data, details);
-              }}
+              renderLeftButton={() => (
+                <View style={styles.inputLeftIcon}>
+                  <Ionicons name="search" size={18} color={COLORS.TEXT.SECONDARY} />
+                </View>
+              )}
+              renderRightButton={() => (
+                <TouchableOpacity onPress={() => placesRef.current?.clear()} style={styles.inputRightIcon} activeOpacity={0.7}>
+                  <Ionicons name="close-circle" size={18} color={COLORS.TEXT.SECONDARY} />
+                </TouchableOpacity>
+              )}
             />
           </View>
         </View>
 
-        {/* Map View */}
+        {/* Map */}
         <View style={styles.mapContainer}>
           <MapView
             ref={mapRef}
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+            provider={PROVIDER_GOOGLE}
             style={styles.map}
             initialRegion={mapRegion}
             onRegionChangeComplete={handleRegionChangeComplete}
             showsUserLocation={hasLocationPermission}
             showsMyLocationButton={false}
-          >
-          </MapView>
-          
-          <View style={styles.centerMarkerContainer}>
-            <View style={styles.mapMessage}>
-              <Text style={styles.mapMessageText}>Your order will be delivered here</Text>
-              <Text style={styles.mapInstruction}>Move the map to set your location</Text>
-            </View>
-            <View style={styles.mapMessagePointer} />
+          />
+
+          {/* Elegant center pin */}
+          <View pointerEvents="none" style={styles.centerPinWrapper}>
+            <Animated.View style={[styles.pinContainer, { transform: [{ translateX: -12 }, { translateY: -24 }, { scale: pinScale }] }]}>
+              <View style={styles.pinDot} />
+              <View style={styles.pinStem} />
+            </Animated.View>
+            <View style={styles.pinShadow} />
           </View>
 
-          {/* Current Location Button */}
+          {/* Instruction chip */}
+          <View style={styles.mapChip}>
+            <Ionicons name="briefcase-outline" size={14} color={COLORS.NEUTRAL.WHITE} />
+            <Text style={styles.mapChipText}>Set where the service will be provided</Text>
+          </View>
+
+          {/* Current Location */}
           <TouchableOpacity
             style={styles.currentLocationButton}
             onPress={getCurrentLocation}
             disabled={fetchingLocation}
+            accessibilityLabel="Use my current location"
           >
             {fetchingLocation ? (
               <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
@@ -332,100 +387,132 @@ const AddAddressScreen = () => {
             )}
           </TouchableOpacity>
         </View>
-        
-        {/* Form Section */}
-        <ScrollView 
-          style={styles.formContainer}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+
+        {/* Form */}
+        <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.locationInfo}>
             <Ionicons name="location-sharp" size={24} color={COLORS.PRIMARY.MAIN} />
             <View style={styles.locationTextContainer}>
-              <Text style={styles.locationTitle}>{addressName || 'Fetching...'}</Text>
+              <Text style={styles.locationTitle}>{reverseGeocoding ? 'Fetching address…' : addressName || 'Set service location'}</Text>
               <Text style={styles.locationSubtitle} numberOfLines={2}>
-                {`${addressLine1}, ${addressLine2}, ${village}, ${district}, ${state}, ${pincode}`}
+                {[addressLine1, addressLine2, village, district, state, pincode].filter(Boolean).join(', ')}
               </Text>
             </View>
           </View>
 
+          {/* Tag chips (required enum) */}
+          <View style={styles.tagRow}>
+            {TAGS.map((t) => {
+              const selected = String(addressTag).toLowerCase() === t;
+              return (
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.tagChip, selected && styles.tagChipSelected]}
+                  onPress={() => setAddressTag(t)}
+                >
+                  <Text style={[styles.tagChipText, selected && styles.tagChipTextSelected]}>{t.toUpperCase()}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {errors.addressTag ? <Text style={styles.errorText}>{errors.addressTag}</Text> : null}
+
           <View style={styles.inputGroup}>
             <TextInput
-              style={[
-                styles.input, 
-                errors.addressLine1 && styles.inputError,
-                focusedInput === 'addressLine1' && styles.inputFocused
-              ]}
+              style={[styles.input, errors.addressLine1 && styles.inputError, focusedInput === 'addressLine1' && styles.inputFocused]}
               value={addressLine1}
               onChangeText={setAddressLine1}
-              placeholder="Flat, House No, Apartment"
+              placeholder="House/Plot/Building"
               placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
               onFocus={() => setFocusedInput('addressLine1')}
               onBlur={() => setFocusedInput(null)}
             />
-            {errors.addressLine1 && (
-              <Text style={styles.errorText}>{errors.addressLine1}</Text>
-            )}
+            {errors.addressLine1 && <Text style={styles.errorText}>{errors.addressLine1}</Text>}
           </View>
 
           <View style={styles.inputGroup}>
             <TextInput
-              style={[
-                styles.input, 
-                errors.addressLine2 && styles.inputError,
-                focusedInput === 'addressLine2' && styles.inputFocused
-              ]}
+              style={[styles.input, focusedInput === 'addressLine2' && styles.inputFocused]}
               value={addressLine2}
               onChangeText={setAddressLine2}
-              placeholder="Locality/Area/Landmark"
+              placeholder="Area / Landmark"
               placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
               onFocus={() => setFocusedInput('addressLine2')}
               onBlur={() => setFocusedInput(null)}
             />
           </View>
 
+          {/* NEW: editable administrative fields so backend requirements are always met */}
           <View style={styles.inputGroup}>
             <TextInput
-              style={[
-                styles.input, 
-                errors.addressTag && styles.inputError,
-                focusedInput === 'addressTag' && styles.inputFocused
-              ]}
-              value={addressTag}
-              onChangeText={setAddressTag}
-              placeholder="Save address as (e.g., Home, Work)"
+              style={[styles.input, errors.village && styles.inputError, focusedInput === 'village' && styles.inputFocused]}
+              value={village}
+              onChangeText={setVillage}
+              placeholder="Village / Locality / Ward"
               placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              onFocus={() => setFocusedInput('addressTag')}
+              onFocus={() => setFocusedInput('village')}
               onBlur={() => setFocusedInput(null)}
+              autoCapitalize="words"
             />
-            {errors.addressTag && (
-              <Text style={styles.errorText}>{errors.addressTag}</Text>
-            )}
+            {errors.village && <Text style={styles.errorText}>{errors.village}</Text>}
           </View>
 
-          <Text style={styles.infoText}>
-            This will be your address for all morning and instant deliveries.
-          </Text>
-        </ScrollView>
-          <View style={styles.footer}>
-            <Button
-              title="SAVE ADDRESS"
-              onPress={handleSaveAddress}
-              loading={loading}
-              fullWidth
-              style={styles.saveButton}
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={[styles.input, errors.district && styles.inputError, focusedInput === 'district' && styles.inputFocused]}
+              value={district}
+              onChangeText={setDistrict}
+              placeholder="District / City"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              onFocus={() => setFocusedInput('district')}
+              onBlur={() => setFocusedInput(null)}
+              autoCapitalize="words"
             />
+            {errors.district && <Text style={styles.errorText}>{errors.district}</Text>}
           </View>
+
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={[styles.input, errors.state && styles.inputError, focusedInput === 'state' && styles.inputFocused]}
+              value={state}
+              onChangeText={setState}
+              placeholder="State"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              onFocus={() => setFocusedInput('state')}
+              onBlur={() => setFocusedInput(null)}
+              autoCapitalize="words"
+            />
+            {errors.state && <Text style={styles.errorText}>{errors.state}</Text>}
+          </View>
+
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={[styles.input, errors.pincode && styles.inputError, focusedInput === 'pincode' && styles.inputFocused]}
+              value={pincode}
+              onChangeText={(v) => setPincode(v.replace(/[^\d]/g, '').slice(0, 6))}
+              placeholder="Pincode"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              onFocus={() => setFocusedInput('pincode')}
+              onBlur={() => setFocusedInput(null)}
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+            {errors.pincode && <Text style={styles.errorText}>{errors.pincode}</Text>}
+          </View>
+
+          <Text style={styles.infoText}>This will be your default service location for bookings.</Text>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <Button title="SAVE LOCATION" onPress={handleSaveAddress} loading={loading} fullWidth style={styles.saveButton} />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-  },
+  container: { flex: 1, backgroundColor: COLORS.BACKGROUND.PRIMARY },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -433,39 +520,27 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.SM,
     backgroundColor: COLORS.NEUTRAL.WHITE,
     ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 4,
-      },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2 },
+      android: { elevation: 4 },
     }),
-    zIndex: 10, // Ensure header is above other content
+    zIndex: 10,
   },
-  backButton: {
-    padding: SPACING.XS,
-    marginRight: SPACING.XS,
-    backgroundColor: '#f1f1f1',
-    borderRadius: 20,
-  },
-  searchContainer: {
-    flex: 1,
-    marginLeft: SPACING.SM,
-    // Allow dropdown to render outside of this container
-    overflow: 'visible',
-  },
+  backButton: { padding: SPACING.XS, marginRight: SPACING.XS, backgroundColor: '#f1f1f1', borderRadius: 20 },
+  searchContainer: { flex: 1, marginLeft: SPACING.SM, overflow: 'visible' },
   searchInput: {
     height: 40,
     backgroundColor: COLORS.BACKGROUND.PRIMARY,
     borderRadius: BORDER_RADIUS.LG,
-    paddingHorizontal: SPACING.MD,
+    paddingLeft: 36,
+    paddingRight: 32,
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
   },
+  inputLeftIcon: { position: 'absolute', left: 10, height: 40, justifyContent: 'center' },
+  inputRightIcon: { position: 'absolute', right: 8, height: 40, justifyContent: 'center', padding: 6 },
   listView: {
     position: 'absolute',
     top: 45,
@@ -475,100 +550,45 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.MD,
     ...SHADOWS.MD,
     zIndex: 1000,
+    maxHeight: 300,
   },
-  mapContainer: {
-    height: screenHeight * 0.4,
-    position: 'relative',
+  resultRow: { paddingVertical: 10, paddingHorizontal: 12 },
+  resultSeparator: { height: 1, backgroundColor: COLORS.BORDER.PRIMARY },
+  resultText: { fontFamily: FONTS.POPPINS.REGULAR, color: COLORS.TEXT.PRIMARY, fontSize: FONT_SIZES.BASE },
+  mapContainer: { height: screenHeight * 0.4, position: 'relative' },
+  map: { ...StyleSheet.absoluteFillObject },
+  centerPinWrapper: { position: 'absolute', left: '50%', top: '50%', alignItems: 'center' },
+  pinContainer: { alignItems: 'center' },
+  pinDot: {
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: COLORS.PRIMARY.MAIN, borderWidth: 2, borderColor: COLORS.NEUTRAL.WHITE, ...SHADOWS.MD,
   },
-  map: {
-    ...StyleSheet.absoluteFillObject,
+  pinStem: { width: 2, height: 12, backgroundColor: COLORS.PRIMARY.MAIN, marginTop: 2, borderRadius: 1 },
+  pinShadow: { width: 24, height: 6, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.2)', marginTop: 4, transform: [{ translateX: -12 }] },
+  mapChip: {
+    position: 'absolute', top: SPACING.SM, alignSelf: 'center',
+    backgroundColor: COLORS.PRIMARY.MAIN, paddingHorizontal: SPACING.MD, paddingVertical: SPACING.XS,
+    borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6, ...SHADOWS.MD,
   },
-  centerMarkerContainer: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: [{ translateX: -100 }, { translateY: -70 }],
-    width: 200,
-    alignItems: 'center',
-  },
-  mapMessage: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MD,
-    ...SHADOWS.MD,
-    alignItems: 'center',
-  },
-  mapMessagePointer: {
-    width: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftWidth: 10,
-    borderRightWidth: 10,
-    borderTopWidth: 10,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: COLORS.PRIMARY.MAIN,
-  },
-  mapMessageText: {
-    color: COLORS.NEUTRAL.WHITE,
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-  },
-  mapInstruction: {
-    color: COLORS.NEUTRAL.WHITE,
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    marginTop: SPACING.XS,
-  },
-  currentLocationButton: {
-    position: 'absolute',
-    bottom: SPACING.LG,
-    right: SPACING.LG,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 50,
-    padding: SPACING.SM,
-    ...SHADOWS.MD,
-  },
-  formContainer: {
-    flex: 1,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingHorizontal: SPACING.MD,
-    paddingTop: SPACING.MD,
-  },
+  mapChipText: { color: COLORS.NEUTRAL.WHITE, fontSize: FONT_SIZES.SM, fontFamily: FONTS.POPPINS.MEDIUM },
+  currentLocationButton: { position: 'absolute', bottom: SPACING.LG, right: SPACING.LG, backgroundColor: COLORS.NEUTRAL.WHITE, borderRadius: 50, padding: SPACING.SM, ...SHADOWS.MD },
+  formContainer: { flex: 1, backgroundColor: COLORS.NEUTRAL.WHITE, paddingHorizontal: SPACING.MD, paddingTop: SPACING.MD },
   locationInfo: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.LG,
-    paddingBottom: SPACING.MD,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
+    flexDirection: 'row', alignItems: 'flex-start', marginBottom: SPACING.LG, paddingBottom: SPACING.MD,
+    borderBottomWidth: 1, borderBottomColor: COLORS.BORDER.PRIMARY,
   },
-  locationTextContainer: {
-    marginLeft: SPACING.MD,
-    flex: 1,
+  locationTextContainer: { marginLeft: SPACING.MD, flex: 1 },
+  locationTitle: { fontSize: FONT_SIZES.LG, fontFamily: FONTS.POPPINS.SEMIBOLD, color: COLORS.TEXT.PRIMARY },
+  locationSubtitle: { fontSize: FONT_SIZES.SM, fontFamily: FONTS.POPPINS.REGULAR, color: COLORS.TEXT.SECONDARY, marginTop: SPACING.XS },
+  tagRow: { flexDirection: 'row', gap: 8, marginBottom: SPACING.MD, flexWrap: 'wrap' },
+  tagChip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18,
+    borderWidth: 1, borderColor: COLORS.BORDER.PRIMARY, backgroundColor: COLORS.NEUTRAL.WHITE,
   },
-  locationTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  locationSubtitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-    marginTop: SPACING.XS,
-  },
-  inputGroup: {
-    marginBottom: SPACING.MD,
-  },
-  inputLabel: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.SECONDARY,
-    marginBottom: SPACING.XS,
-  },
+  tagChipSelected: { backgroundColor: COLORS.PRIMARY.MAIN },
+  tagChipText: { fontFamily: FONTS.POPPINS.MEDIUM, color: COLORS.TEXT.PRIMARY, fontSize: FONT_SIZES.SM },
+  tagChipTextSelected: { color: COLORS.NEUTRAL.WHITE },
+  inputGroup: { marginBottom: SPACING.MD },
   input: {
     backgroundColor: 'transparent',
     borderRadius: BORDER_RADIUS.MD,
@@ -581,19 +601,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.BORDER.PRIMARY,
     height: 50,
   },
-  inputFocused: {
-    borderColor: COLORS.PRIMARY.MAIN,
-    borderWidth: 1.5,
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  errorText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#EF4444',
-    marginTop: SPACING.XS,
-  },
+  inputFocused: { borderColor: COLORS.PRIMARY.MAIN, borderWidth: 1.5 },
+  inputError: { borderColor: '#EF4444' },
+  errorText: { fontSize: FONT_SIZES.XS, fontFamily: FONTS.POPPINS.REGULAR, color: '#EF4444', marginTop: SPACING.XS },
   infoText: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.POPPINS.REGULAR,
@@ -603,16 +613,8 @@ const styles = StyleSheet.create({
     marginTop: SPACING.MD,
     paddingBottom: SPACING.LG,
   },
-  footer: {
-    padding: SPACING.MD,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.BORDER.PRIMARY,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-  },
-  saveButton: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    borderRadius: BORDER_RADIUS.MD,
-  },
+  footer: { padding: SPACING.MD, borderTopWidth: 1, borderTopColor: COLORS.BORDER.PRIMARY, backgroundColor: COLORS.NEUTRAL.WHITE },
+  saveButton: { backgroundColor: COLORS.PRIMARY.MAIN, borderRadius: BORDER_RADIUS.MD },
 });
 
 export default AddAddressScreen;

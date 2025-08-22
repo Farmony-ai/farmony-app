@@ -456,17 +456,3 @@ export default {
   chat: chatAPI,
 };
 
-// 🔎 Convenience helper used by screens – wraps usersAPI.checkPhone with extra debug logs
-//    Note: This does not change behavior; it only adds logging and normalizes the return.
-export const checkPhoneExists = async (phone: string): Promise<{ exists: boolean; raw?: any }> => {
-  try {
-    console.log('[checkPhoneExists] Checking phone:', phone);
-    const result = await usersAPI.checkPhone(phone);
-    const exists = !!(result?.exists ?? result?.data?.exists ?? result?.userExists);
-    console.log('[checkPhoneExists] Result:', { exists, raw: result });
-    return { exists, raw: result };
-  } catch (error: any) {
-    console.log('[checkPhoneExists] ❌ Error:', error?.message || error);
-    throw error;
-  }
-};
