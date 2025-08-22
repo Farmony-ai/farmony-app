@@ -166,6 +166,20 @@ export const usersAPI = {
   },
 };
 
+export const checkPhoneExists = async (phone: string) => {
+  const response = await fetch(`${API_BASE_URL}/users/check-phone/${phone}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Phone check failed: ${response.status}`);
+  }
+  
+  return response.json();
+};
+
+
 // 📦 Listings API
 export const listingsAPI = {
   // Search listings

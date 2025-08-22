@@ -1,4 +1,4 @@
-# Resolve react_native_pods.rb with node to allow for hoisting
+# RN helper must be first
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(
     "react-native/scripts/react_native_pods.rb",
@@ -6,15 +6,13 @@ require Pod::Executable.execute_command('node', ['-p',
   )', __dir__]).strip
 
 platform :ios, '15.1'
+$RNMaps_UseGoogleMaps = true
 prepare_react_native_project!
 
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage.to_sym
-end
+# Works well with Firebase + Maps
+use_frameworks! :linkage => :static
 
-target 'rnmshowcase' do
+target 'RuralShareApp' do
   config = use_native_modules!
 
   use_react_native!(
@@ -22,16 +20,17 @@ target 'rnmshowcase' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
-  rn_maps_path = '../..'
+  # RN Maps iOS bridge (this will pull GoogleMaps 7.4.0)
+  pod 'Google-Maps-iOS-Utils', :git => 'https://github.com/Simon-TechForm/google-maps-ios-utils.git', :branch => 'feat/support-apple-silicon'
 
-  pod 'react-native-maps/Google', :path => rn_maps_path
+  pod 'react-native-google-maps', :path => '../node_modules/react-native-maps'
 
   post_install do |installer|
-    react_native_post_install(
-      installer,
-      config[:reactNativePath],
-      :mac_catalyst_enabled => false,
-    )
-
+    react_native_post_install(installer, config[:reactNativePath], :mac_catalyst_enabled => false)
+    installer.pods_project.targets.each do |t|
+      t.build_configurations.each do |bc|
+        bc.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      end
+    end
   end
 end

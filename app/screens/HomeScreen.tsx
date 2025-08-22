@@ -21,10 +21,10 @@ import ClimateService, { WeatherData } from '../services/ClimateService';
 
 import SmartDatePicker from '../components/SmartDatePicker';
 import ExpandableSearchFilter from '../components/ExpandableSearchFilter';
-import CatalogueService from '../services/CatalogueService';
+import CatalogueService, { Category } from '../services/CatalogueService';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
-import { setDate } from '../store/slices/dateRangeSlice';
+import { setDateRange } from '../store/slices/dateRangeSlice';
 import { setLocation } from '../store/slices/locationSlice';
 import AddressService, { Address } from '../services/AddressService';
 
@@ -40,20 +40,7 @@ const mechanicalIcon = require('../assets/mechanical.png');
 const farmerIcon = require('../assets/farmer.png');
 const backgroundImg = require('../assets/provider-bg.png');
 
-interface Category {
-  _id: string;
-  name: string;
-  description: string;
-  category: string;
-  transactionType: string;
-  parentId: string | null;
-  icon: string;
-  isActive: boolean;
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-  __v: number;
-}
+
 
 const iconMapping: { [key: string]: string } = {
   'farm_machinery': 'construct-outline',
@@ -87,13 +74,8 @@ export default function HomeScreen() {
   const [isDatePickerExpanded, setIsDatePickerExpanded] = useState(false);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
-  const [isWeatherExpanded, setIsWeatherExpanded] = useState(false);
-  const [weeklyForecast, setWeeklyForecast] = useState<any[]>([]);
   const [currentAddress, setCurrentAddress] = useState<Address | null>(null);
- const { user } = useSelector((state: RootState) => state.auth);
-
-  // Only keep the expand animation for weekly forecast
-  const expandAnim = useRef(new Animated.Value(0)).current;
+  const { user } = useSelector((state: RootState) => state.auth);
   
   const dispatch = useDispatch();
   
@@ -204,48 +186,6 @@ export default function HomeScreen() {
     });
   };
 
-  const handleWeatherCardPress = () => {
-    if (!isWeatherExpanded) {
-      // Generate mock weekly forecast data
-      const mockForecast = [
-        { day: 'Mon', temp: 28, condition: 'Clear', icon: '01d' },
-        { day: 'Tue', temp: 26, condition: 'Cloudy', icon: '03d' },
-        { day: 'Wed', temp: 24, condition: 'Rain', icon: '10d' },
-        { day: 'Thu', temp: 27, condition: 'Clear', icon: '01d' },
-        { day: 'Fri', temp: 29, condition: 'Sunny', icon: '01d' },
-        { day: 'Sat', temp: 25, condition: 'Cloudy', icon: '03d' },
-        { day: 'Sun', temp: 30, condition: 'Clear', icon: '01d' },
-      ];
-      setWeeklyForecast(mockForecast);
-    }
-    
-    setIsWeatherExpanded(!isWeatherExpanded);
-    
-    Animated.timing(expandAnim, {
-      toValue: isWeatherExpanded ? 0 : 1,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  };
-
-  // Get weather-based background color (static)
-  const getWeatherBackground = () => {
-    if (!weatherData) return 'white';
-    const condition = weatherData.condition.toLowerCase();
-    if (condition.includes('rain') || condition.includes('drizzle')) {
-      return '#e3f2fd'; // Light blue
-    } else if (condition.includes('storm') || condition.includes('thunder')) {
-      return '#f3e5f5'; // Light purple
-    } else if (condition.includes('clear') || condition.includes('sunny')) {
-      return '#fff9c4'; // Light yellow
-    } else if (condition.includes('cloudy') || condition.includes('overcast')) {
-      return '#f5f5f5'; // Light gray
-    } else if (condition.includes('snow')) {
-      return '#f0f4ff'; // Very light blue
-    }
-    return 'white';
-  };
-
   return (
     <SafeAreaWrapper backgroundColor="#f5f5f5" style={{ flex: 1 }}>
       <Image source={backgroundImg} style={styles.backgroundImage} resizeMode="cover" />
@@ -265,27 +205,39 @@ export default function HomeScreen() {
           
           <View style={styles.headerContent}>
             <View style={styles.headerTop}>
-              <TouchableOpacity 
-                style={styles.locationWrapper}
-                onPress={() => navigation.navigate('AddressSelection')}
-                activeOpacity={0.7}
-              >
                 <View style={styles.locationInfo}>
                   <View style={styles.locationTextContainer}>
-                  
                     <View style={styles.locationRow}>
-                      <Ionicons name="location" size={16} color="white" />
-                      <Text style={styles.locationText} numberOfLines={1}>
-                        {currentAddress 
-                          ? `${currentAddress.tag.toUpperCase()} - ${currentAddress.district || city}`
-                          : city?.toUpperCase() || 'SELECT LOCATION'
-                        }
-                      </Text>
-                      <Ionicons name="chevron-down" size={14} color="white" style={styles.chevronIcon} />
+                      <TouchableOpacity 
+                        style={styles.locationLeftSection}
+                        onPress={() => navigation.navigate('AddressSelection')}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="location" size={16} color="white" />
+                        <Text style={styles.locationText} numberOfLines={1}>
+                          {currentAddress 
+                            ? `${currentAddress.tag.toUpperCase()} - ${currentAddress.district || city}`
+                            : city?.toUpperCase() || 'SELECT LOCATION'
+                          }
+                        </Text>
+                        <Ionicons name="chevron-down" size={14} color="white" style={styles.chevronIcon} />
+                      </TouchableOpacity>
+                      {/* Small Weather Indicator */}
+                      {weatherData && (
+                        <View style={styles.smallWeatherIndicator}>
+                          <View style={styles.weatherIconContainer}>
+                            <Ionicons 
+                              name={ClimateService.getWeatherIcon(weatherData.icon)} 
+                              size={14} 
+                              color="rgba(255, 255, 255, 0.9)" 
+                            />
+                          </View>
+                          <Text style={styles.smallWeatherText}>{weatherData.temperature}°</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                 </View>
-              </TouchableOpacity>
             </View>
             
           </View>
@@ -330,7 +282,7 @@ export default function HomeScreen() {
                 onPress={() => navigation.navigate('CategoryBrowser', { selectedCategoryId: category._id })}
               >
                 <View style={styles.serviceIconWrapper}>
-                  <Image source={categoryIcons[category.icon]} style={styles.serviceIcon} />
+                  <Image source={categoryIcons[category.icon || 'default']} style={styles.serviceIcon} />
                 </View>
                 <Text style={styles.serviceLabel} numberOfLines={2}>{category.name}</Text>
               </TouchableOpacity>
@@ -350,113 +302,13 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        {/* Climate Card - Simplified without animations */}
-        <View style={styles.climateSection}>
-          <Text style={styles.sectionTitle}>Weather & Climate</Text>
-          <TouchableOpacity 
-            activeOpacity={0.9}
-            onPress={handleWeatherCardPress}
-            style={styles.climateCardWrapper}
-          >
-            <View 
-              style={[
-                styles.climateCard,
-                { backgroundColor: getWeatherBackground() }
-              ]}
-            >
-              {weatherLoading ? (
-                <View style={styles.climateLoading}>
-                  <Text style={styles.climateLoadingText}>Loading weather data...</Text>
-                </View>
-              ) : weatherData ? (
-                <View style={styles.climateContent}>
-                  <View style={styles.climateHeader}>
-                    <View style={styles.weatherIconContainer}>
-                      <Ionicons 
-                        name={ClimateService.getWeatherIcon(weatherData.icon)} 
-                        size={32} 
-                        color={COLORS.PRIMARY.MAIN} 
-                      />
-                    </View>
-                    <View style={styles.mainWeatherInfo}>
-                      <Text style={styles.temperatureText}>{weatherData.temperature}°</Text>
-                      <Text style={styles.conditionText}>{weatherData.condition}</Text>
-                    </View>
-                    <View style={styles.weatherMetrics}>
-                      <View style={styles.metricItem}>
-                        <Ionicons name="water-outline" size={14} color={COLORS.TEXT.SECONDARY} />
-                        <Text style={styles.metricText}>{weatherData.humidity}%</Text>
-                      </View>
-                      <View style={styles.metricItem}>
-                        <Ionicons name="speedometer-outline" size={14} color={COLORS.TEXT.SECONDARY} />
-                        <Text style={styles.metricText}>{weatherData.windSpeed}</Text>
-                      </View>
-                    </View>
-                    <Ionicons 
-                      name={isWeatherExpanded ? "chevron-up" : "chevron-down"} 
-                      size={16} 
-                      color={COLORS.TEXT.SECONDARY} 
-                    />
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.climateError}>
-                  <Ionicons name="cloud-offline-outline" size={24} color={COLORS.TEXT.SECONDARY} />
-                  <Text style={styles.climateErrorText}>Weather data unavailable</Text>
-                </View>
-              )}
-            </View>
-            
-            {/* Weekly Forecast */}
-            <Animated.View 
-              style={[
-                styles.weeklyForecastContainer,
-                {
-                  maxHeight: expandAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 140],
-                  }),
-                  opacity: expandAnim,
-                  transform: [{
-                    translateY: expandAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-10, 0],
-                    })
-                  }],
-                }
-              ]}
-            >
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.forecastScrollContent}
-              >
-                {weeklyForecast.map((day, index) => (
-                  <View key={index} style={styles.forecastDay}>
-                    <Text style={styles.forecastDayText}>{day.day}</Text>
-                    <Ionicons 
-                      name={ClimateService.getWeatherIcon(day.icon)} 
-                      size={24} 
-                      color={COLORS.PRIMARY.MAIN} 
-                    />
-                    <Text style={styles.forecastTempText}>{day.temp}°</Text>
-                    <Text style={styles.forecastConditionText}>{day.condition}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
-
        <View style={styles.ctaSection}>
         <Text style={styles.quickServicesTitle}>Quick Services</Text>
         <View style={styles.ctaCardsRow}>
           <TouchableOpacity style={styles.ctaCard} activeOpacity={0.8}>
             <View style={styles.ctaContent}>
-              <Text style={styles.ctaTitle}>Need mechanical {
-}help?</Text>
-              <Text style={styles.ctaSubtitle}>Find nearby {
-}tractor</Text>
+              <Text style={styles.ctaTitle}>Need mechanical help?</Text>
+              <Text style={styles.ctaSubtitle}>Find nearby tractor</Text>
               <TouchableOpacity style={styles.ctaButton} activeOpacity={0.7}>
                 <Text style={styles.ctaButtonText}>Explore</Text>
                 <Ionicons name="arrow-forward" size={16} color={COLORS.PRIMARY.MAIN} />
@@ -492,30 +344,53 @@ const styles = StyleSheet.create({
   locationTextContainer: {
     flex: 1,
   },
-  locationLabel: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontFamily: FONTS.POPPINS.REGULAR,
-    marginBottom: 2,
-  },
+    // styles (only the relevant ones)
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+
+  locationLeftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // IMPORTANT: don't let it stretch
+    // remove any `flex: 1` and don't use `justifyContent: 'space-between'`
+    alignSelf: 'flex-start',
+    marginRight: 8, // small space before the weather pill
+  },
+
   locationText: {
-    fontSize: 14,
+    marginLeft: 6,
+    flexShrink: 1,   // allow ellipsis if long
     color: 'white',
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    marginLeft: 4,
-    maxWidth: 200,
   },
+
   chevronIcon: {
-    marginLeft: 4,
+    marginLeft: 4,   // sits right next to the text
   },
-  scrollContent: {
-    flexGrow: 1,
-    backgroundColor: 'transparent',
+
+  smallWeatherIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // …your existing styles
   },
+    weatherIconContainer: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    smallWeatherText: {
+      fontSize: 11,
+      color: 'rgba(255, 255, 255, 0.9)',
+      fontFamily: FONTS.POPPINS.MEDIUM,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      backgroundColor: 'transparent',
+    },
   backgroundImage: {
     position: 'absolute',
     bottom: 75,
@@ -738,133 +613,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.SECONDARY.LIGHT,
     borderRadius: BORDER_RADIUS.LG,
-  },
-  // Climate Card Styles - Simplified without animations
-  climateSection: {
-    paddingHorizontal: SPACING.MD,
-    marginTop: SPACING.LG,
-  },
-  climateCardWrapper: {
-    overflow: 'hidden',
-    borderRadius: BORDER_RADIUS.XL,
-    ...SHADOWS.MD,
-  },
-  climateCard: {
-    backgroundColor: 'white',
-    borderRadius: BORDER_RADIUS.XL,
-    padding: SPACING.SM,
-  },
-  climateLoading: {
-    alignItems: 'center',
-    paddingVertical: SPACING.SM,
-  },
-  climateLoadingText: {
-    fontSize: 12,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-  },
-  climateContent: {
-    gap: SPACING.SM,
-  },
-  climateHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  weatherIconContainer: {
-    width: 56,
-    height: 46,
-    borderRadius: 28,
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOWS.SM,
-  },
-  mainWeatherInfo: {
-    flex: 1,
-    marginLeft: SPACING.MD,
-    flexShrink: 1,
-  },
-  temperatureText: {
-    fontSize: 28,
-    fontFamily: FONTS.POPPINS.BOLD,
-    color: COLORS.TEXT.PRIMARY,
-    lineHeight: 32,
-  },
-  conditionText: {
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.SECONDARY,
-    textTransform: 'capitalize',
-    marginTop: 2,
-  },
-  weatherMetrics: {
-    alignItems: 'flex-end',
-    gap: SPACING.SM,
-    flexShrink: 0,
-  },
-  metricItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.XS,
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  metricText: {
-    fontSize: 12,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.SECONDARY,
-  },
-  climateError: {
-    alignItems: 'center',
-    paddingVertical: SPACING.SM,
-  },
-  climateErrorText: {
-    fontSize: 11,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-    marginTop: SPACING.XS,
-  },
-  // Weekly Forecast Styles
-  weeklyForecastContainer: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    borderTopWidth: 0.5,
-    borderTopColor: COLORS.BORDER.PRIMARY,
-    overflow: 'hidden',
-    minHeight: 0,
-  },
-  forecastScrollContent: {
-    paddingVertical: SPACING.SM,
-    gap: SPACING.SM,
-  },
-  forecastDay: {
-    alignItems: 'center',
-    minWidth: 67,
-    paddingVertical: SPACING.SM,
-    backgroundColor: 'white',
-    borderRadius: BORDER_RADIUS.MD,
-    paddingHorizontal: SPACING.SM,
-    ...SHADOWS.SM,
-  },
-  forecastDayText: {
-    fontSize: 12,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: SPACING.SM,
-  },
-  forecastTempText: {
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.BOLD,
-    color: COLORS.TEXT.PRIMARY,
-    marginTop: SPACING.SM,
-  },
-  forecastConditionText: {
-    fontSize: 10,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-    textAlign: 'center',
-    marginTop: 4,
   },
 });
