@@ -153,16 +153,29 @@ export const usersAPI = {
   
   // Check if phone exists
   checkPhone: async (phone: string) => {
-    const response = await fetch(`${API_BASE_URL}/users/check-phone/${phone}`, {
+    const url = `${API_BASE_URL}/users/check-phone/${phone}`;
+    console.log('[usersAPI.checkPhone] ➜ GET', url);
+    const startedAt = Date.now();
+    const response = await fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
-    
+    const durationMs = Date.now() - startedAt;
+    console.log('[usersAPI.checkPhone] ⇦ status:', response.status, 'in', durationMs + 'ms');
+
+    let body: any = null;
+    try {
+      body = await response.json();
+    } catch (e) {
+      console.log('[usersAPI.checkPhone] ⚠️ Non-JSON response or parse error:', e);
+    }
+
     if (!response.ok) {
+      console.log('[usersAPI.checkPhone] ❌ Error body:', body);
       throw new Error(`Phone check failed: ${response.status}`);
     }
-    
-    return response.json();
+    console.log('[usersAPI.checkPhone] ✅ Body:', body);
+    return body;
   },
 };
 
@@ -441,4 +454,19 @@ export default {
   catalogue: catalogueAPI,
   addresses: addressesAPI,
   chat: chatAPI,
+};
+
+// 🔎 Convenience helper used by screens – wraps usersAPI.checkPhone with extra debug logs
+//    Note: This does not change behavior; it only adds logging and normalizes the return.
+export const checkPhoneExists = async (phone: string): Promise<{ exists: boolean; raw?: any }> => {
+  try {
+    console.log('[checkPhoneExists] Checking phone:', phone);
+    const result = await usersAPI.checkPhone(phone);
+    const exists = !!(result?.exists ?? result?.data?.exists ?? result?.userExists);
+    console.log('[checkPhoneExists] Result:', { exists, raw: result });
+    return { exists, raw: result };
+  } catch (error: any) {
+    console.log('[checkPhoneExists] ❌ Error:', error?.message || error);
+    throw error;
+  }
 };
