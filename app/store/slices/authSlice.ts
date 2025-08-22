@@ -238,7 +238,7 @@ export const registerUser = createAsyncThunk(
       }
       
       // Legacy response format
-      const userId = result._id || result.id;
+      const userId = result.user?._id;
       if (!userId) {
         console.error('❌ registerUser: User ID not found in registration response.', result);
         return rejectWithValue('User ID not found after registration.');
