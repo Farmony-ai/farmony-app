@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,46 +6,72 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   Image,
+  Animated,
+  Dimensions,
+  ActivityIndicator,
+  Keyboard,
 } from 'react-native';
-import {useDispatch, useSelector} from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
+import LinearGradient from 'react-native-linear-gradient';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import Button from '../components/Button';
-import {COLORS, SPACING, BORDER_RADIUS, SHADOWS} from '../utils';
-import {isValidEmail, isRequired} from '../utils/validators';
-import {signIn, clearError} from '../store/slices/authSlice';
-import {RootState, AppDispatch} from '../store';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS, FONT_SIZES } from '../utils';
+import { isValidEmail, isRequired } from '../utils/validators';
+import { signIn, clearError } from '../store/slices/authSlice';
+import { RootState, AppDispatch } from '../store';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const SignInScreen = () => {
   const navigation = useNavigation();
-  // Redux state and dispatch
   const dispatch = useDispatch<AppDispatch>();
-  const {isSigningIn, error} = useSelector((state: RootState) => state.auth);
+  const { isSigningIn, error } = useSelector((state: RootState) => state.auth);
 
   // Form state
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
   const [emailOrPhoneError, setEmailOrPhoneError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  
+  // Refs for inputs
+  const emailInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
 
-  // Form validation
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
   const validateForm = () => {
     let isValid = true;
-    
-    // Clear previous errors
     setEmailOrPhoneError('');
     setPasswordError('');
     
-    // Email/Phone validation
     if (!isRequired(emailOrPhone)) {
       setEmailOrPhoneError('Email or Phone is required');
       isValid = false;
     }
     
-    // Password validation
     if (!isRequired(password)) {
       setPasswordError('Password is required');
       isValid = false;
@@ -54,170 +80,187 @@ const SignInScreen = () => {
     return isValid;
   };
 
-  // Handle sign in
   const handleSignIn = async () => {
+    Keyboard.dismiss();
     if (!validateForm()) return;
-    
-    // Clear any previous errors
     dispatch(clearError());
     
     try {
-      // Attempt to sign in
-      const result = await dispatch(signIn({emailOrPhone, password}));
-      
+      const result = await dispatch(signIn({ emailOrPhone, password }));
       if (signIn.fulfilled.match(result)) {
-        // Success - navigation will happen through Redux state
         console.log('✅ Sign in successful');
-      } else {
-        // Error - will be handled by Redux state
-        console.log('❌ Sign in failed');
       }
     } catch (error) {
       console.error('Sign in error:', error);
     }
   };
 
-  // Navigate to sign up screen
-  const handleNavigateToSignUp = () => {
-    navigation.navigate('SignUp');
-  };
-
-  // Handle email/phone input change
-  const handleEmailOrPhoneChange = (text: string) => {
-    setEmailOrPhone(text);
-    if (emailOrPhoneError) setEmailOrPhoneError(''); // Clear error when user types
-  };
-
-  // Handle password input change
-  const handlePasswordChange = (text: string) => {
-    setPassword(text);
-    if (passwordError) setPasswordError(''); // Clear error when user types
+  const handleForgotPassword = () => {
+    navigation.navigate('ForgotPassword');
   };
 
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+      <View style={styles.container}>
+        {/* Gradient Header */}
+        <LinearGradient
+          colors={[COLORS.PRIMARY.MAIN, COLORS.PRIMARY.DARK]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
         >
-          {/* Header Section */}
-          <View style={styles.header}>
-            <Image
-              source={require('../assets/tractor.png')}
-              style={styles.headerImage}
-              resizeMode="contain"
-            />
-            <Text variant="h2" weight="bold" style={styles.title}>
-              Rural Share
-            </Text>
-            <Text variant="body" style={styles.subtitle}>
-              Sign in to continue
-            </Text>
-          </View>
+          {/* Decorative circles */}
+          <View style={styles.headerCircle1} />
+          <View style={styles.headerCircle2} />
+          
+          <Animated.View style={[styles.headerContent, {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }]}>
+            <View style={styles.logoContainer}>
+              <View style={styles.logoBackground}>
+                <Image
+                  source={require('../assets/logo.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+              </View>
+            </View>
+            <Text style={styles.appName}>Farmony</Text>
+            <Text style={styles.tagline}>Connect • Share • Grow</Text>
+          </Animated.View>
+        </LinearGradient>
 
-          {/* Form Section */}
-          <View style={styles.form}>
-            {/* Email/Phone Input */}
-            <View style={styles.inputContainer}>
-              <Text variant="label" weight="medium" style={styles.inputLabel}>
-                Email or Phone
-              </Text>
+        {/* Form Card */}
+        <Animated.View style={[styles.formCard, {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }]
+        }]}>
+          <Text style={styles.welcomeText}>Welcome Back!</Text>
+          <Text style={styles.subtitleText}>Sign in to continue to your account</Text>
+
+          {/* Email/Phone Input */}
+          <View style={styles.inputContainer}>
+            <View style={[styles.inputWrapper, emailOrPhoneError && styles.inputWrapperError]}>
+              <Ionicons name="person-outline" size={18} color={COLORS.TEXT.PLACEHOLDER} />
               <TextInput
-                style={[
-                  styles.input,
-                  emailOrPhoneError ? styles.inputError : null,
-                ]}
-                placeholder="Enter your email or phone"
+                ref={emailInputRef}
+                style={styles.input}
+                placeholder="Email or Phone"
                 placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
                 value={emailOrPhone}
-                onChangeText={handleEmailOrPhoneChange}
+                onChangeText={(text) => {
+                  setEmailOrPhone(text);
+                  if (emailOrPhoneError) setEmailOrPhoneError('');
+                }}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                returnKeyType="next"
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
+                blurOnSubmit={false}
                 editable={!isSigningIn}
               />
-              {emailOrPhoneError ? (
-                <Text variant="caption" style={styles.errorText}>
-                  {emailOrPhoneError}
-                </Text>
-              ) : null}
             </View>
+            {emailOrPhoneError ? (
+              <Text style={styles.errorText}>{emailOrPhoneError}</Text>
+            ) : null}
+          </View>
 
-            {/* Password Input */}
-            <View style={styles.inputContainer}>
-              <Text variant="label" weight="medium" style={styles.inputLabel}>
-                Password
-              </Text>
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <View style={[styles.inputWrapper, passwordError && styles.inputWrapperError]}>
+              <Ionicons name="lock-closed-outline" size={18} color={COLORS.TEXT.PLACEHOLDER} />
               <TextInput
-                style={[
-                  styles.input,
-                  passwordError ? styles.inputError : null,
-                ]}
-                placeholder="Enter your password"
+                ref={passwordInputRef}
+                style={styles.input}
+                placeholder="Password"
                 placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
                 value={password}
-                onChangeText={handlePasswordChange}
-                secureTextEntry
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (passwordError) setPasswordError('');
+                }}
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={handleSignIn}
                 editable={!isSigningIn}
               />
-              {passwordError ? (
-                <Text variant="caption" style={styles.errorText}>
-                  {passwordError}
-                </Text>
-              ) : null}
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons 
+                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                  size={18} 
+                  color={COLORS.TEXT.PLACEHOLDER} 
+                />
+              </TouchableOpacity>
             </View>
+            {passwordError ? (
+              <Text style={styles.errorText}>{passwordError}</Text>
+            ) : null}
+          </View>
 
-            {/* Error Display */}
-            {error && (
-              <View style={styles.errorContainer}>
-                <Text variant="caption" style={styles.errorText}>
-                  {error}
-                </Text>
-              </View>
-            )}
-
-            {/* Sign In Button */}
-            <Button
-              title="Sign In"
-              onPress={handleSignIn}
-              loading={isSigningIn}
-              fullWidth
-              style={styles.signInButton}
-            />
-
-            {/* Forgot Password Link */}
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => navigation.navigate('ForgotPassword')}
+          {/* Remember Me & Forgot Password */}
+          <View style={styles.optionsRow}>
+            <TouchableOpacity 
+              style={styles.rememberMe} 
+              onPress={() => setRememberMe(!rememberMe)}
+              activeOpacity={0.7}
             >
-              <Text variant="caption" style={styles.forgotPasswordText}>
-                Sign in Using OTP!
-              </Text>
+              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                {rememberMe && <Ionicons name="checkmark" size={12} color={COLORS.NEUTRAL.WHITE} />}
+              </View>
+              <Text style={styles.rememberText}>Remember me</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleForgotPassword}>
+              <Text style={styles.forgotText}>Forgot Password?</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Sign Up Section */}
-          <View style={styles.signUpSection}>
-            <Text variant="body" style={styles.signUpPrompt}>
-              Don't have an account?{' '}
-              <Text
-                variant="body"
-                weight="medium"
-                style={styles.signUpLink}
-                onPress={handleNavigateToSignUp}
-              >
-                Sign Up
-              </Text>
-            </Text>
+          {/* Error Display */}
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorMessageText}>{error}</Text>
+            </View>
+          )}
+
+          {/* Sign In Button */}
+          <TouchableOpacity
+            style={[styles.signInButton, isSigningIn && styles.signInButtonLoading]}
+            onPress={handleSignIn}
+            disabled={isSigningIn}
+            activeOpacity={0.8}
+          >
+            {isSigningIn ? (
+              <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+            ) : (
+              <Text style={styles.signInText}>Sign In →</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* OR Divider */}
+          <Text style={styles.dividerText}>OR</Text>
+
+          {/* OTP Login Button */}
+          <TouchableOpacity
+            style={styles.otpButton}
+            onPress={handleForgotPassword}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="phone-portrait-outline" size={18} color={COLORS.PRIMARY.MAIN} />
+            <Text style={styles.otpButtonText}>Sign in with OTP</Text>
+          </TouchableOpacity>
+
+          {/* Sign Up Link */}
+          <View style={styles.signUpContainer}>
+            <Text style={styles.signUpPrompt}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+              <Text style={styles.signUpLink}>Sign Up</Text>
+            </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </Animated.View>
+      </View>
     </SafeAreaWrapper>
   );
 };
@@ -225,84 +268,224 @@ const SignInScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
-  scrollContent: {
-    flexGrow: 1,
-    padding: SPACING.LG,
+  headerGradient: {
+    height: screenHeight * 0.30, // Reduced from 0.35
+    borderBottomLeftRadius: 15, // Reduced from 30
+    borderBottomRightRadius: 15,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  header: {
+  headerCircle1: {
+    position: 'absolute',
+    width: 150, // Reduced from 200
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    top: -30,
+    right: -30,
+  },
+  headerCircle2: {
+    position: 'absolute',
+    width: 120, // Reduced from 150
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    bottom: -20,
+    left: -20,
+  },
+  headerContent: {
+    flex: 1,
     alignItems: 'center',
-    marginTop: SPACING['2XL'],
-    marginBottom: SPACING['2XL'],
+    justifyContent: 'center',
+    paddingTop: SPACING.MD, // Reduced padding
   },
-  headerImage: {
-    width: 80,
-    height: 80,
-    marginBottom: SPACING.MD,
+  logoContainer: {
+    marginBottom: SPACING.SM, // Reduced spacing
   },
-  title: {
-    color: COLORS.PRIMARY.MAIN,
-    marginBottom: SPACING.SM,
+  logoBackground: {
+    width: 60, // Reduced from 80
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.SM,
   },
-  subtitle: {
+  logo: {
+    width: 40, // Reduced from 50
+    height: 40,
+  },
+  appName: {
+    fontSize: 24, // Reduced from 30
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+    marginBottom: 2,
+  },
+  tagline: {
+    fontSize: 11, // Reduced from 14
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: 'rgba(255, 255, 255, 0.9)',
+    letterSpacing: 1.5,
+  },
+  formCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginTop: -20, // Reduced from -30
+    marginHorizontal: SPACING.MD,
+    marginBottom: SPACING.LG, // Add bottom margin to ensure visibility
+    borderRadius: 15, // Reduced from 20
+    padding: SPACING.XL, // Reduced from XL
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08, // Reduced shadow
+    shadowRadius: 4, // Reduced shadow radius
+    elevation: 2, // Reduced elevation
+    // Remove flex: 1 to prevent card from taking all available space
+  },
+  welcomeText: {
+    fontSize: 20, // Reduced from 24
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 4,
+  },
+  subtitleText: {
+    fontSize: 12, // Reduced from 14
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
-    textAlign: 'center',
-  },
-  form: {
-    marginBottom: SPACING.XL,
+    marginBottom: SPACING.LG, // Reduced spacing
   },
   inputContainer: {
-    marginBottom: SPACING.LG,
+    marginBottom: SPACING.MD, // Reduced from LG
   },
-  inputLabel: {
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: SPACING.SM,
-  },
-  input: {
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: 10, // Reduced from 12
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM, // Reduced padding
     borderWidth: 1,
     borderColor: COLORS.BORDER.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    padding: SPACING.MD,
-    fontSize: 16,
-    color: COLORS.TEXT.PRIMARY,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    ...SHADOWS.SM,
+    height: 44, // Fixed height to prevent focus issues
   },
-  inputError: {
+  inputWrapperError: {
     borderColor: '#EF4444',
+  },
+  input: {
+    flex: 1,
+    marginLeft: SPACING.SM,
+    fontSize: 14, // Reduced from 16
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    paddingVertical: 0, // Remove default padding
+    height: '100%',
+  },
+  errorText: {
+    fontSize: 11, // Reduced from 12
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: '#EF4444',
+    marginTop: 4,
+    marginLeft: SPACING.SM,
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.MD, // Reduced spacing
+  },
+  rememberMe: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkbox: {
+    width: 18, // Reduced from 20
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.BORDER.PRIMARY,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.SM,
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  rememberText: {
+    fontSize: 12, // Reduced from 14
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  forgotText: {
+    fontSize: 12, // Reduced from 14
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
   },
   errorContainer: {
     backgroundColor: '#FEF2F2',
-    borderRadius: BORDER_RADIUS.SM,
+    borderRadius: 8,
     padding: SPACING.SM,
-    marginBottom: SPACING.MD,
+    marginBottom: SPACING.SM,
   },
-  errorText: {
+  errorMessageText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: '#EF4444',
-    marginTop: SPACING.XS,
-  },
-  signInButton: {
-    marginTop: SPACING.MD,
-  },
-  forgotPassword: {
-    alignItems: 'center',
-    marginTop: SPACING.MD,
-  },
-  forgotPasswordText: {
-    color: COLORS.PRIMARY.MAIN,
-  },
-  signUpSection: {
-    alignItems: 'center',
-    marginTop: 'auto',
-    paddingTop: SPACING.LG,
-  },
-  signUpPrompt: {
-    color: COLORS.TEXT.SECONDARY,
     textAlign: 'center',
   },
+  signInButton: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderRadius: 10, // Reduced from 12
+    paddingVertical: 12, // Reduced padding
+    alignItems: 'center',
+    marginBottom: SPACING.MD,
+  },
+  signInButtonLoading: {
+    opacity: 0.8,
+  },
+  signInText: {
+    fontSize: 14, // Reduced from 16
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  dividerText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    textAlign: 'center',
+    marginBottom: SPACING.MD,
+  },
+  otpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderRadius: 10, // Reduced from 12
+    paddingVertical: 12, // Reduced padding
+    marginBottom: SPACING.LG,
+  },
+  otpButtonText: {
+    fontSize: 14, // Reduced from 16
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+    marginLeft: SPACING.SM,
+  },
+  signUpContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signUpPrompt: {
+    fontSize: 12, // Reduced from 14
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
   signUpLink: {
+    fontSize: 12, // Reduced from 14
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.PRIMARY.MAIN,
   },
 });
 
-export default SignInScreen; 
+export default SignInScreen;

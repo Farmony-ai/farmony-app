@@ -61,10 +61,8 @@
 	<true/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
-		<string>whatsapp</string>
-		<string>otpless</string>
-		<string>gmail</string>
-		<string>googlegmail</string>
+		<string>googlechromes</string>
+		<string>comgooglemaps</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
@@ -142,10 +140,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	 <key>LSApplicationQueriesSchemes</key>
-	 <array>
-        <string>googlechromes</string>
-        <string>comgooglemaps</string>
-    </array>
 </dict>
 </plist>
