@@ -8,7 +8,7 @@
  * Note: Ensure GOOGLE_MAPS_API_KEY is configured in ../config/api
  */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -43,6 +43,7 @@ import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplet
 import { GOOGLE_MAPS_API_KEY } from '../config/api';
 import AddressService from '../services/AddressService';
 import LocationService from '../services/locationService';
+import debounce from 'lodash.debounce';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const GOOGLE_API_KEY = (GOOGLE_MAPS_API_KEY || '') as string;
@@ -207,6 +208,13 @@ const SignUpScreen = () => {
     return c?.long_name || '';
   };
 
+  const debouncedReverseGeocode = useCallback(
+  debounce((region: Region) => {
+    reverseGeocodeLocation(region.latitude, region.longitude);
+  }, 800),
+  []
+);
+
   const applyAddressComponentsFromPlace = (components: any[] = [], formatted?: string) => {
     setAddressLine1('');
     setAddressLine2('');
@@ -256,14 +264,10 @@ const SignUpScreen = () => {
   };
 
   const handleRegionChangeComplete = (region: Region) => {
-    setMapRegion(region);
-    // Debounce is built into the reverseGeocoding with timeout
-    if (!reverseGeocoding) {
-      setTimeout(() => {
-        reverseGeocodeLocation(region.latitude, region.longitude);
-      }, 800);
-    }
-  };
+  setMapRegion(region);
+  debouncedReverseGeocode(region);
+};
+
 
   const handlePlaceSelected = (data: any, details: any) => {
     if (!details || !details.geometry || !details.geometry.location) {
@@ -765,7 +769,6 @@ const SignUpScreen = () => {
     </Animated.View>
   );
 
-// Render Step 2: Address (dropdown truly hidden when not focused; bigger map)
 const renderStep2 = () => (
   <Animated.View
     style={[
@@ -781,257 +784,360 @@ const renderStep2 = () => (
       </View>
     </View>
 
-    <FlatList
-      data={[]}
-      keyExtractor={() => 'header-only'}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      removeClippedSubviews={false}
-      contentContainerStyle={[styles.addressScrollView, { paddingBottom: SPACING.LG }]}
-      ListFooterComponent={<View style={{ height: SPACING.LG }} />}
-      ListHeaderComponent={
-        <>
-          {/* Search + Map (relative so the dropdown can be absolutely positioned) */}
-          <View style={[styles.mapSection, { position: 'relative', zIndex: 10, overflow: 'visible' }]}>
-            {GOOGLE_API_KEY ? (
-              <GooglePlacesAutocomplete
-                ref={placesRef}
-                placeholder="Search for location"
-                minLength={2}
-                onPress={(data, details = null) => {
-                  handlePlaceSelected(data, details);
-                  setPlacesOpen(false);
-                }}
-                onFail={(e) => console.warn('Places error:', e)}
-                query={{ key: GOOGLE_API_KEY, language: 'en', components: 'country:in' }}
-                fetchDetails={true}
-                GooglePlacesDetailsQuery={{
-                  fields: 'geometry,address_components,formatted_address,name,place_id,types',
-                }}
-                enablePoweredByContainer={false}
-                predefinedPlaces={[]}
-                predefinedPlacesAlwaysVisible={false}
-                nearbyPlacesAPI="GooglePlacesSearch"
-                debounce={200}
-                renderDescription={(row) => row.description}
-                textInputProps={{
-                  placeholderTextColor: COLORS.TEXT.PLACEHOLDER,
-                  returnKeyType: 'search',
-                  style: styles.searchInput,
-                  onFocus: () => setPlacesOpen(true),
-                  onBlur: () => setPlacesOpen(false),
-                  onEndEditing: () => setPlacesOpen(false),
-                  // Optional: close when the user clears the field
-                  onChangeText: (t) => { if (!t) setPlacesOpen(false); },
-                  blurOnSubmit: true,
-                }}
-                styles={{
-                  container: {
-                    flex: 0,
-                    position: 'relative',
-                    width: '100%',
-                    zIndex: 20,
-                  },
-                  textInputContainer: {
-                    backgroundColor: 'transparent',
-                    height: 44,
-                    marginHorizontal: 0,
-                    borderTopWidth: 0,
-                    borderBottomWidth: 0,
-                  },
-                  textInput: styles.searchInput,
-                  // ⬇️ This is the key: when not focused, don't render it at all
-                  listView: [
-                    styles.searchListView,
-                    {
-                      position: 'absolute',
-                      top: 52,
-                      left: 0,
-                      right: 0,
-                      maxHeight: 260,
-                      zIndex: 30,
-                      elevation: 6,
-                      overflow: 'hidden',
-                      display: placesOpen ? 'flex' : 'none',
-                    },
-                  ],
-                  row: {
-                    backgroundColor: COLORS.NEUTRAL.WHITE,
-                    padding: 13,
-                    height: 44,
-                    flexDirection: 'row',
-                  },
-                  separator: {
-                    height: 0.5,
-                    backgroundColor: COLORS.BORDER.PRIMARY,
-                  },
-                }}
-              />
-            ) : (
-              <View style={styles.searchInput}>
-                <Text style={styles.errorText}>Google Maps API key not configured</Text>
+    {/* Container for the entire form content */}
+    <View style={{ flex: 1 }}>
+      {/* Search Bar - Fixed positioning */}
+      {GOOGLE_API_KEY ? (
+        <View style={styles.searchSection}>
+          <GooglePlacesAutocomplete
+            ref={placesRef}
+            placeholder="Search for your area or village"
+            minLength={2}
+            onPress={(data, details = null) => {
+              handlePlaceSelected(data, details);
+            }}
+            query={{ 
+              key: GOOGLE_API_KEY, 
+              language: 'en', 
+              components: 'country:in' 
+            }}
+            fetchDetails={true}
+            GooglePlacesDetailsQuery={{
+              fields: 'geometry,address_components,formatted_address,name,place_id,types',
+            }}
+            enablePoweredByContainer={false}
+            predefinedPlaces={[]}
+            filterReverseGeocodingByTypes={[]}
+            debounce={200}
+            onFail={(error) => console.error('Places API Error:', error)}
+            onNotFound={() => console.log('No results found')}
+            textInputProps={{
+              placeholderTextColor: COLORS.TEXT.PLACEHOLDER,
+              returnKeyType: 'search',
+              autoCorrect: false,
+              autoCapitalize: 'none',
+              clearButtonMode: 'while-editing',
+            }}
+            styles={{
+              container: {
+                flex: 0,
+                backgroundColor: 'transparent',
+                zIndex: 1,
+              },
+              textInputContainer: {
+                backgroundColor: 'transparent',
+                height: 44,
+                padding: 0,
+                margin: 0,
+              },
+              textInput: styles.searchInput,
+              listView: {
+                backgroundColor: COLORS.NEUTRAL.WHITE,
+                borderRadius: 12,
+                elevation: 5,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                position: 'absolute',
+                top: 45,
+                left: 0,
+                right: 0,
+                maxHeight: 200,
+                zIndex: 1000,
+              },
+              row: {
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+              },
+              separator: {
+                height: 1,
+                backgroundColor: COLORS.BORDER.PRIMARY,
+              },
+              description: {
+                fontFamily: FONTS.POPPINS.REGULAR,
+                fontSize: 14,
+                color: COLORS.TEXT.PRIMARY,
+              },
+            }}
+            renderLeftButton={() => (
+              <View style={styles.searchIconLeft}>
+                <Ionicons name="search" size={18} color={COLORS.TEXT.SECONDARY} />
               </View>
             )}
-
-            {/* Bigger map (height override only, styles untouched) */}
-            <View style={[styles.miniMapContainer, { height: MAP_HEIGHT }]}>
-              {mapRegion && GOOGLE_API_KEY ? (
-                <MapView
-                  ref={mapRef}
-                  provider={PROVIDER_GOOGLE}
-                  style={styles.miniMap}
-                  initialRegion={mapRegion}
-                  onRegionChangeComplete={handleRegionChangeComplete}
-                  showsUserLocation={true}
-                  showsMyLocationButton={false}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.miniMap,
-                    {
-                      backgroundColor: COLORS.BACKGROUND.PRIMARY,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                    },
-                  ]}
+            renderRightButton={() => 
+              placesRef.current?.getAddressText() ? (
+                <TouchableOpacity 
+                  onPress={() => placesRef.current?.clear()} 
+                  style={styles.searchIconRight}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.errorText}>Map not available</Text>
-                </View>
-              )}
+                  <Ionicons name="close-circle" size={18} color={COLORS.TEXT.SECONDARY} />
+                </TouchableOpacity>
+              ) : null
+            }
+          />
+        </View>
+      ) : (
+        <View style={[styles.searchInput, { marginBottom: SPACING.MD }]}>
+          <Text style={styles.errorText}>Google Maps API key not configured</Text>
+        </View>
+      )}
 
-              <View pointerEvents="none" style={styles.centerPin}>
-                <Ionicons name="location-sharp" size={24} color={COLORS.PRIMARY.MAIN} />
-              </View>
+      {/* Map Container */}
+      <View style={styles.mapWrapper}>
+        <View style={[styles.miniMapContainer, { height: MAP_HEIGHT }]}>
+          {mapRegion && GOOGLE_API_KEY ? (
+            <MapView
+              ref={mapRef}
+              provider={PROVIDER_GOOGLE}
+              style={styles.miniMap}
+              initialRegion={mapRegion}
+              onRegionChangeComplete={handleRegionChangeComplete}
+              showsUserLocation={true}
+              showsMyLocationButton={false}
+            />
+          ) : (
+            <View
+              style={[
+                styles.miniMap,
+                {
+                  backgroundColor: COLORS.BACKGROUND.PRIMARY,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                },
+              ]}
+            >
+              <Text style={styles.errorText}>Map not available</Text>
+            </View>
+          )}
+          
+          {/* Map Pin */}
+          <View pointerEvents="none" style={styles.centerPin}>
+            <Ionicons name="location-sharp" size={24} color={COLORS.PRIMARY.MAIN} />
+          </View>
+          
+          {/* Current Location Button */}
+          <TouchableOpacity
+            style={styles.locationButton}
+            onPress={getCurrentLocation}
+            disabled={fetchingLocation || !GOOGLE_API_KEY}
+            activeOpacity={0.8}
+          >
+            {fetchingLocation ? (
+              <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+            ) : (
+              <MaterialIcons name="my-location" size={20} color={COLORS.PRIMARY.MAIN} />
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
 
+      {/* Address Form - ScrollView */}
+      <ScrollView
+        style={styles.addressScrollView}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.addressFormContent}
+      >
+        {/* Tag Selection */}
+        <View style={styles.tagSection}>
+          <Text style={styles.inputLabel}>Address Type</Text>
+          <View style={styles.tagContainer}>
+            {TAGS.map((tag) => (
               <TouchableOpacity
-                style={styles.locationButton}
-                onPress={getCurrentLocation}
-                disabled={fetchingLocation || !GOOGLE_API_KEY}
+                key={tag}
+                style={[
+                  styles.tagChip, 
+                  addressTag === tag && styles.tagChipSelected
+                ]}
+                onPress={() => setAddressTag(tag)}
                 activeOpacity={0.8}
               >
-                {fetchingLocation ? (
-                  <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
-                ) : (
-                  <MaterialIcons name="my-location" size={20} color={COLORS.PRIMARY.MAIN} />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Address Form */}
-          <View style={[styles.addressForm, { zIndex: 1 }]}>
-            <View style={styles.tagContainer}>
-              <Text style={[styles.inputLabel, { marginBottom: SPACING.XS }]}>Address Type</Text>
-              {TAGS.map((tag) => (
-                <TouchableOpacity
-                  key={tag}
-                  style={[styles.tagChip, addressTag === tag && styles.tagChipSelected]}
-                  onPress={() => setAddressTag(tag)}
-                  activeOpacity={0.8}
+                <Text 
+                  style={[
+                    styles.tagText, 
+                    addressTag === tag && styles.tagTextSelected
+                  ]}
                 >
-                  <Text style={[styles.tagText, addressTag === tag && styles.tagTextSelected]}>
-                    {tag.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>House/Plot/Building</Text>
-              <View style={[styles.inputWrapper, addressErrors.addressLine1 && styles.inputWrapperError]}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter house/plot number"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                  value={addressLine1}
-                  onChangeText={setAddressLine1}
-                />
-              </View>
-              {addressErrors.addressLine1 ? <Text style={styles.errorText}>{addressErrors.addressLine1}</Text> : null}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Area/Landmark</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter area or landmark"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                  value={addressLine2}
-                  onChangeText={setAddressLine2}
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Village/Locality</Text>
-              <View style={[styles.inputWrapper, addressErrors.village && styles.inputWrapperError]}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter village or locality"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                  value={village}
-                  onChangeText={setVillage}
-                />
-              </View>
-              {addressErrors.village ? <Text style={styles.errorText}>{addressErrors.village}</Text> : null}
-            </View>
-
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.SM }]}>
-                <Text style={styles.inputLabel}>District/City</Text>
-                <View style={[styles.inputWrapper, addressErrors.district && styles.inputWrapperError]}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter district"
-                    placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                    value={district}
-                    onChangeText={setDistrict}
-                  />
-                </View>
-                {addressErrors.district ? <Text style={styles.errorText}>{addressErrors.district}</Text> : null}
-              </View>
-
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>State</Text>
-                <View style={[styles.inputWrapper, addressErrors.state && styles.inputWrapperError]}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter state"
-                    placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                    value={state}
-                    onChangeText={setState}
-                  />
-                </View>
-                {addressErrors.state ? <Text style={styles.errorText}>{addressErrors.state}</Text> : null}
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Pincode</Text>
-              <View style={[styles.inputWrapper, addressErrors.pincode && styles.inputWrapperError]}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter 6-digit pincode"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                  value={pincode}
-                  onChangeText={(text) => setPincode(text.replace(/[^\d]/g, '').slice(0, 6))}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                />
-              </View>
-              {addressErrors.pincode ? <Text style={styles.errorText}>{addressErrors.pincode}</Text> : null}
-            </View>
+                  {tag.toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        </>
-      }
-    />
+        </View>
+
+        {/* Address Line 1 */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>House/Plot/Building *</Text>
+          <View style={[
+            styles.inputWrapper, 
+            addressErrors.addressLine1 && styles.inputWrapperError
+          ]}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter house/plot number"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              value={addressLine1}
+              onChangeText={(text) => {
+                setAddressLine1(text);
+                if (addressErrors.addressLine1) {
+                  setAddressErrors({...addressErrors, addressLine1: ''});
+                }
+              }}
+              autoCapitalize="words"
+            />
+          </View>
+          {addressErrors.addressLine1 ? (
+            <Text style={styles.errorText}>{addressErrors.addressLine1}</Text>
+          ) : null}
+        </View>
+
+        {/* Address Line 2 */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Area/Landmark</Text>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter area or landmark"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              value={addressLine2}
+              onChangeText={setAddressLine2}
+              autoCapitalize="words"
+            />
+          </View>
+        </View>
+
+        {/* Village/Locality */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Village/Locality *</Text>
+          <View style={[
+            styles.inputWrapper, 
+            addressErrors.village && styles.inputWrapperError
+          ]}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter village or locality"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              value={village}
+              onChangeText={(text) => {
+                setVillage(text);
+                if (addressErrors.village) {
+                  setAddressErrors({...addressErrors, village: ''});
+                }
+              }}
+              autoCapitalize="words"
+            />
+          </View>
+          {addressErrors.village ? (
+            <Text style={styles.errorText}>{addressErrors.village}</Text>
+          ) : null}
+        </View>
+
+        {/* Tehsil - Optional */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Tehsil/Sub-district</Text>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter tehsil (optional)"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              value={tehsil}
+              onChangeText={setTehsil}
+              autoCapitalize="words"
+            />
+          </View>
+        </View>
+
+        {/* District and State Row */}
+        <View style={styles.inputRow}>
+          <View style={[styles.inputGroup, styles.inputGroupHalf]}>
+            <Text style={styles.inputLabel}>District/City *</Text>
+            <View style={[
+              styles.inputWrapper, 
+              addressErrors.district && styles.inputWrapperError
+            ]}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter district"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                value={district}
+                onChangeText={(text) => {
+                  setDistrict(text);
+                  if (addressErrors.district) {
+                    setAddressErrors({...addressErrors, district: ''});
+                  }
+                }}
+                autoCapitalize="words"
+              />
+            </View>
+            {addressErrors.district ? (
+              <Text style={styles.errorText}>{addressErrors.district}</Text>
+            ) : null}
+          </View>
+
+          <View style={[styles.inputGroup, styles.inputGroupHalf]}>
+            <Text style={styles.inputLabel}>State *</Text>
+            <View style={[
+              styles.inputWrapper, 
+              addressErrors.state && styles.inputWrapperError
+            ]}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter state"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                value={state}
+                onChangeText={(text) => {
+                  setState(text);
+                  if (addressErrors.state) {
+                    setAddressErrors({...addressErrors, state: ''});
+                  }
+                }}
+                autoCapitalize="words"
+              />
+            </View>
+            {addressErrors.state ? (
+              <Text style={styles.errorText}>{addressErrors.state}</Text>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Pincode */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Pincode *</Text>
+          <View style={[
+            styles.inputWrapper, 
+            addressErrors.pincode && styles.inputWrapperError
+          ]}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter 6-digit pincode"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              value={pincode}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/[^\d]/g, '').slice(0, 6);
+                setPincode(cleaned);
+                if (addressErrors.pincode && cleaned.length === 6) {
+                  setAddressErrors({...addressErrors, pincode: ''});
+                }
+              }}
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+          </View>
+          {addressErrors.pincode ? (
+            <Text style={styles.errorText}>{addressErrors.pincode}</Text>
+          ) : null}
+        </View>
+
+        {/* Info text */}
+        <Text style={styles.infoText}>
+          This will be your default service location for bookings
+        </Text>
+      </ScrollView>
+    </View>
   </Animated.View>
 );
-
-
   // Render Step 3: Password
   const renderStep3 = () => (
     <Animated.View style={[styles.stepContent, {
@@ -1469,27 +1575,12 @@ const styles = StyleSheet.create({
   formSection: {
     flex: 1,
   },
-  addressScrollView: {
-    flex: 1,
-  },
   
   mapSection: {
     marginBottom: SPACING.LG,
     position: 'relative',
     zIndex: 1,
     overflow: 'visible',
-  },
-  searchInput: {
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    borderRadius: 12,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: Platform.OS === 'ios' ? SPACING.SM : SPACING.XS,
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    height: 44,
   },
   searchListView: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
@@ -1507,74 +1598,11 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 1000,
   },
-  miniMapContainer: {
-    height: 150,
-    marginTop: SPACING.MD,
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-  },
-  miniMap: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  centerPin: {
-    position: 'absolute',
-    left: '50%',
-    top: '50%',
-    marginLeft: -12,
-    marginTop: -24,
-  },
-  locationButton: {
-    position: 'absolute',
-    bottom: SPACING.SM,
-    right: SPACING.SM,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 20,
-    padding: SPACING.SM,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
   addressForm: {
     flex: 1,
     marginTop: -SPACING.LG,
     padding: SPACING.LG,
     height: '100%',
-  },
-  tagContainer: {
-    flexDirection: 'row',
-    gap: SPACING.SM,
-    marginBottom: SPACING.MD,
-  },
-  tagChip: {
-    flex: 1,
-    paddingVertical: SPACING.SM,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    alignItems: 'center',
-  },
-  tagChipSelected: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    borderColor: COLORS.PRIMARY.MAIN,
-  },
-  tagText: {
-    fontSize: 12,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  tagTextSelected: {
-    color: COLORS.NEUTRAL.WHITE,
-  },
-  inputGroup: {
-    marginBottom: SPACING.LG,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    marginBottom: SPACING.LG,
   },
   labelRow: {
     flexDirection: 'row',
@@ -1582,31 +1610,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.SM,
   },
-  inputLabel: {
-    fontSize: 13,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: SPACING.SM,
-  },
   optionalLabel: {
     fontSize: 11,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    borderRadius: 12,
-    paddingHorizontal: SPACING.MD,
-    height: 52,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  inputWrapperError: {
-    borderColor: '#EF4444',
-    backgroundColor: '#FEF2F2',
-  },
+
   phonePrefix: {
     paddingRight: SPACING.SM,
     borderRightWidth: 1,
@@ -1617,20 +1626,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
-    paddingVertical: 0,
-  },
-  errorText: {
-    fontSize: 11,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#EF4444',
-    marginTop: 6,
-    marginLeft: SPACING.SM,
   },
   passwordStrength: {
     flexDirection: 'row',
@@ -1782,6 +1777,167 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.PRIMARY.MAIN,
   },
+
+  searchSection: {
+    marginBottom: SPACING.MD,
+    zIndex: 10,
+    elevation: 10,
+  },
+  searchInput: {
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: 12,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: Platform.OS === 'ios' ? SPACING.SM : SPACING.XS,
+    paddingLeft: 36,
+    paddingRight: 32,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    height: 44,
+  },
+  searchIconLeft: {
+    position: 'absolute',
+    left: 10,
+    height: 44,
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  searchIconRight: {
+    position: 'absolute',
+    right: 8,
+    height: 44,
+    justifyContent: 'center',
+    padding: 6,
+    zIndex: 1,
+  },
+  mapWrapper: {
+    marginBottom: SPACING.MD,
+  },
+  miniMapContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    marginHorizontal: 0,
+  },
+  miniMap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  centerPin: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    marginLeft: -12,
+    marginTop: -24,
+    zIndex: 1,
+  },
+  locationButton: {
+    position: 'absolute',
+    bottom: SPACING.SM,
+    right: SPACING.SM,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: SPACING.SM,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    zIndex: 2,
+  },
+  addressScrollView: {
+    flex: 1,
+  },
+  addressFormContent: {
+    paddingBottom: SPACING.XL,
+  },
+  tagSection: {
+    marginBottom: SPACING.MD,
+  },
+  tagContainer: {
+    flexDirection: 'row',
+    gap: SPACING.SM,
+    marginTop: SPACING.XS,
+  },
+  tagChip: {
+    flex: 1,
+    paddingVertical: SPACING.SM,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+  },
+  tagChipSelected: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  tagText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  tagTextSelected: {
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  inputGroup: {
+    marginBottom: SPACING.MD,
+  },
+  inputGroupHalf: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: SPACING.SM,
+    marginBottom: SPACING.MD,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.XS,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: 12,
+    paddingHorizontal: SPACING.MD,
+    height: 48,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  inputWrapperError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    paddingVertical: 0,
+    height: '100%',
+  },
+  errorText: {
+    fontSize: 11,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: '#EF4444',
+    marginTop: 4,
+    marginLeft: SPACING.XS,
+  },
+  infoText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    textAlign: 'center',
+    marginTop: SPACING.MD,
+    paddingHorizontal: SPACING.MD,
+  },
+
 });
 
 export default SignUpScreen;
