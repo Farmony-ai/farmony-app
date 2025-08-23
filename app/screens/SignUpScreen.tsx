@@ -8,7 +8,7 @@
  * Note: Ensure GOOGLE_MAPS_API_KEY is configured in ../config/api
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -22,6 +22,7 @@ import {
   Animated,
   Dimensions,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
@@ -92,6 +93,15 @@ const SignUpScreen = () => {
   const [reverseGeocoding, setReverseGeocoding] = useState(false);
   const mapRef = useRef<MapView>(null);
   const placesRef = useRef<any>(null);
+    // inside SignUpScreen component, near your other hooks:
+  const [placesOpen, setPlacesOpen] = useState(false);
+
+  const screenHeight = useRef(Dimensions.get('window').height).current;
+  const MAP_HEIGHT = useMemo(
+    () => Math.min(300, Math.max(220, Math.floor(screenHeight * 0.30))),
+    [screenHeight]
+  );
+
 
   // Step 3 State - Password
   const [password, setPassword] = useState('');
@@ -755,219 +765,272 @@ const SignUpScreen = () => {
     </Animated.View>
   );
 
-  // Render Step 2: Address
-  const renderStep2 = () => (
-    <Animated.View style={[styles.stepContent, {
-      opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }]
-    }]}>
-      <View style={styles.stepHeader}>
-        <Text style={styles.stepNumber}>02</Text>
-        <View style={styles.stepTitleContainer}>
-          <Text style={styles.stepTitle}>Service Location</Text>
-          <Text style={styles.stepSubtitle}>Where will services be provided?</Text>
-        </View>
+// Render Step 2: Address (dropdown truly hidden when not focused; bigger map)
+const renderStep2 = () => (
+  <Animated.View
+    style={[
+      styles.stepContent,
+      { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+    ]}
+  >
+    <View style={styles.stepHeader}>
+      <Text style={styles.stepNumber}>02</Text>
+      <View style={styles.stepTitleContainer}>
+        <Text style={styles.stepTitle}>Service Location</Text>
+        <Text style={styles.stepSubtitle}>Where will services be provided?</Text>
       </View>
+    </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.addressScrollView}>
-        {/* Map Section */}
-        <View style={styles.mapSection}>
-          {GOOGLE_API_KEY ? (
-            <GooglePlacesAutocomplete
-              ref={placesRef}
-              placeholder="Search for location"
-              minLength={2}
-              onPress={(data, details = null) => handlePlaceSelected(data, details)}
-              query={{ key: GOOGLE_API_KEY, language: 'en', components: 'country:in' }}
-              fetchDetails={true}
-              GooglePlacesDetailsQuery={{
-                fields: 'geometry,address_components,formatted_address,name,place_id,types',
-              }}
-              enablePoweredByContainer={false}
-              predefinedPlaces={[]}
-              predefinedPlacesAlwaysVisible={false}
-              nearbyPlacesAPI="GooglePlacesSearch"
-              debounce={200}
-              renderDescription={(row) => row.description}
-              textInputProps={{
-                placeholderTextColor: COLORS.TEXT.PLACEHOLDER,
-                returnKeyType: 'search',
-                style: styles.searchInput,
-              }}
-              styles={{
-                container: { 
-                  flex: 0,
-                  position: 'relative',
-                  width: '100%',
-                  zIndex: 1,
-                },
-                textInputContainer: {
-                  backgroundColor: 'transparent',
-                  height: 44,
-                  marginHorizontal: 0,
-                  borderTopWidth: 0,
-                  borderBottomWidth: 0,
-                },
-                textInput: styles.searchInput,
-                listView: styles.searchListView,
-                row: {
-                  backgroundColor: COLORS.NEUTRAL.WHITE,
-                  padding: 13,
-                  height: 44,
-                  flexDirection: 'row',
-                },
-                separator: {
-                  height: 0.5,
-                  backgroundColor: COLORS.BORDER.PRIMARY,
-                },
-              }}
-            />
-          ) : (
-            <View style={styles.searchInput}>
-              <Text style={styles.errorText}>Google Maps API key not configured</Text>
-            </View>
-          )}
-          
-          <View style={styles.miniMapContainer}>
-            {mapRegion && GOOGLE_API_KEY ? (
-              <MapView
-                ref={mapRef}
-                provider={PROVIDER_GOOGLE}
-                style={styles.miniMap}
-                initialRegion={mapRegion}
-                onRegionChangeComplete={handleRegionChangeComplete}
-                showsUserLocation={true}
-                showsMyLocationButton={false}
+    <FlatList
+      data={[]}
+      keyExtractor={() => 'header-only'}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      removeClippedSubviews={false}
+      contentContainerStyle={[styles.addressScrollView, { paddingBottom: SPACING.LG }]}
+      ListFooterComponent={<View style={{ height: SPACING.LG }} />}
+      ListHeaderComponent={
+        <>
+          {/* Search + Map (relative so the dropdown can be absolutely positioned) */}
+          <View style={[styles.mapSection, { position: 'relative', zIndex: 10, overflow: 'visible' }]}>
+            {GOOGLE_API_KEY ? (
+              <GooglePlacesAutocomplete
+                ref={placesRef}
+                placeholder="Search for location"
+                minLength={2}
+                onPress={(data, details = null) => {
+                  handlePlaceSelected(data, details);
+                  setPlacesOpen(false);
+                }}
+                onFail={(e) => console.warn('Places error:', e)}
+                query={{ key: GOOGLE_API_KEY, language: 'en', components: 'country:in' }}
+                fetchDetails={true}
+                GooglePlacesDetailsQuery={{
+                  fields: 'geometry,address_components,formatted_address,name,place_id,types',
+                }}
+                enablePoweredByContainer={false}
+                predefinedPlaces={[]}
+                predefinedPlacesAlwaysVisible={false}
+                nearbyPlacesAPI="GooglePlacesSearch"
+                debounce={200}
+                renderDescription={(row) => row.description}
+                textInputProps={{
+                  placeholderTextColor: COLORS.TEXT.PLACEHOLDER,
+                  returnKeyType: 'search',
+                  style: styles.searchInput,
+                  onFocus: () => setPlacesOpen(true),
+                  onBlur: () => setPlacesOpen(false),
+                  onEndEditing: () => setPlacesOpen(false),
+                  // Optional: close when the user clears the field
+                  onChangeText: (t) => { if (!t) setPlacesOpen(false); },
+                  blurOnSubmit: true,
+                }}
+                styles={{
+                  container: {
+                    flex: 0,
+                    position: 'relative',
+                    width: '100%',
+                    zIndex: 20,
+                  },
+                  textInputContainer: {
+                    backgroundColor: 'transparent',
+                    height: 44,
+                    marginHorizontal: 0,
+                    borderTopWidth: 0,
+                    borderBottomWidth: 0,
+                  },
+                  textInput: styles.searchInput,
+                  // ⬇️ This is the key: when not focused, don't render it at all
+                  listView: [
+                    styles.searchListView,
+                    {
+                      position: 'absolute',
+                      top: 52,
+                      left: 0,
+                      right: 0,
+                      maxHeight: 260,
+                      zIndex: 30,
+                      elevation: 6,
+                      overflow: 'hidden',
+                      display: placesOpen ? 'flex' : 'none',
+                    },
+                  ],
+                  row: {
+                    backgroundColor: COLORS.NEUTRAL.WHITE,
+                    padding: 13,
+                    height: 44,
+                    flexDirection: 'row',
+                  },
+                  separator: {
+                    height: 0.5,
+                    backgroundColor: COLORS.BORDER.PRIMARY,
+                  },
+                }}
               />
             ) : (
-              <View style={[styles.miniMap, { backgroundColor: COLORS.BACKGROUND.PRIMARY, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={styles.errorText}>Map not available</Text>
+              <View style={styles.searchInput}>
+                <Text style={styles.errorText}>Google Maps API key not configured</Text>
               </View>
             )}
-            <View pointerEvents="none" style={styles.centerPin}>
-              <Ionicons name="location-sharp" size={24} color={COLORS.PRIMARY.MAIN} />
-            </View>
-            <TouchableOpacity
-              style={styles.locationButton}
-              onPress={getCurrentLocation}
-              disabled={fetchingLocation || !GOOGLE_API_KEY}
-            >
-              {fetchingLocation ? (
-                <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+
+            {/* Bigger map (height override only, styles untouched) */}
+            <View style={[styles.miniMapContainer, { height: MAP_HEIGHT }]}>
+              {mapRegion && GOOGLE_API_KEY ? (
+                <MapView
+                  ref={mapRef}
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.miniMap}
+                  initialRegion={mapRegion}
+                  onRegionChangeComplete={handleRegionChangeComplete}
+                  showsUserLocation={true}
+                  showsMyLocationButton={false}
+                />
               ) : (
-                <MaterialIcons name="my-location" size={20} color={COLORS.PRIMARY.MAIN} />
+                <View
+                  style={[
+                    styles.miniMap,
+                    {
+                      backgroundColor: COLORS.BACKGROUND.PRIMARY,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    },
+                  ]}
+                >
+                  <Text style={styles.errorText}>Map not available</Text>
+                </View>
               )}
-            </TouchableOpacity>
-          </View>
-        </View>
 
-        {/* Address Form Fields */}
-        <View style={styles.addressForm}>
-          {/* Tag Selection */}
-          <View style={styles.tagContainer}>
-            {TAGS.map((tag) => (
+              <View pointerEvents="none" style={styles.centerPin}>
+                <Ionicons name="location-sharp" size={24} color={COLORS.PRIMARY.MAIN} />
+              </View>
+
               <TouchableOpacity
-                key={tag}
-                style={[styles.tagChip, addressTag === tag && styles.tagChipSelected]}
-                onPress={() => setAddressTag(tag)}
+                style={styles.locationButton}
+                onPress={getCurrentLocation}
+                disabled={fetchingLocation || !GOOGLE_API_KEY}
+                activeOpacity={0.8}
               >
-                <Text style={[styles.tagText, addressTag === tag && styles.tagTextSelected]}>
-                  {tag.toUpperCase()}
-                </Text>
+                {fetchingLocation ? (
+                  <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+                ) : (
+                  <MaterialIcons name="my-location" size={20} color={COLORS.PRIMARY.MAIN} />
+                )}
               </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>House/Plot/Building</Text>
-            <View style={[styles.inputWrapper, addressErrors.addressLine1 && styles.inputWrapperError]}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter house/plot number"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                value={addressLine1}
-                onChangeText={setAddressLine1}
-              />
-            </View>
-            {addressErrors.addressLine1 ? <Text style={styles.errorText}>{addressErrors.addressLine1}</Text> : null}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Area/Landmark</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter area or landmark"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                value={addressLine2}
-                onChangeText={setAddressLine2}
-              />
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Village/Locality</Text>
-            <View style={[styles.inputWrapper, addressErrors.village && styles.inputWrapperError]}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter village or locality"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                value={village}
-                onChangeText={setVillage}
-              />
+          {/* Address Form */}
+          <View style={[styles.addressForm, { zIndex: 1 }]}>
+            <View style={styles.tagContainer}>
+              <Text style={[styles.inputLabel, { marginBottom: SPACING.XS }]}>Address Type</Text>
+              {TAGS.map((tag) => (
+                <TouchableOpacity
+                  key={tag}
+                  style={[styles.tagChip, addressTag === tag && styles.tagChipSelected]}
+                  onPress={() => setAddressTag(tag)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tagText, addressTag === tag && styles.tagTextSelected]}>
+                    {tag.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            {addressErrors.village ? <Text style={styles.errorText}>{addressErrors.village}</Text> : null}
-          </View>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.SM }]}>
-              <Text style={styles.inputLabel}>District/City</Text>
-              <View style={[styles.inputWrapper, addressErrors.district && styles.inputWrapperError]}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>House/Plot/Building</Text>
+              <View style={[styles.inputWrapper, addressErrors.addressLine1 && styles.inputWrapperError]}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter district"
+                  placeholder="Enter house/plot number"
                   placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                  value={district}
-                  onChangeText={setDistrict}
+                  value={addressLine1}
+                  onChangeText={setAddressLine1}
                 />
               </View>
-              {addressErrors.district ? <Text style={styles.errorText}>{addressErrors.district}</Text> : null}
+              {addressErrors.addressLine1 ? <Text style={styles.errorText}>{addressErrors.addressLine1}</Text> : null}
             </View>
 
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.inputLabel}>State</Text>
-              <View style={[styles.inputWrapper, addressErrors.state && styles.inputWrapperError]}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Area/Landmark</Text>
+              <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter state"
+                  placeholder="Enter area or landmark"
                   placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                  value={state}
-                  onChangeText={setState}
+                  value={addressLine2}
+                  onChangeText={setAddressLine2}
                 />
               </View>
-              {addressErrors.state ? <Text style={styles.errorText}>{addressErrors.state}</Text> : null}
             </View>
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Pincode</Text>
-            <View style={[styles.inputWrapper, addressErrors.pincode && styles.inputWrapperError]}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter 6-digit pincode"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                value={pincode}
-                onChangeText={(text) => setPincode(text.replace(/[^\d]/g, '').slice(0, 6))}
-                keyboardType="number-pad"
-                maxLength={6}
-              />
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Village/Locality</Text>
+              <View style={[styles.inputWrapper, addressErrors.village && styles.inputWrapperError]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter village or locality"
+                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                  value={village}
+                  onChangeText={setVillage}
+                />
+              </View>
+              {addressErrors.village ? <Text style={styles.errorText}>{addressErrors.village}</Text> : null}
             </View>
-            {addressErrors.pincode ? <Text style={styles.errorText}>{addressErrors.pincode}</Text> : null}
+
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.SM }]}>
+                <Text style={styles.inputLabel}>District/City</Text>
+                <View style={[styles.inputWrapper, addressErrors.district && styles.inputWrapperError]}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter district"
+                    placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                    value={district}
+                    onChangeText={setDistrict}
+                  />
+                </View>
+                {addressErrors.district ? <Text style={styles.errorText}>{addressErrors.district}</Text> : null}
+              </View>
+
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <Text style={styles.inputLabel}>State</Text>
+                <View style={[styles.inputWrapper, addressErrors.state && styles.inputWrapperError]}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter state"
+                    placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                    value={state}
+                    onChangeText={setState}
+                  />
+                </View>
+                {addressErrors.state ? <Text style={styles.errorText}>{addressErrors.state}</Text> : null}
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Pincode</Text>
+              <View style={[styles.inputWrapper, addressErrors.pincode && styles.inputWrapperError]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter 6-digit pincode"
+                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                  value={pincode}
+                  onChangeText={(text) => setPincode(text.replace(/[^\d]/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                />
+              </View>
+              {addressErrors.pincode ? <Text style={styles.errorText}>{addressErrors.pincode}</Text> : null}
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </Animated.View>
-  );
+        </>
+      }
+    />
+  </Animated.View>
+);
+
 
   // Render Step 3: Password
   const renderStep3 = () => (
@@ -1377,7 +1440,7 @@ const styles = StyleSheet.create({
   },
   stepHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: SPACING.XL,
   },
   stepNumber: {
@@ -1386,6 +1449,7 @@ const styles = StyleSheet.create({
     color: COLORS.PRIMARY.LIGHT,
     marginRight: SPACING.MD,
     lineHeight: 32,
+    fontWeight: '900',
   },
   stepTitleContainer: {
     flex: 1,
@@ -1408,9 +1472,7 @@ const styles = StyleSheet.create({
   addressScrollView: {
     flex: 1,
   },
-  addressScrollView: {
-    flex: 1,
-  },
+  
   mapSection: {
     marginBottom: SPACING.LG,
     position: 'relative',
@@ -1478,9 +1540,9 @@ const styles = StyleSheet.create({
   },
   addressForm: {
     flex: 1,
-  },
-  addressForm: {
-    flex: 1,
+    marginTop: -SPACING.LG,
+    padding: SPACING.LG,
+    height: '100%',
   },
   tagContainer: {
     flexDirection: 'row',
