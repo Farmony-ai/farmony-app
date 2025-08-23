@@ -305,8 +305,8 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.SM, // Reduced spacing
   },
   logoBackground: {
-    width: 60, // Reduced from 80
-    height: 60,
+    width: 80, // Reduced from 80
+    height: 80,
     borderRadius: 30,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
