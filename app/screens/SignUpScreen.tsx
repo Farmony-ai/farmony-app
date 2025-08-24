@@ -44,6 +44,7 @@ import { GOOGLE_MAPS_API_KEY } from '../config/api';
 import AddressService from '../services/AddressService';
 import LocationService from '../services/locationService';
 import debounce from 'lodash.debounce';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const GOOGLE_API_KEY = (GOOGLE_MAPS_API_KEY || '') as string;
@@ -64,6 +65,10 @@ const SignUpScreen = () => {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
+  const { top: safeTop } = useSafeAreaInsets();
+  const STEPPER_H = 28;         // visual height of your stepper bar/dots
+  const STEPPER_TOP = safeTop + 6
+  const TITLE_H = 22;
 
   // Step 1 State - User Details
   const [name, setName] = useState('');
@@ -94,10 +99,21 @@ const SignUpScreen = () => {
   const [reverseGeocoding, setReverseGeocoding] = useState(false);
   const mapRef = useRef<MapView>(null);
   const placesRef = useRef<any>(null);
-    // inside SignUpScreen component, near your other hooks:
+
   const [placesOpen, setPlacesOpen] = useState(false);
 
-  const screenHeight = useRef(Dimensions.get('window').height).current;
+  const SHEET_MIN = 0.40;   // 40% of screen
+  const SHEET_MAX = 0.86;   // 86% of screen
+  const sheetProgress = useRef(new Animated.Value(0)).current; // 0 collapsed, 1 expanded
+  const [isAddressExpanded, setIsAddressExpanded] = useState(false);
+
+  const SHEET_MIN_HEIGHT = screenHeight * SHEET_MIN;
+  const SHEET_MAX_HEIGHT = screenHeight * SHEET_MAX;
+
+  const sheetHeight = sheetProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [SHEET_MIN_HEIGHT, SHEET_MAX_HEIGHT],
+  });
   const MAP_HEIGHT = useMemo(
     () => Math.min(300, Math.max(220, Math.floor(screenHeight * 0.30))),
     [screenHeight]
@@ -214,6 +230,22 @@ const SignUpScreen = () => {
   }, 800),
   []
 );
+
+  const pinTranslateY = sheetProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -((SHEET_MAX_HEIGHT - SHEET_MIN_HEIGHT) / 2)],
+  });
+
+  const toggleAddressSheet = useCallback(() => {
+    const next = isAddressExpanded ? 0 : 1;
+    Animated.timing(sheetProgress, {
+      toValue: next,
+      duration: 260,
+      useNativeDriver: false,
+    }).start();
+    setIsAddressExpanded(!isAddressExpanded);
+  }, [isAddressExpanded, sheetProgress]);
+
 
   const applyAddressComponentsFromPlace = (components: any[] = [], formatted?: string) => {
     setAddressLine1('');
@@ -769,375 +801,320 @@ const SignUpScreen = () => {
     </Animated.View>
   );
 
-const renderStep2 = () => (
-  <Animated.View
-    style={[
-      styles.stepContent,
-      { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-    ]}
-  >
-    <View style={styles.stepHeader}>
-      <Text style={styles.stepNumber}>02</Text>
-      <View style={styles.stepTitleContainer}>
-        <Text style={styles.stepTitle}>Service Location</Text>
-        <Text style={styles.stepSubtitle}>Where will services be provided?</Text>
-      </View>
-    </View>
+    const renderStep2 = () => {
+    const safeMapRegion = mapRegion || {
+      latitude: 17.385044,
+      longitude: 78.486671,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    };
 
-    {/* Container for the entire form content */}
+  const TITLE_H = 28; // visual height for the title row
+
+  return (
     <View style={{ flex: 1 }}>
-      {/* Search Bar - Fixed positioning */}
+      {/* Full-screen Map */}
       {GOOGLE_API_KEY ? (
-        <View style={styles.searchSection}>
-          <GooglePlacesAutocomplete
-            ref={placesRef}
-            placeholder="Search for your area or village"
-            minLength={2}
-            onPress={(data, details = null) => {
-              handlePlaceSelected(data, details);
-            }}
-            query={{ 
-              key: GOOGLE_API_KEY, 
-              language: 'en', 
-              components: 'country:in' 
-            }}
-            fetchDetails={true}
-            GooglePlacesDetailsQuery={{
-              fields: 'geometry,address_components,formatted_address,name,place_id,types',
-            }}
-            enablePoweredByContainer={false}
-            predefinedPlaces={[]}
-            filterReverseGeocodingByTypes={[]}
-            debounce={200}
-            onFail={(error) => console.error('Places API Error:', error)}
-            onNotFound={() => console.log('No results found')}
-            textInputProps={{
-              placeholderTextColor: COLORS.TEXT.PLACEHOLDER,
-              returnKeyType: 'search',
-              autoCorrect: false,
-              autoCapitalize: 'none',
-              clearButtonMode: 'while-editing',
-            }}
-            styles={{
-              container: {
-                flex: 0,
-                backgroundColor: 'transparent',
-                zIndex: 1,
-              },
-              textInputContainer: {
-                backgroundColor: 'transparent',
-                height: 44,
-                padding: 0,
-                margin: 0,
-              },
-              textInput: styles.searchInput,
-              listView: {
-                backgroundColor: COLORS.NEUTRAL.WHITE,
-                borderRadius: 12,
-                elevation: 5,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                position: 'absolute',
-                top: 45,
-                left: 0,
-                right: 0,
-                maxHeight: 200,
-                zIndex: 1000,
-              },
-              row: {
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-              },
-              separator: {
-                height: 1,
-                backgroundColor: COLORS.BORDER.PRIMARY,
-              },
-              description: {
-                fontFamily: FONTS.POPPINS.REGULAR,
-                fontSize: 14,
-                color: COLORS.TEXT.PRIMARY,
-              },
-            }}
-            renderLeftButton={() => (
-              <View style={styles.searchIconLeft}>
-                <Ionicons name="search" size={18} color={COLORS.TEXT.SECONDARY} />
-              </View>
-            )}
-            renderRightButton={() => 
-              placesRef.current?.getAddressText() ? (
-                <TouchableOpacity 
-                  onPress={() => placesRef.current?.clear()} 
-                  style={styles.searchIconRight}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="close-circle" size={18} color={COLORS.TEXT.SECONDARY} />
-                </TouchableOpacity>
-              ) : null
-            }
+        <View style={StyleSheet.absoluteFillObject}>
+          <MapView
+            ref={mapRef}
+            provider={PROVIDER_GOOGLE}
+            style={StyleSheet.absoluteFillObject}
+            region={safeMapRegion}
+            onRegionChangeComplete={handleRegionChangeComplete}
+            showsUserLocation
+            showsMyLocationButton={false}
+            loadingEnabled
+            loadingIndicatorColor={COLORS.PRIMARY.MAIN}
+            loadingBackgroundColor={COLORS.BACKGROUND.PRIMARY}
           />
         </View>
       ) : (
-        <View style={[styles.searchInput, { marginBottom: SPACING.MD }]}>
-          <Text style={styles.errorText}>Google Maps API key not configured</Text>
+        <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center' }]}>
+          <MaterialIcons name="location-off" size={48} color={COLORS.TEXT.PLACEHOLDER} />
+          <Text style={{ marginTop: 8, color: '#EF4444' }}>Map not available</Text>
         </View>
       )}
 
-      {/* Map Container */}
-      <View style={styles.mapWrapper}>
-        <View style={[styles.miniMapContainer, { height: MAP_HEIGHT }]}>
-          {mapRegion && GOOGLE_API_KEY ? (
-            <MapView
-              ref={mapRef}
-              provider={PROVIDER_GOOGLE}
-              style={styles.miniMap}
-              initialRegion={mapRegion}
-              onRegionChangeComplete={handleRegionChangeComplete}
-              showsUserLocation={true}
-              showsMyLocationButton={false}
-            />
-          ) : (
-            <View
-              style={[
-                styles.miniMap,
-                {
-                  backgroundColor: COLORS.BACKGROUND.PRIMARY,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                },
-              ]}
-            >
-              <Text style={styles.errorText}>Map not available</Text>
+      {/* Center Pin */}
+      {GOOGLE_API_KEY && (
+        <Animated.View
+          pointerEvents="none"
+          style={[step2Styles.mapPinContainer, { transform: [{ translateY: pinTranslateY }] }]}
+        >
+          <View style={step2Styles.pinWrapper}>
+            <Ionicons name="location-sharp" size={32} color={COLORS.PRIMARY.MAIN} />
+            <View style={step2Styles.pinShadow} />
+          </View>
+          {reverseGeocoding && (
+            <View style={step2Styles.locatingBadge}>
+              <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+              <Text style={step2Styles.locatingText}>Locating...</Text>
             </View>
           )}
-          
-          {/* Map Pin */}
-          <View pointerEvents="none" style={styles.centerPin}>
-            <Ionicons name="location-sharp" size={24} color={COLORS.PRIMARY.MAIN} />
-          </View>
-          
-          {/* Current Location Button */}
-          <TouchableOpacity
-            style={styles.locationButton}
-            onPress={getCurrentLocation}
-            disabled={fetchingLocation || !GOOGLE_API_KEY}
-            activeOpacity={0.8}
-          >
-            {fetchingLocation ? (
-              <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
-            ) : (
-              <MaterialIcons name="my-location" size={20} color={COLORS.PRIMARY.MAIN} />
-            )}
+        </Animated.View>
+      )}
+
+      {/* Title where stepper used to be */}
+      <View style={[step2Styles.topTitleWrap, { top: STEPPER_TOP }]}>
+        <Text style={step2Styles.topTitle}>Service Location</Text>
+      </View>
+
+      {/* Back button + Google Places in a single aligned row */}
+      <View
+        style={[step2Styles.topSection, { paddingTop: STEPPER_TOP + TITLE_H + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.MD }}>
+          <TouchableOpacity onPress={handleBack} style={step2Styles.backButtonCompact} activeOpacity={0.85}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
           </TouchableOpacity>
+
+          {GOOGLE_API_KEY ? (
+            <GooglePlacesAutocomplete
+              ref={placesRef}
+              placeholder="Search for a place"
+              fetchDetails
+              predefinedPlaces={[]}
+              predefinedPlacesAlwaysVisible={false}
+              textInputProps={{ returnKeyType: 'search' }}
+              minLength={2}
+              debounce={150}
+              enablePoweredByContainer={true}
+              keyboardShouldPersistTaps="handled"
+              listViewDisplayed="auto"
+              keepResultsAfterBlur={false}
+              nearbyPlacesAPI="GooglePlacesSearch"
+              GooglePlacesSearchQuery={{ rankby: 'distance' }}
+              GooglePlacesDetailsQuery={{}}
+              GoogleReverseGeocodingQuery={{}}
+              timeout={20000}
+              onPress={handlePlaceSelected}
+              query={{
+                key: GOOGLE_API_KEY,
+                language: 'en',
+                components: 'country:in',
+              }}
+              /* IMPORTANT: container is flex:1 so the dropdown aligns under the input only */
+              styles={{
+                container: { flex: 1, marginLeft: 10 },
+                textInput: step2Styles.placesInput,
+                listView: step2Styles.placesList,          // absolute under the input (not full-screen)
+                row: step2Styles.placesRow,
+                separator: step2Styles.placesSeparator,
+                description: step2Styles.placesDescription,
+              }}
+            />
+          ) : (
+            <View style={[step2Styles.searchInputWrapper, { flex: 1, marginLeft: 10 }]}>
+              <Ionicons name="search" size={18} color={COLORS.TEXT.PLACEHOLDER} />
+              <TextInput
+                style={step2Styles.searchInputSimple}
+                placeholder="Enter your location manually below"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                editable={false}
+              />
+            </View>
+          )}
         </View>
       </View>
 
-      {/* Address Form - ScrollView */}
-      <ScrollView
-        style={styles.addressScrollView}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.addressFormContent}
+      {/* Current location FAB */}
+      <TouchableOpacity
+        style={step2Styles.locationFAB}
+        onPress={getCurrentLocation}
+        disabled={fetchingLocation}
+        activeOpacity={0.85}
       >
-        {/* Tag Selection */}
-        <View style={styles.tagSection}>
-          <Text style={styles.inputLabel}>Address Type</Text>
-          <View style={styles.tagContainer}>
-            {TAGS.map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  styles.tagChip, 
-                  addressTag === tag && styles.tagChipSelected
-                ]}
-                onPress={() => setAddressTag(tag)}
-                activeOpacity={0.8}
-              >
-                <Text 
-                  style={[
-                    styles.tagText, 
-                    addressTag === tag && styles.tagTextSelected
-                  ]}
-                >
-                  {tag.toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        {fetchingLocation ? (
+          <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+        ) : (
+          <MaterialIcons name="my-location" size={22} color={COLORS.PRIMARY.MAIN} />
+        )}
+      </TouchableOpacity>
 
-        {/* Address Line 1 */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>House/Plot/Building *</Text>
-          <View style={[
-            styles.inputWrapper, 
-            addressErrors.addressLine1 && styles.inputWrapperError
-          ]}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter house/plot number"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              value={addressLine1}
-              onChangeText={(text) => {
-                setAddressLine1(text);
-                if (addressErrors.addressLine1) {
-                  setAddressErrors({...addressErrors, addressLine1: ''});
-                }
-              }}
-              autoCapitalize="words"
-            />
-          </View>
-          {addressErrors.addressLine1 ? (
-            <Text style={styles.errorText}>{addressErrors.addressLine1}</Text>
-          ) : null}
-        </View>
+      {/* Bottom Sheet */}
+      <Animated.View style={[step2Styles.bottomSheet, { height: sheetHeight }]}>
+        <TouchableOpacity style={step2Styles.sheetHandle} onPress={toggleAddressSheet} activeOpacity={0.9}>
+          <View style={step2Styles.handleBar} />
+        </TouchableOpacity>
 
-        {/* Address Line 2 */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Area/Landmark</Text>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter area or landmark"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              value={addressLine2}
-              onChangeText={setAddressLine2}
-              autoCapitalize="words"
-            />
+        <TouchableOpacity style={step2Styles.addressHeader} onPress={toggleAddressSheet} activeOpacity={0.9}>
+          <View style={step2Styles.addressIconWrapper}>
+            <Ionicons name="location" size={20} color={COLORS.PRIMARY.MAIN} />
           </View>
-        </View>
-
-        {/* Village/Locality */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Village/Locality *</Text>
-          <View style={[
-            styles.inputWrapper, 
-            addressErrors.village && styles.inputWrapperError
-          ]}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter village or locality"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              value={village}
-              onChangeText={(text) => {
-                setVillage(text);
-                if (addressErrors.village) {
-                  setAddressErrors({...addressErrors, village: ''});
-                }
-              }}
-              autoCapitalize="words"
-            />
+          <View style={step2Styles.addressHeaderText}>
+            <Text style={step2Styles.addressLabel}>Service Location</Text>
+            {(village || district) ? (
+              <Text style={step2Styles.addressPreview} numberOfLines={1}>
+                {[addressLine1, village, district].filter(Boolean).join(', ')}
+              </Text>
+            ) : (
+              <Text style={step2Styles.addressPlaceholder}>
+                {GOOGLE_API_KEY ? 'Move pin to your exact location' : 'Enter your address details'}
+              </Text>
+            )}
           </View>
-          {addressErrors.village ? (
-            <Text style={styles.errorText}>{addressErrors.village}</Text>
-          ) : null}
-        </View>
+          <Ionicons name={isAddressExpanded ? 'chevron-down' : 'chevron-up'} size={22} color={COLORS.TEXT.SECONDARY} />
+        </TouchableOpacity>
 
-        {/* Tehsil - Optional */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Tehsil/Sub-district</Text>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter tehsil (optional)"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              value={tehsil}
-              onChangeText={setTehsil}
-              autoCapitalize="words"
-            />
-          </View>
-        </View>
+        {/* Address form */}
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView
+            style={step2Styles.formScrollView}
+            contentContainerStyle={[step2Styles.formContent, { paddingBottom: 120 }]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Save-as tags */}
+            <View style={step2Styles.tagSection}>
+              <Text style={step2Styles.sectionTitle}>Save address as</Text>
+              <View style={step2Styles.tagRow}>
+                {TAGS.map((tag) => (
+                  <TouchableOpacity
+                    key={tag}
+                    style={[step2Styles.tag, addressTag === tag && step2Styles.tagActive]}
+                    onPress={() => setAddressTag(tag)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={tag === 'home' ? 'home' : tag === 'work' ? 'briefcase' : tag === 'personal' ? 'person' : 'bookmark'}
+                      size={16}
+                      color={addressTag === tag ? COLORS.NEUTRAL.WHITE : COLORS.TEXT.SECONDARY}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={[step2Styles.tagText, addressTag === tag && step2Styles.tagTextActive]}>
+                      {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
-        {/* District and State Row */}
-        <View style={styles.inputRow}>
-          <View style={[styles.inputGroup, styles.inputGroupHalf]}>
-            <Text style={styles.inputLabel}>District/City *</Text>
-            <View style={[
-              styles.inputWrapper, 
-              addressErrors.district && styles.inputWrapperError
-            ]}>
+            {/* Fields */}
+            <View style={step2Styles.fieldGroup}>
+              <Text style={step2Styles.fieldLabel}>House/Flat/Building <Text style={step2Styles.required}>*</Text></Text>
               <TextInput
-                style={styles.input}
-                placeholder="Enter district"
+                style={[step2Styles.fieldInput, addressErrors.addressLine1 && step2Styles.fieldInputError]}
+                placeholder="e.g., Flat 301, Green Apartments"
                 placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                value={district}
-                onChangeText={(text) => {
-                  setDistrict(text);
-                  if (addressErrors.district) {
-                    setAddressErrors({...addressErrors, district: ''});
-                  }
+                value={addressLine1}
+                onChangeText={(t) => {
+                  setAddressLine1(t);
+                  if (addressErrors.addressLine1) setAddressErrors({ ...addressErrors, addressLine1: '' });
                 }}
-                autoCapitalize="words"
+                returnKeyType="next"
+              />
+              {!!addressErrors.addressLine1 && <Text style={step2Styles.fieldError}>{addressErrors.addressLine1}</Text>}
+            </View>
+
+            <View style={step2Styles.fieldGroup}>
+              <Text style={step2Styles.fieldLabel}>Landmark / Area</Text>
+              <TextInput
+                style={step2Styles.fieldInput}
+                placeholder="e.g., Near City Mall"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                value={addressLine2}
+                onChangeText={setAddressLine2}
               />
             </View>
-            {addressErrors.district ? (
-              <Text style={styles.errorText}>{addressErrors.district}</Text>
-            ) : null}
-          </View>
 
-          <View style={[styles.inputGroup, styles.inputGroupHalf]}>
-            <Text style={styles.inputLabel}>State *</Text>
-            <View style={[
-              styles.inputWrapper, 
-              addressErrors.state && styles.inputWrapperError
-            ]}>
+            <View style={step2Styles.fieldGroup}>
+              <Text style={step2Styles.fieldLabel}>Village/Locality <Text style={step2Styles.required}>*</Text></Text>
               <TextInput
-                style={styles.input}
-                placeholder="Enter state"
+                style={[step2Styles.fieldInput, addressErrors.village && step2Styles.fieldInputError]}
+                placeholder="e.g., Madhapur"
                 placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                value={state}
-                onChangeText={(text) => {
-                  setState(text);
-                  if (addressErrors.state) {
-                    setAddressErrors({...addressErrors, state: ''});
-                  }
+                value={village}
+                onChangeText={(t) => {
+                  setVillage(t);
+                  if (addressErrors.village) setAddressErrors({ ...addressErrors, village: '' });
                 }}
-                autoCapitalize="words"
+              />
+              {!!addressErrors.village && <Text style={step2Styles.fieldError}>{addressErrors.village}</Text>}
+            </View>
+
+            <View style={step2Styles.fieldGroup}>
+              <Text style={step2Styles.fieldLabel}>Tehsil/Sub-district</Text>
+              <TextInput
+                style={step2Styles.fieldInput}
+                placeholder="Optional"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                value={tehsil}
+                onChangeText={setTehsil}
               />
             </View>
-            {addressErrors.state ? (
-              <Text style={styles.errorText}>{addressErrors.state}</Text>
-            ) : null}
-          </View>
-        </View>
 
-        {/* Pincode */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Pincode *</Text>
-          <View style={[
-            styles.inputWrapper, 
-            addressErrors.pincode && styles.inputWrapperError
-          ]}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter 6-digit pincode"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              value={pincode}
-              onChangeText={(text) => {
-                const cleaned = text.replace(/[^\d]/g, '').slice(0, 6);
-                setPincode(cleaned);
-                if (addressErrors.pincode && cleaned.length === 6) {
-                  setAddressErrors({...addressErrors, pincode: ''});
-                }
-              }}
-              keyboardType="number-pad"
-              maxLength={6}
-            />
-          </View>
-          {addressErrors.pincode ? (
-            <Text style={styles.errorText}>{addressErrors.pincode}</Text>
-          ) : null}
-        </View>
+            <View style={step2Styles.fieldRow}>
+              <View style={[step2Styles.fieldGroup, { flex: 1, marginRight: 8 }]}>
+                <Text style={step2Styles.fieldLabel}>District <Text style={step2Styles.required}>*</Text></Text>
+                <TextInput
+                  style={[step2Styles.fieldInput, addressErrors.district && step2Styles.fieldInputError]}
+                  placeholder="e.g., Hyderabad"
+                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                  value={district}
+                  onChangeText={(t) => {
+                    setDistrict(t);
+                    if (addressErrors.district) setAddressErrors({ ...addressErrors, district: '' });
+                  }}
+                />
+                {!!addressErrors.district && <Text style={step2Styles.fieldError}>{addressErrors.district}</Text>}
+              </View>
 
-        {/* Info text */}
-        <Text style={styles.infoText}>
-          This will be your default service location for bookings
-        </Text>
-      </ScrollView>
+              <View style={[step2Styles.fieldGroup, { flex: 1, marginLeft: 8 }]}>
+                <Text style={step2Styles.fieldLabel}>State <Text style={step2Styles.required}>*</Text></Text>
+                <TextInput
+                  style={[step2Styles.fieldInput, addressErrors.state && step2Styles.fieldInputError]}
+                  placeholder="e.g., Telangana"
+                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                  value={state}
+                  onChangeText={(t) => {
+                    setState(t);
+                    if (addressErrors.state) setAddressErrors({ ...addressErrors, state: '' });
+                  }}
+                />
+                {!!addressErrors.state && <Text style={step2Styles.fieldError}>{addressErrors.state}</Text>}
+              </View>
+            </View>
+
+            <View style={step2Styles.fieldGroup}>
+              <Text style={step2Styles.fieldLabel}>Pincode <Text style={step2Styles.required}>*</Text></Text>
+              <TextInput
+                style={[step2Styles.fieldInput, addressErrors.pincode && step2Styles.fieldInputError]}
+                placeholder="6-digit pincode"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                value={pincode}
+                onChangeText={(t) => {
+                  const cleaned = t.replace(/[^\d]/g, '').slice(0, 6);
+                  setPincode(cleaned);
+                  if (addressErrors.pincode && cleaned.length === 6) setAddressErrors({ ...addressErrors, pincode: '' });
+                }}
+                keyboardType="number-pad"
+                maxLength={6}
+              />
+              {!!addressErrors.pincode && <Text style={step2Styles.fieldError}>{addressErrors.pincode}</Text>}
+            </View>
+
+            <View style={step2Styles.infoNote}>
+              <Ionicons name="information-circle" size={16} color={COLORS.PRIMARY.MAIN} />
+              <Text style={step2Styles.infoNoteText}>This will be your default service location for all bookings</Text>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        {/* Continue button pinned to bottom of the sheet */}
+        <View style={step2Styles.bottomActions}>
+          <TouchableOpacity style={step2Styles.continueButton} onPress={handleNext} activeOpacity={0.9}>
+            <Text style={step2Styles.continueButtonText}>Continue</Text>
+            <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
     </View>
-  </Animated.View>
-);
+  );
+};
+
+
   // Render Step 3: Password
   const renderStep3 = () => (
     <Animated.View style={[styles.stepContent, {
@@ -1330,9 +1307,10 @@ const renderStep2 = () => (
   );
 
   return (
-    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      <View style={styles.container}>
-        {/* Header */}
+  <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+    <View style={styles.container}>
+      {/* Header - Hide for Step 2 */}
+      {currentStep !== 2 && (
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
@@ -1347,38 +1325,42 @@ const renderStep2 = () => (
             <Text style={styles.brandName}>Farmony</Text>
           </View>
         </View>
+      )}
 
-        {/* Progress Bar */}
+      {/* Progress Bar — hidden on Step 2 */}
+      {currentStep !== 2 && (
         <View style={styles.progressContainer}>
           <View style={styles.progressBar}>
-            <Animated.View 
+            <Animated.View
               style={[
                 styles.progressFill,
                 {
                   width: progressAnim.interpolate({
                     inputRange: [0, 1],
                     outputRange: ['0%', '100%'],
-                  })
-                }
+                  }),
+                },
               ]}
             />
           </View>
           <View style={styles.progressSteps}>
             {[1, 2, 3, 4].map((step) => (
-              <View 
-                key={step} 
+              <View
+                key={step}
                 style={[
                   styles.progressStep,
-                  currentStep >= step && styles.progressStepActive
+                  currentStep >= step && styles.progressStepActive,
                 ]}
               >
                 {currentStep > step ? (
                   <Ionicons name="checkmark" size={14} color={COLORS.NEUTRAL.WHITE} />
                 ) : (
-                  <Text style={[
-                    styles.progressStepText,
-                    currentStep >= step && styles.progressStepTextActive
-                  ]}>
+                  <Text
+                    style={[
+                      styles.progressStepText,
+                      currentStep >= step && styles.progressStepTextActive,
+                    ]}
+                  >
                     {step}
                   </Text>
                 )}
@@ -1386,21 +1368,33 @@ const renderStep2 = () => (
             ))}
           </View>
         </View>
+      )}
 
-        {/* Content */}
+
+      {/* Content - Special handling for Step 2 */}
+      {currentStep === 2 ? (
+        renderStep2()
+      ) : (
+        // Other steps get the card layout
         <View style={styles.content}>
-          <Animated.View style={[styles.formCard, {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }]
-          }]}>
+          <Animated.View
+            style={[
+              styles.formCard,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
+          >
             {currentStep === 1 && renderStep1()}
-            {currentStep === 2 && renderStep2()}
             {currentStep === 3 && renderStep3()}
             {currentStep === 4 && renderStep4()}
           </Animated.View>
         </View>
+      )}
 
-        {/* Bottom Actions */}
+      {/* Bottom Actions - Hide for Step 2 as it has its own Continue button */}
+      {currentStep !== 2 && (
         <View style={styles.bottomActions}>
           {currentStep < 4 ? (
             <TouchableOpacity
@@ -1445,12 +1439,20 @@ const renderStep2 = () => (
             </View>
           )}
         </View>
-      </View>
-    </SafeAreaWrapper>
-  );
+      )}
+    </View>
+  </SafeAreaWrapper>
+);
+
 };
 
 const styles = StyleSheet.create({
+  progressContainerStep2: {
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  zIndex: 50,           // stays above the map but below nothing else we care about
+},
   container: {
     flex: 1,
     backgroundColor: COLORS.BACKGROUND.PRIMARY,
@@ -1939,5 +1941,610 @@ const styles = StyleSheet.create({
   },
 
 });
+
+const enhancedStyles = StyleSheet.create({
+  locationContainer: {
+    flex: 1,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
+  
+  // Top Section Styles
+  topSection: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+  },
+  
+  compactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.MD,
+    marginBottom: SPACING.SM,
+  },
+  
+  backButtonCompact: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  
+  headerTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  
+  searchContainer: {
+    paddingHorizontal: SPACING.MD,
+  },
+  
+  searchIcon: {
+    position: 'absolute',
+    left: 12,
+    height: 48,
+    justifyContent: 'center',
+  },
+  
+  // Map Pin Styles
+  mapPinContainer: {
+    position: 'absolute',
+    top: '40%',
+    left: '50%',
+    marginLeft: -16,
+    marginTop: -32,
+    zIndex: 5,
+    alignItems: 'center',
+  },
+  
+  pinWrapper: {
+    alignItems: 'center',
+  },
+  
+  pinShadow: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    marginTop: -4,
+  },
+  
+  locatingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  
+  locatingText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginLeft: 6,
+  },
+  
+  // Location FAB
+  locationFAB: {
+    position: 'absolute',
+    right: SPACING.MD,
+    bottom: '45%',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    zIndex: 5,
+  },
+  
+  // Bottom Sheet Styles
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    minHeight: '40%',
+  },
+  
+  sheetHandle: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  
+  handleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.BORDER.PRIMARY,
+  },
+  
+  addressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.LG,
+    paddingBottom: SPACING.MD,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
+  
+  addressIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.SM,
+  },
+  
+  addressHeaderText: {
+    flex: 1,
+  },
+  
+  addressLabel: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  
+  addressPreview: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    marginTop: 2,
+  },
+  
+  addressPlaceholder: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PLACEHOLDER,
+    marginTop: 2,
+  },
+  
+  // Form Styles
+  formScrollView: {
+    flex: 1,
+  },
+  
+  formContent: {
+    padding: SPACING.LG,
+    paddingBottom: 100,
+  },
+  
+  tagSection: {
+    marginBottom: SPACING.LG,
+  },
+  
+  sectionTitle: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.SM,
+  },
+  
+  tagRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  
+  tag: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  
+  tagActive: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  
+  tagText: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  
+  tagTextActive: {
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  
+  fieldsSection: {
+    marginTop: SPACING.SM,
+  },
+  
+  fieldGroup: {
+    marginBottom: SPACING.MD,
+  },
+  
+  fieldRow: {
+    flexDirection: 'row',
+    marginBottom: SPACING.MD,
+  },
+  
+  fieldLabel: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 6,
+  },
+  
+  required: {
+    color: '#EF4444',
+  },
+  
+  fieldInput: {
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  
+  fieldInputError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+  },
+  
+  fieldError: {
+    fontSize: 11,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: '#EF4444',
+    marginTop: 4,
+  },
+  
+  infoNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    padding: SPACING.MD,
+    borderRadius: 10,
+    marginTop: SPACING.MD,
+  },
+  
+  infoNoteText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.PRIMARY.MAIN,
+    marginLeft: SPACING.SM,
+  },
+  
+  // Bottom Actions
+  bottomActions: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    padding: SPACING.MD,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+  },
+  
+  continueButton: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderRadius: 12,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  
+  continueButtonText: {
+    fontSize: 15,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+
+   searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+    height: 48,
+    paddingHorizontal: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  searchIconSimple: {
+    marginRight: 10,
+  },
+  searchInputSimple: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PLACEHOLDER,
+  },
+  searchHint: {
+    fontSize: 11,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+});
+
+  const step2Styles = StyleSheet.create({
+ 
+    compactHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: SPACING.MD,
+      marginBottom: SPACING.SM,
+    },
+    backButtonCompact: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: COLORS.NEUTRAL.WHITE,
+      justifyContent: 'center', alignItems: 'center',
+      elevation: 3,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3,
+    },
+    headerTitle: { fontSize: 16, fontFamily: FONTS.POPPINS.SEMIBOLD, color: COLORS.TEXT.PRIMARY },
+
+    // Google Places
+    placesContainer: { paddingHorizontal: SPACING.MD },
+    placesInput: {
+      height: 44,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      backgroundColor: COLORS.NEUTRAL.WHITE,
+      borderWidth: 1, borderColor: COLORS.BORDER.PRIMARY,
+      fontSize: 14, fontFamily: FONTS.POPPINS.REGULAR, color: COLORS.TEXT.PRIMARY,
+    },
+
+    // fallback search hint
+    searchContainer: { paddingHorizontal: SPACING.MD },
+    searchInputWrapper: {
+      height: 44, borderRadius: 12, paddingHorizontal: 12,
+      backgroundColor: COLORS.NEUTRAL.WHITE,
+      borderWidth: 1, borderColor: COLORS.BORDER.PRIMARY,
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+    },
+    searchInputSimple: { flex: 1, fontSize: 14, fontFamily: FONTS.POPPINS.REGULAR, color: COLORS.TEXT.PRIMARY },
+    searchHint: { marginTop: 6, fontSize: 12, color: COLORS.TEXT.SECONDARY },
+
+    // map pin
+    mapPinContainer: {
+      position: 'absolute',
+      left: '50%',
+      top: '40%',
+      marginLeft: -16,
+      zIndex: 5,
+      alignItems: 'center',
+    },
+    pinWrapper: { alignItems: 'center' },
+    pinShadow: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.2)', marginTop: -4 },
+    locatingBadge: {
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: COLORS.NEUTRAL.WHITE,
+      paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20,
+      marginTop: 8,
+      elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3,
+    },
+    locatingText: { fontSize: 12, fontFamily: FONTS.POPPINS.MEDIUM, color: COLORS.TEXT.PRIMARY, marginLeft: 6 },
+
+    // FAB
+    locationFAB: {
+      position: 'absolute',
+      right: SPACING.MD,
+      bottom: '45%', // sits above collapsed sheet and still fine when expanded
+      width: 48, height: 48, borderRadius: 24,
+      backgroundColor: COLORS.NEUTRAL.WHITE,
+      justifyContent: 'center', alignItems: 'center',
+      elevation: 5,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 4,
+      zIndex: 6,
+    },
+
+    // sheet
+    bottomSheet: {
+      position: 'absolute',
+      bottom: 0, left: 0, right: 0,
+      backgroundColor: COLORS.NEUTRAL.WHITE,
+      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      elevation: 12,
+      shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.2, shadowRadius: 6,
+      zIndex: 20,
+      minHeight: '40%',
+    },
+    sheetHandle: { alignItems: 'center', paddingVertical: 12 },
+    handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.BORDER.PRIMARY },
+
+    addressHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.MD, paddingBottom: 12 },
+    addressIconWrapper: {
+      width: 36, height: 36, borderRadius: 18,
+      backgroundColor: COLORS.PRIMARY.LIGHT, justifyContent: 'center', alignItems: 'center', marginRight: 10,
+    },
+    addressHeaderText: { flex: 1 },
+    addressLabel: { fontFamily: FONTS.POPPINS.MEDIUM, fontSize: 13, color: COLORS.TEXT.SECONDARY },
+    addressPreview: { fontFamily: FONTS.POPPINS.SEMIBOLD, fontSize: 15, color: COLORS.TEXT.PRIMARY },
+    addressPlaceholder: { fontFamily: FONTS.POPPINS.REGULAR, fontSize: 14, color: COLORS.TEXT.SECONDARY },
+
+    formScrollView: { flex: 1 },
+    formContent: { paddingHorizontal: SPACING.MD },
+
+    // tags
+    tagSection: { marginBottom: SPACING.MD },
+    sectionTitle: { fontSize: 13, fontFamily: FONTS.POPPINS.MEDIUM, color: COLORS.TEXT.PRIMARY, marginBottom: 8 },
+    tagRow: { flexDirection: 'row', gap: SPACING.SM },
+    tag: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12,
+      borderWidth: 1, borderColor: COLORS.BORDER.PRIMARY, backgroundColor: COLORS.NEUTRAL.WHITE,
+    },
+    tagActive: { backgroundColor: COLORS.PRIMARY.MAIN, borderColor: COLORS.PRIMARY.MAIN },
+    tagText: { fontSize: 13, fontFamily: FONTS.POPPINS.MEDIUM, color: COLORS.TEXT.SECONDARY },
+    tagTextActive: { color: COLORS.NEUTRAL.WHITE },
+
+    // fields
+    fieldsSection: {},
+    fieldGroup: { marginBottom: SPACING.MD },
+    fieldLabel: { fontSize: 13, fontFamily: FONTS.POPPINS.MEDIUM, color: COLORS.TEXT.PRIMARY, marginBottom: 6 },
+    required: { color: COLORS.PRIMARY.MAIN },
+    fieldInput: {
+      height: 48, borderRadius: 12,
+      backgroundColor: COLORS.BACKGROUND.PRIMARY,
+      borderWidth: 1, borderColor: COLORS.BORDER.PRIMARY,
+      paddingHorizontal: 12, fontSize: 14, fontFamily: FONTS.POPPINS.REGULAR, color: COLORS.TEXT.PRIMARY,
+    },
+    fieldRow: { flexDirection: 'row' },
+    fieldInputError: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
+    fieldError: { marginTop: 4, fontSize: 11, color: '#EF4444', fontFamily: FONTS.POPPINS.REGULAR },
+
+    infoNote: {
+      flexDirection: 'row', alignItems: 'center', gap: 6,
+      backgroundColor: COLORS.PRIMARY.LIGHT, padding: 10, borderRadius: 12, marginTop: 6,
+    },
+    infoNoteText: { fontSize: 12, color: COLORS.PRIMARY.MAIN, fontFamily: FONTS.POPPINS.MEDIUM },
+
+    bottomActions: {
+      position: 'absolute', left: 0, right: 0, bottom: 0,
+      padding: SPACING.MD,
+      borderTopWidth: 1, borderTopColor: COLORS.BORDER.PRIMARY,
+      backgroundColor: COLORS.NEUTRAL.WHITE,
+    },
+    continueButton: {
+      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+      backgroundColor: COLORS.PRIMARY.MAIN, borderRadius: 14, paddingVertical: 14,
+    },
+    continueButtonText: { color: COLORS.NEUTRAL.WHITE, fontSize: 15, fontFamily: FONTS.POPPINS.SEMIBOLD },
+
+
+  // one row: back button + search
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: SPACING.MD,
+  },
+
+  // make the Places container flex in a row
+  placesContainerRow: {
+    flex: 1,
+  },
+
+   topTitleWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 16,
+    alignItems: 'center',
+  },
+  topTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+
+  topSection: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 15, // list lives inside here
+  },
+
+  // Back button as an absolute FAB (never moves with list)
+  backFab: {
+    position: 'absolute',
+    left: SPACING.MD,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    zIndex: 30, // above map; below list if you prefer, set to 10
+  },
+
+  // Full-width container for GPlaces (we’ll shift the input itself)
+  placesContainerFull: {
+    paddingHorizontal: SPACING.MD,
+  },
+
+  // Shift input to the right so it doesn't sit under the back FAB
+  placesInputShifted: {
+    height: 44,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    marginLeft: 56,             // <- space for the back FAB
+  },
+
+  // keep your existing listView/row/description styles
+  placesList: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginTop: 8,
+    borderRadius: 12,
+    elevation: 6,
+    zIndex: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    maxHeight: 240,
+  },
+  placesRow: { paddingVertical: 12, paddingHorizontal: 12 },
+  placesSeparator: { height: 1, backgroundColor: COLORS.BORDER.PRIMARY },
+  placesDescription: { fontFamily: FONTS.POPPINS.REGULAR, color: COLORS.TEXT.PRIMARY },
+
+  });
+
 
 export default SignUpScreen;
