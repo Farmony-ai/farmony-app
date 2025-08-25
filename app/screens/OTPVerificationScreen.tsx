@@ -1,17 +1,32 @@
 import React, {useState, useRef, useEffect} from 'react';
 /* eslint-disable react-hooks/exhaustive-deps */
-import { View, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { 
+  View, 
+  StyleSheet, 
+  TextInput, 
+  TouchableOpacity, 
+  KeyboardAvoidingView, 
+  Platform, 
+  ScrollView, 
+  Image, 
+  Animated,
+  Dimensions,
+  ActivityIndicator
+} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useDispatch, useSelector} from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
+import LinearGradient from 'react-native-linear-gradient';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import Button from '../components/Button';
-import {COLORS, SPACING, BORDER_RADIUS, SHADOWS} from '../utils';
+import {COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS} from '../utils';
 import {verifyOTP, clearError, updateUserVerification, otpLogin, setOtpChannel} from '../store/slices/authSlice';
 import {RootState, AppDispatch} from '../store';
 import otplessService from '../services/otpless';
 import firebaseSMSService from '../services/firebaseSMS';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const OTPVerificationScreen = () => {
   const navigation = useNavigation();
@@ -37,6 +52,12 @@ const OTPVerificationScreen = () => {
   const [isWhatsAppLoading, setIsWhatsAppLoading] = useState(false);
   const [isOTPLessInitialized, setIsOTPLessInitialized] = useState(false);
 
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     startFirebaseSMSAuth();
     return () => {
@@ -46,8 +67,40 @@ const OTPVerificationScreen = () => {
 
   // Focus on first input when component mounts
   useEffect(() => {
-    inputRefs.current[0]?.focus();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    setTimeout(() => {
+      inputRefs.current[0]?.focus();
+    }, 300);
   }, []);
+
+  // Shake animation for errors
+  const triggerShakeAnimation = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+    ]).start();
+  };
 
   // 📱 Start SMS authentication via Firebase
   const startFirebaseSMSAuth = async () => {
@@ -75,6 +128,7 @@ const OTPVerificationScreen = () => {
       console.error('❌ Failed to send SMS OTP:', error);
       setOTPError('Unable to send SMS OTP. Please try again.');
       setAuthStatus('');
+      triggerShakeAnimation();
     }
   };
 
@@ -91,6 +145,7 @@ const OTPVerificationScreen = () => {
       console.error('❌ Failed to initialize OTPLess:', error);
       setOTPError('Failed to initialize WhatsApp OTP service. Please try again.');
       setAuthStatus('');
+      triggerShakeAnimation();
     } finally {
       setIsWhatsAppLoading(false);
     }
@@ -130,6 +185,7 @@ const OTPVerificationScreen = () => {
       console.error('❌ Failed to send WhatsApp OTP:', error);
       setOTPError('Failed to send WhatsApp OTP. Please try again.');
       setAuthStatus('');
+      triggerShakeAnimation();
     }
   };
 
@@ -164,6 +220,7 @@ const OTPVerificationScreen = () => {
     } else {
       setOTPError(result.error || 'OTP verification failed');
       setAuthStatus('');
+      triggerShakeAnimation();
     }
   };
 
@@ -192,11 +249,13 @@ const OTPVerificationScreen = () => {
           
           if (!updateUserVerification.fulfilled.match(verificationResult)) {
             setOTPError('Failed to complete user verification. Please try again.');
+            triggerShakeAnimation();
           }
         }
       }
     } catch (error) {
       setOTPError('Failed to complete authentication. Please try again.');
+      triggerShakeAnimation();
     }
   };
 
@@ -229,6 +288,7 @@ const OTPVerificationScreen = () => {
     
     if (otpString.length !== 6) {
       setOTPError('Please enter all 6 digits');
+      triggerShakeAnimation();
       return false;
     }
     
@@ -252,6 +312,7 @@ const OTPVerificationScreen = () => {
       if (otpChannel === 'sms') {
         if (!smsConfirmation) {
           setOTPError('SMS confirmation not found. Please resend OTP.');
+          triggerShakeAnimation();
           return;
         }
         try {
@@ -284,6 +345,7 @@ const OTPVerificationScreen = () => {
         }
       } else {
         setOTPError('Please request an OTP first.');
+        triggerShakeAnimation();
         return;
       }
 
@@ -293,10 +355,12 @@ const OTPVerificationScreen = () => {
       } else {
         setOTPError(lastError || 'Failed to verify OTP. Please try again.');
         setAuthStatus('');
+        triggerShakeAnimation();
       }
     } catch (error: any) {
       setOTPError(error.message || 'Failed to verify OTP. Please try again.');
       setAuthStatus('');
+      triggerShakeAnimation();
     }
   };
 
@@ -317,106 +381,171 @@ const OTPVerificationScreen = () => {
     } catch (error) {
       setOTPError('Failed to resend OTP. Please try again.');
       setAuthStatus('');
+      triggerShakeAnimation();
     }
   };
 
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <ScrollView contentContainerStyle={styles.content}>
-            <>
-            {/* Header Section */}
-          <View style={styles.header}>
+      <View style={styles.container}>
+        {/* Gradient Header */}
+        <LinearGradient
+          colors={[COLORS.PRIMARY.MAIN, COLORS.PRIMARY.DARK]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
+        >
+          {/* Decorative circles */}
+          <View style={styles.headerCircle1} />
+          <View style={styles.headerCircle2} />
+          
+          <View style={styles.headerContent}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
+              <Ionicons name="arrow-back" size={24} color={COLORS.NEUTRAL.WHITE} />
             </TouchableOpacity>
-            <Image
-              source={require('../assets/harvest.png')}
-              style={styles.headerImage}
-              resizeMode="contain"
-            />
-            <Text variant="h2" weight="bold" style={styles.title}>
-              Sign in using OTP
-            </Text>
-            <Text variant="body" style={styles.subtitle}>
-              Enter the 6-digit code sent to
-            </Text>
-            <Text variant="body" weight="medium" style={styles.email}>
-              {pendingUserPhone || 'your phone'}
-            </Text>
-          </View>
-
-          {/* Status and Error Display */}
-          <View style={styles.statusContainer}>
-            {authStatus && (
-              <Text variant="body" style={styles.statusText}>
-                {authStatus}
+            
+            <Animated.View style={[styles.logoContainer, {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }]}>
+              <View style={styles.logoBackground}>
+                <Image
+                  source={require('../assets/logo.png')}
+                  style={styles.headerImage}
+                  resizeMode="contain"
+                />
+              </View>
+            </Animated.View>
+            
+            <Animated.View style={[styles.titleContainer, {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }]}>
+              <Text style={styles.appName}>Verify OTP</Text>
+              <Text style={styles.tagline}>
+                We sent a code to +91 {pendingUserPhone?.slice(-10) || 'your phone'}
               </Text>
-            )}
-            {otpError && (
-              <Text variant="caption" style={styles.errorText}>
-                {otpError}
+            </Animated.View>
+          </View>
+        </LinearGradient>
+
+        {/* OTP Card */}
+        <Animated.View style={[styles.otpCard, {
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }, { translateX: shakeAnim }]
+        }]}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoid}
+          >
+            <ScrollView 
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Status Display */}
+              {authStatus && !otpError && (
+                <View style={styles.statusContainer}>
+                  <View style={styles.statusIcon}>
+                    <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+                  </View>
+                  <Text style={styles.statusText}>{authStatus}</Text>
+                </View>
+              )}
+
+              {/* Error Display */}
+              {otpError && (
+                <View style={styles.errorContainer}>
+                  <View style={styles.errorIcon}>
+                    <Ionicons name="alert-circle" size={16} color="#EF4444" />
+                  </View>
+                  <Text style={styles.errorText}>{otpError}</Text>
+                </View>
+              )}
+
+              {/* OTP Input Grid */}
+              <View style={styles.otpContainer}>
+                <Text style={styles.otpLabel}>Enter Verification Code</Text>
+                <View style={styles.otpInputs}>
+                  {otp.map((digit, index) => (
+                    <TextInput
+                      key={index}
+                      ref={ref => { inputRefs.current[index] = ref; }}
+                      style={[
+                        styles.otpInput,
+                        digit && styles.otpInputFilled,
+                        otpError && styles.otpInputError,
+                      ]}
+                      value={digit}
+                      onChangeText={text => handleOTPChange(text, index)}
+                      onKeyPress={({nativeEvent}) => handleKeyPress(nativeEvent.key, index)}
+                      keyboardType="numeric"
+                      maxLength={1}
+                      textAlign="center"
+                      editable={!isVerifyingOTP}
+                      selectTextOnFocus
+                    />
+                  ))}
+                </View>
+              </View>
+
+              {/* Verify Button */}
+              <TouchableOpacity
+                style={[styles.verifyButton, isVerifyingOTP && styles.verifyButtonLoading]}
+                onPress={handleVerifyOTP}
+                disabled={isVerifyingOTP}
+                activeOpacity={0.8}
+              >
+                {isVerifyingOTP ? (
+                  <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                ) : (
+                  <>
+                    <Text style={styles.verifyButtonText}>Verify OTP</Text>
+                    <Ionicons name="checkmark-circle" size={20} color={COLORS.NEUTRAL.WHITE} />
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Resend Section */}
+              <View style={styles.resendSection}>
+                <Text style={styles.resendPrompt}>Didn't receive the code?</Text>
+                <View style={styles.resendButtons}>
+                  <TouchableOpacity
+                    style={styles.resendButton}
+                    onPress={handleResendOTP}
+                    disabled={isVerifyingOTP}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="refresh" size={18} color={COLORS.PRIMARY.MAIN} />
+                    <Text style={styles.resendButtonText}>Resend SMS</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.resendButton, styles.whatsappButton]}
+                    onPress={handleWhatsAppOTP}
+                    disabled={isVerifyingOTP || isWhatsAppLoading}
+                    activeOpacity={0.7}
+                  >
+                    {isWhatsAppLoading ? (
+                      <ActivityIndicator size="small" color="#25D366" />
+                    ) : (
+                      <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+                    )}
+                    <Text style={[styles.resendButtonText, { color: '#25D366' }]}>
+                      WhatsApp
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Help Text */}
+              <Text style={styles.helpText}>
+                Having trouble? Check your SMS or WhatsApp messages, or ensure you have a stable internet connection.
               </Text>
-            )}
-          </View>
-
-          {/* OTP Input Grid */}
-          <View style={styles.otpContainer}>
-            {otp.map((digit, index) => (
-              <TextInput
-                key={index}
-                ref={ref => { inputRefs.current[index] = ref; }}
-                style={[
-                  styles.otpInput,
-                  otpError ? styles.otpInputError : null,
-                ]}
-                value={digit}
-                onChangeText={text => handleOTPChange(text, index)}
-                onKeyPress={({nativeEvent}) => handleKeyPress(nativeEvent.key, index)}
-                keyboardType="numeric"
-                maxLength={1}
-                textAlign="center"
-                editable={!isVerifyingOTP}
-              />
-            ))}
-          </View>
-
-          {/* Verify Button */}
-          <Button
-            title="Verify OTP"
-            onPress={handleVerifyOTP}
-            loading={isVerifyingOTP}
-            fullWidth
-            style={styles.verifyButton}
-          />
-
-          {/* Resend OTP Link */}
-          <TouchableOpacity
-            style={styles.resendContainer}
-            onPress={handleResendOTP}
-            disabled={isVerifyingOTP}
-          >
-            <Text variant="caption" style={styles.resendText}>
-              Didn't receive the code? <Text style={styles.resendLink}>Resend</Text>
-            </Text>
-          </TouchableOpacity>
-
-          {/* WhatsApp OTP Link */}
-          <TouchableOpacity
-            style={styles.whatsappContainer}
-            onPress={handleWhatsAppOTP}
-            disabled={isVerifyingOTP}
-          >
-            <Text variant="caption" style={styles.whatsappText}>
-              Receive OTP on WhatsApp
-            </Text>
-          </TouchableOpacity>
-            </>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Animated.View>
+      </View>
     </SafeAreaWrapper>
   );
 };
@@ -424,105 +553,240 @@ const OTPVerificationScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
-  content: {
-    flexGrow: 1,
-    padding: SPACING.LG,
+  headerGradient: {
+    height: screenHeight * 0.32, // Reduced from 0.35 to match other screens
+    borderBottomLeftRadius: 15, // Reduced from 30 to match other screens
+    borderBottomRightRadius: 15,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  headerCircle1: {
+    position: 'absolute',
+    width: 150, // Reduced from 200 to match other screens
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    top: -30, // Adjusted from -50
+    right: -30,
+  },
+  headerCircle2: {
+    position: 'absolute',
+    width: 120, // Reduced from 150 to match other screens
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    bottom: -20, // Adjusted from -30
+    left: -20,
+  },
+  headerContent: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: SPACING['2XL'],
+    paddingTop: Platform.OS === 'ios' ? 60 : 40, // Adjusted padding to match other screens
+    position: 'relative',
   },
   backButton: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-  },
-  backImage: {
-    width: 24,
-    height: 24,
-  },
-  headerImage: {
-    width: 80,
-    height: 80,
-    marginBottom: SPACING.MD,
-  },
-  title: {
-    color: COLORS.PRIMARY.MAIN,
-    marginBottom: SPACING.SM,
-  },
-  subtitle: {
-    color: COLORS.TEXT.SECONDARY,
-    textAlign: 'center',
-    marginBottom: SPACING.XS,
-  },
-  email: {
-    color: COLORS.PRIMARY.MAIN,
-    textAlign: 'center',
-  },
-  statusContainer: {
-    backgroundColor: '#F0F9FF',
-    borderRadius: BORDER_RADIUS.SM,
-    padding: SPACING.SM,
-    marginBottom: SPACING.MD,
+    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to match other screens
+    left: SPACING.MD,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  statusText: {
-    color: '#0369A1',
+  logoContainer: {
+    marginBottom: SPACING.SM, // Reduced from MD to match other screens
+  },
+  logoBackground: {
+    width: 80, // Reduced from 100 to match other screens
+    height: 80,
+    borderRadius: 30, // Adjusted from 50 to match other screens
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.SM, // Reduced from MD
+  },
+  headerImage: {
+    width: 40, // Reduced from 60 to match other screens
+    height: 40,
+  },
+  titleContainer: {
+    alignItems: 'center',
+  },
+  appName: {
+    fontSize: 24, // Reduced from 28 to match other screens
+    fontFamily: FONTS.POPPINS.SEMIBOLD, // Changed from BOLD to match other screens
+    color: COLORS.NEUTRAL.WHITE,
+    marginBottom: 2, // Reduced from 8
+  },
+  tagline: {
+    fontSize: 11, // Reduced from 14 to match other screens
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
+    paddingHorizontal: SPACING.LG,
+    letterSpacing: 1.5, // Added to match other screens
+  },
+  otpCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginTop: -20, // Reduced from -30 to match other screens
+    marginHorizontal: SPACING.MD,
+    marginBottom: SPACING.LG, // Added to match other screens
+    borderRadius: 15, // Reduced from 20 to match other screens
+    flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 }, // Reduced shadow to match other screens
+    shadowOpacity: 0.08, // Reduced from 0.1
+    shadowRadius: 4, // Reduced from 8
+    elevation: 2, // Reduced from 5
+  },
+  keyboardAvoid: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: SPACING.XL, // Kept the same as original
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderRadius: 12,
+    padding: SPACING.MD,
+    marginBottom: SPACING.LG,
+  },
+  statusIcon: {
+    marginRight: SPACING.SM,
+  },
+  statusText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: SPACING.MD,
+    marginBottom: SPACING.LG,
+    borderLeftWidth: 4,
+    borderLeftColor: '#EF4444',
+  },
+  errorIcon: {
+    marginRight: SPACING.SM,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: '#EF4444',
   },
   otpContainer: {
+    marginBottom: SPACING.XL,
+  },
+  otpLabel: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    textAlign: 'center',
+    marginBottom: SPACING.LG,
+  },
+  otpInputs: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    width: '100%',
-    maxWidth: 300,
-    marginBottom: SPACING.MD,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.SM,
   },
   otpInput: {
-    width: 45,
-    height: 55,
-    borderWidth: 2,
-    borderColor: COLORS.BORDER.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    width: 48,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
     fontSize: 24,
-    fontWeight: '600',
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
-    ...SHADOWS.SM,
+    textAlign: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  otpInputFilled: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderColor: COLORS.PRIMARY.MAIN,
+    shadowColor: COLORS.PRIMARY.MAIN,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   otpInputError: {
     borderColor: '#EF4444',
-    borderWidth: 2,
-  },
-  errorText: {
-    color: '#EF4444',
-    textAlign: 'center',
-    marginTop: SPACING.SM,
+    backgroundColor: '#FEF2F2',
   },
   verifyButton: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderRadius: 10, // Reduced from 14 to match other screens
+    paddingVertical: 12, // Reduced from 16
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.SM,
+    marginBottom: SPACING.XL,
+  },
+  verifyButtonLoading: {
+    opacity: 0.8,
+  },
+  verifyButtonText: {
+    fontSize: 14, // Reduced from 16 to match other screens
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  resendSection: {
+    alignItems: 'center',
     marginBottom: SPACING.LG,
   },
-  resendContainer: {
-    alignItems: 'center',
-    marginTop: SPACING.MD,
-  },
-  resendText: {
+  resendPrompt: {
+    fontSize: 12, // Reduced from 14 to match other screens
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
+    marginBottom: SPACING.MD,
   },
-  resendLink: {
-    color: COLORS.PRIMARY.MAIN,
+  resendButtons: {
+    flexDirection: 'row',
+    gap: SPACING.MD,
   },
-  whatsappContainer: {
+  resendButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: SPACING.MD,
+    gap: SPACING.SM,
+    paddingHorizontal: SPACING.LG,
+    paddingVertical: SPACING.MD,
+    borderRadius: 25,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
   },
-  whatsappText: {
+  whatsappButton: {
+    backgroundColor: '#E8F8F0',
+    borderColor: '#25D366',
+  },
+  resendButtonText: {
+    fontSize: 12, // Reduced from 14 to match other screens
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.PRIMARY.MAIN,
+  },
+  helpText: {
+    fontSize: 11, // Reduced from 12
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PLACEHOLDER,
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: SPACING.SM,
   },
 });
 
 export default OTPVerificationScreen;
-
- 

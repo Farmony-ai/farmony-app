@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   welcomeText: {
     fontSize: 20, // Reduced from 24
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 4,
   },
