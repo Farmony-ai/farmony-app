@@ -1,44 +1,26 @@
 {
   "project_info": {
-    "project_number": "89534038928",
-    "project_id": "ruralshare-20509",
-    "storage_bucket": "ruralshare-20509.firebasestorage.app"
+    "project_number": "383808719248",
+    "project_id": "farmony-8e5ec",
+    "storage_bucket": "farmony-8e5ec.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:89534038928:android:950097caaf73a16c9da915",
+        "mobilesdk_app_id": "1:383808719248:android:6985e534a1b79d17000b15",
         "android_client_info": {
-          "package_name": "com.ruralshareapp"
+          "package_name": "com.ruralshareapp1"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "89534038928-drd9nklu7n5m3ofc8st8nfpgah0r0k6d.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.ruralshareapp",
-            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
-          }
-        },
-        {
-          "client_id": "89534038928-ben4fanr7nno3ctf9s0ir7q310rm3hd7.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDgkXrtyLIALS-79eIqq2wkbUIskadlLk8"
+          "current_key": "AIzaSyBzbutPA8jB8Fcb-rl_5GCpGZ_faL6Zdas"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "89534038928-ben4fanr7nno3ctf9s0ir7q310rm3hd7.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

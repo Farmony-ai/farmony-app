@@ -81,9 +81,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.ruralshareapp"
+    namespace "com.ruralshareapp1"
     defaultConfig {
-        applicationId "com.ruralshareapp"
+        applicationId "com.ruralshareapp1"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -117,6 +117,13 @@ dependencies {
     implementation "com.facebook.react:react-native:+"  // From node_modules
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation project(':react-native-gesture-handler')
+
+    // Import the Firebase BoM
+    implementation platform('com.google.firebase:firebase-bom:34.1.0')
+
+    // Add the dependency for the Firebase SDK for Google Analytics
+    // When using the BoM, you don't specify versions in Firebase library dependencies
+    implementation 'com.google.firebase:firebase-analytics'
 
 
     if (hermesEnabled.toBoolean()) {
