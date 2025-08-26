@@ -2,24 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CLIENT_ID</key>
-	<string>89534038928-hc3uco908c9l2bs18ku0rfqcflkeqnbh.apps.googleusercontent.com</string>
-	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.89534038928-hc3uco908c9l2bs18ku0rfqcflkeqnbh</string>
-	<key>ANDROID_CLIENT_ID</key>
-	<string>89534038928-drd9nklu7n5m3ofc8st8nfpgah0r0k6d.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
-	<string>AIzaSyBC7bVHW_Q6tOB0mcgz2pBEijNYqrdeK3Q</string>
+	<string>AIzaSyDFj1smtKrvMmIb9Mp4uxYfnnFJbX_kjVY</string>
 	<key>GCM_SENDER_ID</key>
-	<string>89534038928</string>
+	<string>383808719248</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.company.ruralshare</string>
+	<string>org.reactjs.native.example.RuralShareApp</string>
 	<key>PROJECT_ID</key>
-	<string>ruralshare-20509</string>
+	<string>farmony-8e5ec</string>
 	<key>STORAGE_BUCKET</key>
-	<string>ruralshare-20509.firebasestorage.app</string>
+	<string>farmony-8e5ec.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -31,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:89534038928:ios:b537fea29e9903949da915</string>
+	<string>1:383808719248:ios:460644a82be1fc75000b15</string>
 </dict>
 </plist>
