@@ -213,7 +213,7 @@ const CreateListingScreen = () => {
       case 3:
         return !!formData.price && !!formData.unitOfMeasure && !!formData.minimumOrder;
       case 4:
-        return !!formData.description && formData.photos.length > 0;
+        return formData.photos.length > 0;  // Only photos are required, description is optional
       default:
         return true;
     }
@@ -298,48 +298,50 @@ const CreateListingScreen = () => {
         </View>
       </View>
 
-      <View style={styles.formSection}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.categoryGrid}>
-            {availableCategories.map((category) => (
-              <TouchableOpacity
-                key={category._id}
+      <ScrollView 
+        style={styles.formSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        <View style={styles.categoryGrid}>
+          {availableCategories.map((category) => (
+            <TouchableOpacity
+              key={category._id}
+              style={[
+                styles.categoryCard,
+                formData.categoryId === category._id && styles.categoryCardActive,
+              ]}
+              onPress={() => handleCategorySelect(category._id)}
+              activeOpacity={0.7}
+            >
+              <Text
                 style={[
-                  styles.categoryCard,
-                  formData.categoryId === category._id && styles.categoryCardActive,
+                  styles.categoryText,
+                  formData.categoryId === category._id && styles.categoryTextActive,
                 ]}
-                onPress={() => handleCategorySelect(category._id)}
-                activeOpacity={0.7}
+                numberOfLines={2}
               >
-                <Text
-                  style={[
-                    styles.categoryText,
-                    formData.categoryId === category._id && styles.categoryTextActive,
-                  ]}
-                  numberOfLines={2}
-                >
-                  {category.name}
-                </Text>
-                <Image
-                  source={categoryIcons[category.icon || 'tools'] || categoryIcons['tools']}
-                  style={[
-                    styles.categoryIcon,
-                    formData.categoryId === category._id && { 
-                      tintColor: COLORS.PRIMARY.MAIN,
-                      opacity: 1 
-                    }
-                  ]}
-                />
-                {formData.categoryId === category._id && (
-                  <View style={styles.selectedBadge}>
-                    <Ionicons name="checkmark" size={12} color={COLORS.NEUTRAL.WHITE} />
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
+                {category.name}
+              </Text>
+              <Image
+                source={categoryIcons[category.icon || 'tools'] || categoryIcons['tools']}
+                style={[
+                  styles.categoryIcon,
+                  formData.categoryId === category._id && { 
+                    tintColor: COLORS.PRIMARY.MAIN,
+                    opacity: 1 
+                  }
+                ]}
+              />
+              {formData.categoryId === category._id && (
+                <View style={styles.selectedBadge}>
+                  <Ionicons name="checkmark" size={12} color={COLORS.NEUTRAL.WHITE} />
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
     </Animated.View>
   );
 
@@ -357,7 +359,11 @@ const CreateListingScreen = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.formSection} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.formSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
@@ -434,7 +440,11 @@ const CreateListingScreen = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.formSection} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.formSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Service Price</Text>
           <View style={styles.inputWrapper}>
@@ -538,7 +548,11 @@ const CreateListingScreen = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.formSection} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.formSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Service Photos</Text>
           <Text style={styles.inputHint}>Add up to 10 photos to showcase your service</Text>
@@ -558,7 +572,7 @@ const CreateListingScreen = () => {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Service Description</Text>
+          <Text style={styles.inputLabel}>Service Description (Optional)</Text>
           <Text style={styles.inputHint}>Describe what you offer and what makes it special</Text>
           <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
             <TextInput
@@ -833,7 +847,6 @@ const styles = StyleSheet.create({
   },
   formSection: {
     flex: 1,
-    paddingBottom: SPACING.XL,
   },
   
   // Category Grid
