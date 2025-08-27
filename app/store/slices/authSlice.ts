@@ -4,7 +4,7 @@ import { API_BASE_URL } from '../../config/api';
 import apiInterceptor from '../../services/apiInterceptor';
 
 // Storage keys constants - matching apiInterceptor
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'access_token',
   REFRESH_TOKEN: 'refresh_token',
   USER: 'user',
@@ -575,6 +575,11 @@ const authSlice = createSlice({
       state.token = action.payload.accessToken;
       state.refreshToken = action.payload.refreshToken;
     },
+    
+    // Update the in-memory user object (used after profile/preference edits)
+    setUser: (state, action: PayloadAction<User>) => {
+      state.user = action.payload;
+    },
   },
   
   extraReducers: (builder) => {
@@ -745,7 +750,8 @@ export const {
   startForgotPassword, 
   finishForgotPassword, 
   setOtpChannel,
-  updateTokens
+  updateTokens,
+  setUser
 } = authSlice.actions;
 
 export default authSlice.reducer;

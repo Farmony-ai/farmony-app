@@ -7,8 +7,8 @@ export const API_CONFIG = {
   development: {
     // For Android Emulator (most common)
     // android: 'http://localhost:3000',
-    // android: 'http://10.0.2.2:3000',
-    android: 'http://192.168.5.1:3000', 
+    android: 'http://10.0.2.2:3000',
+    // android: 'http://192.168.5.1:3000', 
     
     // For iOS Simulator (replace with your actual IP)
     ios: 'http://localhost:3000',
