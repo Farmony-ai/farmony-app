@@ -487,10 +487,12 @@ const OTPLoginScreen = () => {
           <Ionicons name="shield-checkmark-outline" size={36} color={COLORS.PRIMARY.MAIN} />
         </View>
         <Text style={styles.otpTitle}>Verification Code</Text>
-        <Text style={styles.otpSubtitle}>
-          Enter the 6-digit code sent to{'\n'}
-          <Text style={styles.phoneNumber}>+91 {phone}</Text>
-        </Text>
+        <View style={styles.phoneNumberWrapper}>
+            <Text style={styles.otpSubtitle}>
+                Enter the 6-digit code sent to
+            </Text>
+            <Text style={styles.phoneNumber}>+91 {phone}</Text>
+        </View>
       </View>
 
       <View style={styles.otpInputContainer}>
@@ -678,6 +680,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.MD,
     paddingVertical: SPACING.MD,
     backgroundColor: COLORS.NEUTRAL.WHITE,
+  },
+  phoneNumberWrapper: {
+    flexDirection: 'column',
+    alignItems: 'center',
   },
   backButton: {
     width: 40,
