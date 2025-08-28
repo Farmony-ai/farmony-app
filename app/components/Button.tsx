@@ -206,7 +206,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    ...SHADOWS.SM,
   },
 
   // Remove all shadow/elevation when needed (for outline/text variants)
@@ -243,16 +242,20 @@ const styles = StyleSheet.create({
   // Visual variants
   buttonPrimary: {
     backgroundColor: COLORS.PRIMARY.MAIN,
+    ...SHADOWS.SM,
   },
   buttonPrimaryDisabled: {
     backgroundColor: COLORS.NEUTRAL.GRAY[300],
+    ...SHADOWS.SM,
   },
   
   buttonSecondary: {
     backgroundColor: COLORS.SECONDARY.MAIN,
+    ...SHADOWS.SM,
   },
   buttonSecondaryDisabled: {
     backgroundColor: COLORS.NEUTRAL.GRAY[200],
+    ...SHADOWS.SM,
   },
   
   buttonOutline: {
@@ -273,9 +276,11 @@ const styles = StyleSheet.create({
   
   buttonDanger: {
     backgroundColor: '#EF4444',
+    ...SHADOWS.SM,
   },
   buttonDangerDisabled: {
     backgroundColor: COLORS.NEUTRAL.GRAY[300],
+    ...SHADOWS.SM,
   },
   
   // Button content layout

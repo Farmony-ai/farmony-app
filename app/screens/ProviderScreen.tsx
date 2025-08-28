@@ -302,9 +302,9 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.SM,
   },
   providerName: {
-    fontSize: FONT_SIZES.XL,
+    fontSize: FONT_SIZES.LG,
     color: COLORS.NEUTRAL.WHITE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontFamily: FONTS.POPPINS.MEDIUM,
   },
   notificationButton: {
     width: 36,
@@ -362,19 +362,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statValue: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.BOLD,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
-    lineHeight: 28,
+    lineHeight: 24,
     marginBottom: 2,
   },
   statLabel: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 16,
-    fontWeight: '500',
   },
   section: {
     paddingHorizontal: 20,
@@ -387,14 +386,13 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
-    fontWeight: '500',
   },
   viewAllText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.PRIMARY.MAIN,
   },
   bookingCard: {
@@ -423,20 +421,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   emptyTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 4,
   },
   emptySubtitle: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
     textAlign: 'center',
     marginBottom: 12,
   },
   emptyCta: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
   },
   createListingCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
@@ -463,8 +461,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   createListingTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 4,
   },
@@ -484,13 +482,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bookingTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 2,
   },
   customerName: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
   },
@@ -502,7 +500,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: '#155724',
   },
   bookingTime: {

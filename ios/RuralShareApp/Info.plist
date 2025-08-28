@@ -31,11 +31,13 @@
 			</array>
 		</dict>
 		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
 			<key>CFBundleURLName</key>
 			<string>firebase</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.89534038928-drd9nklu7n5m3ofc8st8nfpgah0r0k6d</string>
+				<string>com.googleusercontent.apps.89534038928-hc3uco908c9l2bs18ku0rfqcflkeqnbh</string>
 			</array>
 		</dict>
 		<dict>
@@ -125,6 +127,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>processing</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
