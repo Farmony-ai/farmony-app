@@ -19,7 +19,7 @@ import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, FONT_SIZES } from '../utils';
 import { isValidEmail, isRequired } from '../utils/validators';
-import { signIn, clearError } from '../store/slices/authSlice';
+import { signIn, clearError, setIsOtpLogin, setPendingUserPhone } from '../store/slices/authSlice';
 import { RootState, AppDispatch } from '../store';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
@@ -97,6 +97,12 @@ const SignInScreen = () => {
 
   const handleForgotPassword = () => {
     navigation.navigate('ForgotPassword');
+  };
+
+  const handleOTPLogin = () => {
+    // Set OTP login flag and navigate to OTPLogin screen
+    dispatch(setIsOtpLogin(true));
+    navigation.navigate('OTPLogin');
   };
 
   return (
@@ -245,7 +251,7 @@ const SignInScreen = () => {
           {/* OTP Login Button */}
           <TouchableOpacity
             style={styles.otpButton}
-            onPress={handleForgotPassword}
+            onPress={handleOTPLogin}
             activeOpacity={0.7}
           >
             <Ionicons name="phone-portrait-outline" size={18} color={COLORS.PRIMARY.MAIN} />
@@ -271,15 +277,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
   headerGradient: {
-    height: screenHeight * 0.30, // Reduced from 0.35
-    borderBottomLeftRadius: 15, // Reduced from 30
+    height: screenHeight * 0.30,
+    borderBottomLeftRadius: 15,
     borderBottomRightRadius: 15,
     position: 'relative',
     overflow: 'hidden',
   },
   headerCircle1: {
     position: 'absolute',
-    width: 150, // Reduced from 200
+    width: 150,
     height: 150,
     borderRadius: 75,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -288,7 +294,7 @@ const styles = StyleSheet.create({
   },
   headerCircle2: {
     position: 'absolute',
-    width: 120, // Reduced from 150
+    width: 120,
     height: 120,
     borderRadius: 60,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
@@ -299,13 +305,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: SPACING.MD, // Reduced padding
+    paddingTop: SPACING.MD,
   },
   logoContainer: {
-    marginBottom: SPACING.SM, // Reduced spacing
+    marginBottom: SPACING.SM,
   },
   logoBackground: {
-    width: 80, // Reduced from 80
+    width: 80,
     height: 80,
     borderRadius: 30,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -314,60 +320,59 @@ const styles = StyleSheet.create({
     padding: SPACING.SM,
   },
   logo: {
-    width: 40, // Reduced from 50
+    width: 40,
     height: 40,
   },
   appName: {
-    fontSize: 24, // Reduced from 30
+    fontSize: 24,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
     marginBottom: 2,
   },
   tagline: {
-    fontSize: 11, // Reduced from 14
+    fontSize: 11,
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: 'rgba(255, 255, 255, 0.9)',
     letterSpacing: 1.5,
   },
   formCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    marginTop: -20, // Reduced from -30
+    marginTop: -20,
     marginHorizontal: SPACING.MD,
-    marginBottom: SPACING.LG, // Add bottom margin to ensure visibility
-    borderRadius: 15, // Reduced from 20
-    padding: SPACING.XL, // Reduced from XL
+    marginBottom: SPACING.LG,
+    borderRadius: 15,
+    padding: SPACING.XL,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08, // Reduced shadow
-    shadowRadius: 4, // Reduced shadow radius
-    elevation: 2, // Reduced elevation
-    // Remove flex: 1 to prevent card from taking all available space
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   welcomeText: {
-    fontSize: 20, // Reduced from 24
+    fontSize: 20,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 4,
   },
   subtitleText: {
-    fontSize: 12, // Reduced from 14
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
-    marginBottom: SPACING.LG, // Reduced spacing
+    marginBottom: SPACING.LG,
   },
   inputContainer: {
-    marginBottom: SPACING.MD, // Reduced from LG
+    marginBottom: SPACING.MD,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    borderRadius: 10, // Reduced from 12
+    borderRadius: 10,
     paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM, // Reduced padding
+    paddingVertical: SPACING.SM,
     borderWidth: 1,
     borderColor: COLORS.BORDER.PRIMARY,
-    height: 44, // Fixed height to prevent focus issues
+    height: 44,
   },
   inputWrapperError: {
     borderColor: '#EF4444',
@@ -375,14 +380,14 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     marginLeft: SPACING.SM,
-    fontSize: 14, // Reduced from 16
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
-    paddingVertical: 0, // Remove default padding
+    paddingVertical: 0,
     height: '100%',
   },
   errorText: {
-    fontSize: 11, // Reduced from 12
+    fontSize: 11,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#EF4444',
     marginTop: 4,
@@ -392,14 +397,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.MD, // Reduced spacing
+    marginBottom: SPACING.MD,
   },
   rememberMe: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   checkbox: {
-    width: 18, // Reduced from 20
+    width: 18,
     height: 18,
     borderRadius: 4,
     borderWidth: 1.5,
@@ -413,12 +418,12 @@ const styles = StyleSheet.create({
     borderColor: COLORS.PRIMARY.MAIN,
   },
   rememberText: {
-    fontSize: 12, // Reduced from 14
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
   forgotText: {
-    fontSize: 12, // Reduced from 14
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.PRIMARY.MAIN,
   },
@@ -436,8 +441,8 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
-    borderRadius: 10, // Reduced from 12
-    paddingVertical: 12, // Reduced padding
+    borderRadius: 10,
+    paddingVertical: 12,
     alignItems: 'center',
     marginBottom: SPACING.MD,
   },
@@ -445,7 +450,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   signInText: {
-    fontSize: 14, // Reduced from 16
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
   },
@@ -461,12 +466,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.PRIMARY.LIGHT,
-    borderRadius: 10, // Reduced from 12
-    paddingVertical: 12, // Reduced padding
+    borderRadius: 10,
+    paddingVertical: 12,
     marginBottom: SPACING.LG,
   },
   otpButtonText: {
-    fontSize: 14, // Reduced from 16
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.PRIMARY.MAIN,
     marginLeft: SPACING.SM,
@@ -477,12 +482,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   signUpPrompt: {
-    fontSize: 12, // Reduced from 14
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
   signUpLink: {
-    fontSize: 12, // Reduced from 14
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.PRIMARY.MAIN,
   },

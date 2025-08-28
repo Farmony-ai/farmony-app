@@ -12,20 +12,18 @@ import {
   ActivityIndicator,
   Keyboard,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
-import LinearGradient from 'react-native-linear-gradient';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, FONTS, FONT_SIZES } from '../utils';
-import { isRequired, isValidPassword } from '../utils/validators';
+import { COLORS, SPACING, FONTS } from '../utils';
+import { isRequired } from '../utils/validators';
 import { 
-  startForgotPassword, 
+  setPendingUserPhone,
   clearError, 
   verifyOTP,
-  resetPassword,
+  otpLogin,
   setOtpChannel 
 } from '../store/slices/authSlice';
 import { RootState, AppDispatch } from '../store';
@@ -36,13 +34,13 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-const ForgotPasswordScreen = () => {
+const OTPLoginScreen = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch<AppDispatch>();
   const { isLoading, error, otpChannel, isVerifyingOTP } = useSelector((state: RootState) => state.auth);
 
   // Step state management
-  const [currentStep, setCurrentStep] = useState<'phone' | 'otp' | 'newPassword'>('phone');
+  const [currentStep, setCurrentStep] = useState<'phone' | 'otp'>('phone');
   
   // Phone step state
   const [phone, setPhone] = useState('');
@@ -58,19 +56,11 @@ const ForgotPasswordScreen = () => {
   const [isOTPLessInitialized, setIsOTPLessInitialized] = useState(false);
   const inputRefs = useRef<Array<TextInput | null>>([]);
 
-  // New Password step state
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [confirmPasswordError, setConfirmPasswordError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -89,9 +79,9 @@ const ForgotPasswordScreen = () => {
   }, []);
 
   useEffect(() => {
-    const stepIndex = currentStep === 'phone' ? 0 : currentStep === 'otp' ? 1 : 2;
+    const stepIndex = currentStep === 'phone' ? 0 : 1;
     Animated.timing(progressAnim, {
-      toValue: stepIndex / 2,
+      toValue: stepIndex,
       duration: 300,
       useNativeDriver: false,
     }).start();
@@ -104,6 +94,15 @@ const ForgotPasswordScreen = () => {
       }, 300);
     }
   }, [currentStep]);
+
+  const triggerShakeAnimation = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+    ]).start();
+  };
 
   const validatePhone = async () => {
     if (!isRequired(phone)) {
@@ -121,7 +120,7 @@ const ForgotPasswordScreen = () => {
       setIsValidating(false);
       
       if (!result.exists) {
-        setPhoneError('Phone number is not registered. Please register first.');
+        setPhoneError('Phone number is not registered. Please sign up first.');
         return false;
       }
     } catch (error) {
@@ -138,13 +137,13 @@ const ForgotPasswordScreen = () => {
     Keyboard.dismiss();
     if (!(await validatePhone())) return;
     dispatch(clearError());
+    dispatch(setPendingUserPhone(phone));
     
     try {
-      await dispatch(startForgotPassword(phone));
       startFirebaseSMSAuth();
       setCurrentStep('otp');
     } catch (error) {
-      console.error('Forgot password error:', error);
+      console.error('OTP login error:', error);
     }
   };
 
@@ -169,6 +168,7 @@ const ForgotPasswordScreen = () => {
       console.error('Failed to send SMS OTP:', error);
       setOTPError('Unable to send SMS OTP. Please try again.');
       setAuthStatus('');
+      triggerShakeAnimation();
     }
   };
 
@@ -184,6 +184,7 @@ const ForgotPasswordScreen = () => {
       console.error('Failed to initialize OTPLess:', error);
       setOTPError('Failed to initialize WhatsApp OTP service.');
       setAuthStatus('');
+      triggerShakeAnimation();
     } finally {
       setIsWhatsAppLoading(false);
     }
@@ -217,6 +218,7 @@ const ForgotPasswordScreen = () => {
       console.error('Failed to send WhatsApp OTP:', error);
       setOTPError('Failed to send WhatsApp OTP.');
       setAuthStatus('');
+      triggerShakeAnimation();
     }
   };
 
@@ -239,8 +241,9 @@ const ForgotPasswordScreen = () => {
           break;
         case 'One-tap authentication successful':
         case 'OTP verified successfully':
-          setAuthStatus('OTP verified successfully');
-          setCurrentStep('newPassword');
+          if (result.token) {
+            handleSuccessfulOTPVerification(result.token);
+          }
           break;
         default:
           setAuthStatus(result.message || 'Ready');
@@ -249,6 +252,28 @@ const ForgotPasswordScreen = () => {
     } else {
       setOTPError(result.error || 'OTP verification failed');
       setAuthStatus('');
+      triggerShakeAnimation();
+    }
+  };
+
+  const handleSuccessfulOTPVerification = async (token?: string) => {
+    try {
+      // For OTP login, directly log the user in
+      const result = await dispatch(otpLogin({ phone }));
+      
+      if (otpLogin.fulfilled.match(result)) {
+        // Navigate to home on successful login
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
+      } else {
+        setOTPError('Login failed. Please try again.');
+        triggerShakeAnimation();
+      }
+    } catch (error) {
+      setOTPError('Failed to complete authentication. Please try again.');
+      triggerShakeAnimation();
     }
   };
 
@@ -298,6 +323,7 @@ const ForgotPasswordScreen = () => {
       if (otpChannel === 'sms') {
         if (!smsConfirmation) {
           setOTPError('SMS confirmation not found. Please resend OTP.');
+          triggerShakeAnimation();
           return;
         }
         try {
@@ -329,17 +355,17 @@ const ForgotPasswordScreen = () => {
       }
 
       if (verificationSuccessful) {
-        // Store OTP verification in Redux state
-        await dispatch(verifyOTP({ phone, otp: otpString }));
-        setCurrentStep('newPassword');
+        await handleSuccessfulOTPVerification();
         setOTPError('');
       } else {
         setOTPError(lastError || 'Failed to verify OTP.');
         setAuthStatus('');
+        triggerShakeAnimation();
       }
     } catch (error: any) {
       setOTPError(error.message || 'Failed to verify OTP.');
       setAuthStatus('');
+      triggerShakeAnimation();
     }
   };
 
@@ -361,72 +387,9 @@ const ForgotPasswordScreen = () => {
     }
   };
 
-  const validatePassword = () => {
-    let isValid = true;
-    setPasswordError('');
-    setConfirmPasswordError('');
-
-    if (!isRequired(newPassword)) {
-      setPasswordError('Password is required');
-      isValid = false;
-    } else if (!isValidPassword(newPassword)) {
-      setPasswordError('Password must be 8+ characters with uppercase, lowercase, and numbers');
-      isValid = false;
-    }
-
-    if (!isRequired(confirmPassword)) {
-      setConfirmPasswordError('Please confirm your password');
-      isValid = false;
-    } else if (newPassword !== confirmPassword) {
-      setConfirmPasswordError('Passwords do not match');
-      isValid = false;
-    }
-
-    return isValid;
-  };
-
-  const handlePasswordReset = async () => {
-    if (!validatePassword()) return;
-    
-    setIsResetting(true);
-    try {
-      const result = await dispatch(resetPassword({
-        phone,
-        newPassword,
-      }));
-      
-      if (resetPassword.fulfilled.match(result)) {
-        // Successfully reset password, navigate to sign in
-        Alert.alert(
-          'Success',
-          'Your password has been reset successfully. Please sign in with your new password.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'SignIn' }],
-                });
-              },
-            },
-          ]
-        );
-      } else {
-        setPasswordError('Failed to reset password. Please try again.');
-      }
-    } catch (error) {
-      setPasswordError('An error occurred. Please try again.');
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
   const handleBack = () => {
     if (currentStep === 'otp') {
       setCurrentStep('phone');
-    } else if (currentStep === 'newPassword') {
-      setCurrentStep('otp');
     } else {
       navigation.goBack();
     }
@@ -443,7 +406,7 @@ const ForgotPasswordScreen = () => {
         </View>
       </View>
 
-      <Text style={styles.welcomeText}>Reset Password</Text>
+      <Text style={styles.welcomeText}>Sign in with OTP</Text>
       <Text style={styles.subtitleText}>
         Enter your registered phone number to receive a verification code
       </Text>
@@ -490,7 +453,7 @@ const ForgotPasswordScreen = () => {
       )}
 
       <TouchableOpacity
-        style={[styles.sendOTPButton, (isLoading || isValidating) && styles.sendOTPButtonLoading]}
+        style={[styles.primaryButton, (isLoading || isValidating) && styles.primaryButtonLoading]}
         onPress={handlePhoneSubmit}
         disabled={isLoading || isValidating}
         activeOpacity={0.8}
@@ -499,7 +462,7 @@ const ForgotPasswordScreen = () => {
           <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
         ) : (
           <>
-            <Text style={styles.sendOTPText}>Send OTP</Text>
+            <Text style={styles.primaryButtonText}>Send OTP</Text>
             <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
           </>
         )}
@@ -517,15 +480,16 @@ const ForgotPasswordScreen = () => {
   const renderOTPStep = () => (
     <Animated.View style={[styles.otpCard, {
       opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }]
+      transform: [{ scale: 0.95 }, { translateX: shakeAnim }]
     }]}>
       <View style={styles.otpHeader}>
         <View style={styles.otpIconContainer}>
-          <Ionicons name="shield-checkmark-outline" size={32} color={COLORS.PRIMARY.MAIN} />
+          <Ionicons name="shield-checkmark-outline" size={36} color={COLORS.PRIMARY.MAIN} />
         </View>
         <Text style={styles.otpTitle}>Verification Code</Text>
         <Text style={styles.otpSubtitle}>
-          Enter the 6-digit code sent to{'\n'}+91 {phone}
+          Enter the 6-digit code sent to{'\n'}
+          <Text style={styles.phoneNumber}>+91 {phone}</Text>
         </Text>
       </View>
 
@@ -575,7 +539,7 @@ const ForgotPasswordScreen = () => {
           <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
         ) : (
           <>
-            <Text style={styles.verifyButtonText}>Verify Code</Text>
+            <Text style={styles.verifyButtonText}>Verify & Sign In</Text>
             <Ionicons name="checkmark-circle" size={20} color={COLORS.NEUTRAL.WHITE} />
           </>
         )}
@@ -611,141 +575,10 @@ const ForgotPasswordScreen = () => {
           </TouchableOpacity>
         </View>
       </View>
-    </Animated.View>
-  );
 
-  const renderNewPasswordStep = () => (
-    <Animated.View style={[styles.formCard, {
-      opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }]
-    }]}>
-      <View style={styles.iconContainer}>
-        <View style={[styles.iconBackground, { backgroundColor: COLORS.SUCCESS.LIGHT }]}>
-          <Ionicons name="lock-open-outline" size={32} color={COLORS.SUCCESS.MAIN} />
-        </View>
-      </View>
-
-      <Text style={styles.welcomeText}>Create New Password</Text>
-      <Text style={styles.subtitleText}>
-        Your identity has been verified. Please set a new password for your account.
+      <Text style={styles.helpText}>
+        Check your SMS or WhatsApp messages. The code expires in 10 minutes.
       </Text>
-
-      <View style={styles.inputContainer}>
-        <Text style={styles.inputLabel}>New Password</Text>
-        <View style={[styles.inputWrapper, passwordError && styles.inputWrapperError]}>
-          <Ionicons name="lock-closed-outline" size={20} color={COLORS.TEXT.PLACEHOLDER} />
-          <TextInput
-            style={styles.input}
-            placeholder="Enter new password"
-            placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-            value={newPassword}
-            onChangeText={(text) => {
-              setNewPassword(text);
-              if (passwordError) setPasswordError('');
-            }}
-            secureTextEntry={!showPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isResetting}
-          />
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-            <Ionicons 
-              name={showPassword ? "eye-outline" : "eye-off-outline"} 
-              size={20} 
-              color={COLORS.TEXT.PLACEHOLDER} 
-            />
-          </TouchableOpacity>
-        </View>
-        {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
-      </View>
-
-      <View style={styles.inputContainer}>
-        <Text style={styles.inputLabel}>Confirm Password</Text>
-        <View style={[styles.inputWrapper, confirmPasswordError && styles.inputWrapperError]}>
-          <Ionicons name="lock-closed-outline" size={20} color={COLORS.TEXT.PLACEHOLDER} />
-          <TextInput
-            style={styles.input}
-            placeholder="Re-enter new password"
-            placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-            value={confirmPassword}
-            onChangeText={(text) => {
-              setConfirmPassword(text);
-              if (confirmPasswordError) setConfirmPasswordError('');
-            }}
-            secureTextEntry={!showConfirmPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isResetting}
-          />
-          <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-            <Ionicons 
-              name={showConfirmPassword ? "eye-outline" : "eye-off-outline"} 
-              size={20} 
-              color={COLORS.TEXT.PLACEHOLDER} 
-            />
-          </TouchableOpacity>
-        </View>
-        {confirmPasswordError ? <Text style={styles.errorText}>{confirmPasswordError}</Text> : null}
-      </View>
-
-      <View style={styles.passwordStrength}>
-        <View style={styles.strengthItem}>
-          <Ionicons 
-            name={newPassword.length >= 8 ? "checkmark-circle" : "ellipse-outline"} 
-            size={16} 
-            color={newPassword.length >= 8 ? COLORS.SUCCESS.MAIN : COLORS.TEXT.PLACEHOLDER} 
-          />
-          <Text style={[styles.strengthText, newPassword.length >= 8 && styles.strengthTextMet]}>
-            8+ characters
-          </Text>
-        </View>
-        <View style={styles.strengthItem}>
-          <Ionicons 
-            name={/[A-Z]/.test(newPassword) ? "checkmark-circle" : "ellipse-outline"} 
-            size={16} 
-            color={/[A-Z]/.test(newPassword) ? COLORS.SUCCESS.MAIN : COLORS.TEXT.PLACEHOLDER} 
-          />
-          <Text style={[styles.strengthText, /[A-Z]/.test(newPassword) && styles.strengthTextMet]}>
-            Uppercase
-          </Text>
-        </View>
-        <View style={styles.strengthItem}>
-          <Ionicons 
-            name={/[a-z]/.test(newPassword) ? "checkmark-circle" : "ellipse-outline"} 
-            size={16} 
-            color={/[a-z]/.test(newPassword) ? COLORS.SUCCESS.MAIN : COLORS.TEXT.PLACEHOLDER} 
-          />
-          <Text style={[styles.strengthText, /[a-z]/.test(newPassword) && styles.strengthTextMet]}>
-            Lowercase
-          </Text>
-        </View>
-        <View style={styles.strengthItem}>
-          <Ionicons 
-            name={/\d/.test(newPassword) ? "checkmark-circle" : "ellipse-outline"} 
-            size={16} 
-            color={/\d/.test(newPassword) ? COLORS.SUCCESS.MAIN : COLORS.TEXT.PLACEHOLDER} 
-          />
-          <Text style={[styles.strengthText, /\d/.test(newPassword) && styles.strengthTextMet]}>
-            Number
-          </Text>
-        </View>
-      </View>
-
-      <TouchableOpacity
-        style={[styles.sendOTPButton, isResetting && styles.sendOTPButtonLoading]}
-        onPress={handlePasswordReset}
-        disabled={isResetting}
-        activeOpacity={0.8}
-      >
-        {isResetting ? (
-          <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
-        ) : (
-          <>
-            <Text style={styles.sendOTPText}>Reset Password</Text>
-            <Ionicons name="checkmark-done" size={20} color={COLORS.NEUTRAL.WHITE} />
-          </>
-        )}
-      </TouchableOpacity>
     </Animated.View>
   );
 
@@ -788,27 +621,24 @@ const ForgotPasswordScreen = () => {
             />
           </View>
           <View style={styles.progressSteps}>
-            {['phone', 'otp', 'newPassword'].map((step, index) => (
+            {['phone', 'otp'].map((step, index) => (
               <View
                 key={step}
                 style={[
                   styles.progressStep,
                   (currentStep === 'otp' && index <= 1) || 
-                  (currentStep === 'newPassword' && index <= 2) || 
                   (currentStep === 'phone' && index === 0) 
                     ? styles.progressStepActive 
                     : null,
                 ]}
               >
-                {((currentStep === 'otp' && index < 1) || 
-                  (currentStep === 'newPassword' && index < 2)) ? (
+                {currentStep === 'otp' && index < 1 ? (
                   <Ionicons name="checkmark" size={14} color={COLORS.NEUTRAL.WHITE} />
                 ) : (
                   <Text
                     style={[
                       styles.progressStepText,
                       (currentStep === 'otp' && index <= 1) || 
-                      (currentStep === 'newPassword' && index <= 2) || 
                       (currentStep === 'phone' && index === 0)
                         ? styles.progressStepTextActive 
                         : null,
@@ -831,7 +661,6 @@ const ForgotPasswordScreen = () => {
         >
           {currentStep === 'phone' && renderPhoneStep()}
           {currentStep === 'otp' && renderOTPStep()}
-          {currentStep === 'newPassword' && renderNewPasswordStep()}
         </ScrollView>
       </View>
     </SafeAreaWrapper>
@@ -939,13 +768,13 @@ const styles = StyleSheet.create({
   },
   otpCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 15,
+    borderRadius: 20,
     padding: SPACING.XL,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 6,
+    elevation: 3,
   },
   iconContainer: {
     alignItems: 'center',
@@ -1038,7 +867,7 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     flex: 1,
   },
-  sendOTPButton: {
+  primaryButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
     borderRadius: 10,
     paddingVertical: 12,
@@ -1048,10 +877,10 @@ const styles = StyleSheet.create({
     gap: SPACING.SM,
     marginBottom: SPACING.LG,
   },
-  sendOTPButtonLoading: {
+  primaryButtonLoading: {
     opacity: 0.8,
   },
-  sendOTPText: {
+  primaryButtonText: {
     fontSize: 14,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
@@ -1075,51 +904,60 @@ const styles = StyleSheet.create({
   // OTP Step Styles
   otpHeader: {
     alignItems: 'center',
-    marginBottom: SPACING.XL,
+    marginBottom: SPACING.XXL,
   },
   otpIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: COLORS.PRIMARY.LIGHT,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.MD,
+    marginBottom: SPACING.LG,
   },
   otpTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    marginBottom: 8,
+    marginBottom: SPACING.SM,
   },
   otpSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
     textAlign: 'center',
     lineHeight: 20,
   },
+  phoneNumber: {
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+  },
   otpInputContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: SPACING.XL,
-    paddingHorizontal: SPACING.SM,
+    paddingHorizontal: SPACING.XS,
   },
   otpInput: {
-    width: 45,
-    height: 52,
+    width: 48,
+    height: 56,
     borderRadius: 12,
     backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    fontSize: 20,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: 24,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
     textAlign: 'center',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: 'transparent',
   },
   otpInputFilled: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderColor: COLORS.PRIMARY.MAIN,
+    shadowColor: COLORS.PRIMARY.MAIN,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   otpInputError: {
     borderColor: '#EF4444',
@@ -1152,8 +990,8 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1164,15 +1002,16 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   verifyButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
   },
   resendSection: {
     alignItems: 'center',
+    marginBottom: SPACING.LG,
   },
   resendPrompt: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
     marginBottom: SPACING.MD,
@@ -1185,45 +1024,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.SM,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    borderRadius: 20,
+    paddingHorizontal: SPACING.LG,
+    paddingVertical: SPACING.MD,
+    borderRadius: 25,
     backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
   },
   whatsappButton: {
     backgroundColor: '#E8F8F0',
+    borderColor: '#25D366',
   },
   resendButtonText: {
     fontSize: 13,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.PRIMARY.MAIN,
   },
-  
-  // Password Strength
-  passwordStrength: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.MD,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    padding: SPACING.MD,
-    borderRadius: 12,
-    marginTop: SPACING.SM,
-    marginBottom: SPACING.LG,
-  },
-  strengthItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  strengthText: {
+  helpText: {
     fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PLACEHOLDER,
-  },
-  strengthTextMet: {
-    color: COLORS.SUCCESS.MAIN,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: SPACING.SM,
   },
 });
 
-export default ForgotPasswordScreen;
+export default OTPLoginScreen;
