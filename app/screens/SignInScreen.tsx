@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
   appName: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
     marginBottom: 2,
