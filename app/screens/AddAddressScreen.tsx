@@ -186,6 +186,9 @@ const AddAddressScreen = () => {
       const best = result?.results?.[0];
       if (best) {
         applyAddressComponentsFromPlace(best.address_components, best.formatted_address);
+        if (best.formatted_address) {
+          setAddressName(best.formatted_address.split(',').slice(0, 2).join(', ').trim());
+        }
       }
     } catch (error) {
       console.error('Error reverse geocoding:', error);
@@ -304,7 +307,9 @@ const AddAddressScreen = () => {
               minLength={2}
               onPress={(data, details = null) => handlePlaceSelected(data, details)}
               query={{ key: GOOGLE_API_KEY, language: 'en', components: 'country:in' }}
+              keyboardShouldPersistTaps="handled" // FIX: Prevents tap interception by ScrollView
               fetchDetails
+              timeout={20000} // IMPORTANT: Prevents a native crash on network failure
               GooglePlacesDetailsQuery={{
                 // IMPORTANT: request address_components (plural)
                 fields: 'geometry,address_components,formatted_address,name,place_id,types',
@@ -393,7 +398,10 @@ const AddAddressScreen = () => {
           <View style={styles.locationInfo}>
             <Ionicons name="location-sharp" size={24} color={COLORS.PRIMARY.MAIN} />
             <View style={styles.locationTextContainer}>
-              <Text style={styles.locationTitle}>{reverseGeocoding ? 'Fetching address…' : addressName || 'Set service location'}</Text>
+              <View style={styles.locationTitleContainer}>
+                <Text style={styles.locationTitle}>{addressName || 'Set service location'}</Text>
+                {reverseGeocoding && <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />}
+              </View>
               <Text style={styles.locationSubtitle} numberOfLines={2}>
                 {[addressLine1, addressLine2, village, district, state, pincode].filter(Boolean).join(', ')}
               </Text>
@@ -401,6 +409,7 @@ const AddAddressScreen = () => {
           </View>
 
           {/* Tag chips (required enum) */}
+          <Text style={styles.formLabel}>Save this location as</Text>
           <View style={styles.tagRow}>
             {TAGS.map((t) => {
               const selected = String(addressTag).toLowerCase() === t;
@@ -418,85 +427,103 @@ const AddAddressScreen = () => {
           {errors.addressTag ? <Text style={styles.errorText}>{errors.addressTag}</Text> : null}
 
           <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.input, errors.addressLine1 && styles.inputError, focusedInput === 'addressLine1' && styles.inputFocused]}
-              value={addressLine1}
-              onChangeText={setAddressLine1}
-              placeholder="House/Plot/Building"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              onFocus={() => setFocusedInput('addressLine1')}
-              onBlur={() => setFocusedInput(null)}
-            />
+            <View style={styles.inputContainer}>
+              <Ionicons name="business-outline" size={18} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, styles.inputWithIcon, errors.addressLine1 && styles.inputError, focusedInput === 'addressLine1' && styles.inputFocused]}
+                value={addressLine1}
+                onChangeText={setAddressLine1}
+                placeholder="House/Plot/Building"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                onFocus={() => setFocusedInput('addressLine1')}
+                onBlur={() => setFocusedInput(null)}
+              />
+            </View>
             {errors.addressLine1 && <Text style={styles.errorText}>{errors.addressLine1}</Text>}
           </View>
 
           <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.input, focusedInput === 'addressLine2' && styles.inputFocused]}
-              value={addressLine2}
-              onChangeText={setAddressLine2}
-              placeholder="Area / Landmark"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              onFocus={() => setFocusedInput('addressLine2')}
-              onBlur={() => setFocusedInput(null)}
-            />
+            <View style={styles.inputContainer}>
+              <Ionicons name="map-outline" size={18} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, styles.inputWithIcon, focusedInput === 'addressLine2' && styles.inputFocused]}
+                value={addressLine2}
+                onChangeText={setAddressLine2}
+                placeholder="Area / Landmark"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                onFocus={() => setFocusedInput('addressLine2')}
+                onBlur={() => setFocusedInput(null)}
+              />
+            </View>
           </View>
 
           {/* NEW: editable administrative fields so backend requirements are always met */}
           <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.input, errors.village && styles.inputError, focusedInput === 'village' && styles.inputFocused]}
-              value={village}
-              onChangeText={setVillage}
-              placeholder="Village / Locality / Ward"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              onFocus={() => setFocusedInput('village')}
-              onBlur={() => setFocusedInput(null)}
-              autoCapitalize="words"
-            />
+            <View style={styles.inputContainer}>
+              <Ionicons name="navigate-circle-outline" size={18} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, styles.inputWithIcon, errors.village && styles.inputError, focusedInput === 'village' && styles.inputFocused]}
+                value={village}
+                onChangeText={setVillage}
+                placeholder="Village / Locality / Ward"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                onFocus={() => setFocusedInput('village')}
+                onBlur={() => setFocusedInput(null)}
+                autoCapitalize="words"
+              />
+            </View>
             {errors.village && <Text style={styles.errorText}>{errors.village}</Text>}
           </View>
 
           <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.input, errors.district && styles.inputError, focusedInput === 'district' && styles.inputFocused]}
-              value={district}
-              onChangeText={setDistrict}
-              placeholder="District / City"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              onFocus={() => setFocusedInput('district')}
-              onBlur={() => setFocusedInput(null)}
-              autoCapitalize="words"
-            />
+            <View style={styles.inputContainer}>
+              <Ionicons name="grid-outline" size={18} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, styles.inputWithIcon, errors.district && styles.inputError, focusedInput === 'district' && styles.inputFocused]}
+                value={district}
+                onChangeText={setDistrict}
+                placeholder="District / City"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                onFocus={() => setFocusedInput('district')}
+                onBlur={() => setFocusedInput(null)}
+                autoCapitalize="words"
+              />
+            </View>
             {errors.district && <Text style={styles.errorText}>{errors.district}</Text>}
           </View>
 
           <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.input, errors.state && styles.inputError, focusedInput === 'state' && styles.inputFocused]}
-              value={state}
-              onChangeText={setState}
-              placeholder="State"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              onFocus={() => setFocusedInput('state')}
-              onBlur={() => setFocusedInput(null)}
-              autoCapitalize="words"
-            />
+            <View style={styles.inputContainer}>
+              <Ionicons name="earth-outline" size={18} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, styles.inputWithIcon, errors.state && styles.inputError, focusedInput === 'state' && styles.inputFocused]}
+                value={state}
+                onChangeText={setState}
+                placeholder="State"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                onFocus={() => setFocusedInput('state')}
+                onBlur={() => setFocusedInput(null)}
+                autoCapitalize="words"
+              />
+            </View>
             {errors.state && <Text style={styles.errorText}>{errors.state}</Text>}
           </View>
 
           <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.input, errors.pincode && styles.inputError, focusedInput === 'pincode' && styles.inputFocused]}
-              value={pincode}
-              onChangeText={(v) => setPincode(v.replace(/[^\d]/g, '').slice(0, 6))}
-              placeholder="Pincode"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              onFocus={() => setFocusedInput('pincode')}
-              onBlur={() => setFocusedInput(null)}
-              keyboardType="number-pad"
-              maxLength={6}
-            />
+            <View style={styles.inputContainer}>
+              <Ionicons name="document-text-outline" size={18} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, styles.inputWithIcon, errors.pincode && styles.inputError, focusedInput === 'pincode' && styles.inputFocused]}
+                value={pincode}
+                onChangeText={(v) => setPincode(v.replace(/[^\d]/g, '').slice(0, 6))}
+                placeholder="Pincode"
+                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                onFocus={() => setFocusedInput('pincode')}
+                onBlur={() => setFocusedInput(null)}
+                keyboardType="number-pad"
+                maxLength={6}
+              />
+            </View>
             {errors.pincode && <Text style={styles.errorText}>{errors.pincode}</Text>}
           </View>
 
@@ -519,14 +546,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.SM,
     paddingVertical: SPACING.SM,
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2 },
-      android: { elevation: 4 },
-    }),
+    // REMOVED elevation to fix dropdown visibility issue on Android
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
     zIndex: 10,
   },
   backButton: { padding: SPACING.XS, marginRight: SPACING.XS, backgroundColor: '#f1f1f1', borderRadius: 20 },
-  searchContainer: { flex: 1, marginLeft: SPACING.SM, overflow: 'visible' },
+  searchContainer: { flex: 1, marginLeft: SPACING.SM, overflow: 'visible', zIndex: 10 },
   searchInput: {
     height: 40,
     backgroundColor: COLORS.BACKGROUND.PRIMARY,
@@ -574,12 +600,35 @@ const styles = StyleSheet.create({
   currentLocationButton: { position: 'absolute', bottom: SPACING.LG, right: SPACING.LG, backgroundColor: COLORS.NEUTRAL.WHITE, borderRadius: 50, padding: SPACING.SM, ...SHADOWS.MD },
   formContainer: { flex: 1, backgroundColor: COLORS.NEUTRAL.WHITE, paddingHorizontal: SPACING.MD, paddingTop: SPACING.MD },
   locationInfo: {
-    flexDirection: 'row', alignItems: 'flex-start', marginBottom: SPACING.LG, paddingBottom: SPACING.MD,
+    flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.LG, paddingBottom: SPACING.MD,
     borderBottomWidth: 1, borderBottomColor: COLORS.BORDER.PRIMARY,
   },
   locationTextContainer: { marginLeft: SPACING.MD, flex: 1 },
-  locationTitle: { fontSize: FONT_SIZES.LG, fontFamily: FONTS.POPPINS.SEMIBOLD, color: COLORS.TEXT.PRIMARY },
+  locationTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationTitle: { fontSize: FONT_SIZES.LG, fontFamily: FONTS.POPPINS.SEMIBOLD, color: COLORS.TEXT.PRIMARY, marginRight: SPACING.SM },
   locationSubtitle: { fontSize: FONT_SIZES.SM, fontFamily: FONTS.POPPINS.REGULAR, color: COLORS.TEXT.SECONDARY, marginTop: SPACING.XS },
+  
+  // New styles for UI improvements
+  formLabel: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.SM,
+    marginTop: SPACING.XS,
+  },
+  inputContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  inputIcon: {
+    position: 'absolute',
+    left: 12,
+    color: COLORS.TEXT.SECONDARY,
+  },
+
   tagRow: { flexDirection: 'row', gap: 8, marginBottom: SPACING.MD, flexWrap: 'wrap' },
   tagChip: {
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18,
@@ -600,6 +649,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.BORDER.PRIMARY,
     height: 50,
+  },
+  inputWithIcon: {
+    paddingLeft: 40, // Make space for the icon
   },
   inputFocused: { borderColor: COLORS.PRIMARY.MAIN, borderWidth: 1.5 },
   inputError: { borderColor: '#EF4444' },
