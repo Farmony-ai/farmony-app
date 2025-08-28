@@ -4,12 +4,9 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   Alert,
   RefreshControl,
-  NativeSyntheticEvent,
-  TextInputSubmitEditingEventData,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -21,20 +18,16 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { setLocation } from '../store/slices/locationSlice';
 import AddressService, { Address } from '../services/AddressService';
-import LocationService from '../services/locationService';
 
 const AddressSelectionScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { latitude, longitude, city } = useSelector((state: RootState) => state.location);
 
-  const [searchQuery, setSearchQuery] = useState('');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  const [fetchingCurrentLocation, setFetchingCurrentLocation] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,27 +59,6 @@ const AddressSelectionScreen = () => {
     setRefreshing(true);
     await fetchAddresses();
     setRefreshing(false);
-  };
-
-  const handleCurrentLocation = async () => {
-    setFetchingCurrentLocation(true);
-    try {
-      const location = await LocationService.getCurrentLocation();
-      if (location) {
-        dispatch(setLocation({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          city: location.city || 'Current Location',
-        }));
-        navigation.goBack();
-      } else {
-        Alert.alert('Error', 'Could not fetch current location. Please try again.');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to get current location. Please check your location settings.');
-    } finally {
-      setFetchingCurrentLocation(false);
-    }
   };
 
   const handleSelectAddress = async (address: Address) => {
@@ -141,35 +113,24 @@ const AddressSelectionScreen = () => {
     );
   };
 
-  const onSearchSubmit = (e: NativeSyntheticEvent<TextInputSubmitEditingEventData>) => {
-    const query = e.nativeEvent.text?.trim();
-    if (query?.length) {
-      navigation.navigate('AddAddress', { initialQuery: query });
-    }
-  };
-
   const getTagIcon = (tag: string) => {
     switch (tag) {
       case 'home':
-        return 'home';
+        return 'home-outline';
       case 'work':
-        return 'business';
+        return 'business-outline';
       case 'personal':
-        return 'person';
+        return 'person-outline';
       default:
-        return 'location-on';
+        return 'location-outline';
     }
   };
 
   const getDistanceText = (coords: [number, number]) => {
-    if (!latitude || !longitude) return '';
+    if (!coords) return '';
     
-    // Simple distance calculation (you might want to use a proper formula)
-    const distance = Math.sqrt(
-      Math.pow(coords[1] - latitude, 2) + 
-      Math.pow(coords[0] - longitude, 2)
-    ) * 111; // Rough conversion to km
-    
+    // Simple placeholder for distance
+    const distance = Math.random() * 5 + 0.5; // Random distance for demo
     return distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km`;
   };
 
@@ -179,25 +140,9 @@ const AddressSelectionScreen = () => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
+            <Ionicons name="arrow-back" size={22} color={COLORS.TEXT.PRIMARY} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Select delivery location</Text>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search" size={20} color={COLORS.TEXT.SECONDARY} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search for a building, street name or area"
-              placeholderTextColor={COLORS.TEXT.SECONDARY}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={onSearchSubmit}
-              returnKeyType="search"
-            />
-          </View>
+          <Text style={styles.headerTitle}>Select address</Text>
         </View>
 
         <ScrollView
@@ -207,33 +152,16 @@ const AddressSelectionScreen = () => {
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
           }
         >
-          {/* Current Location Option */}
-          <TouchableOpacity
-            style={styles.currentLocationButton}
-            onPress={handleCurrentLocation}
-            disabled={fetchingCurrentLocation}
-          >
-            <MaterialIcons 
-              name="my-location" 
-              size={20} 
-              color={COLORS.PRIMARY.MAIN} 
-            />
-            <Text style={styles.currentLocationText}>
-              {fetchingCurrentLocation ? 'Getting location...' : 'Use my current location'}
-            </Text>
-            {fetchingCurrentLocation && (
-              <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
-            )}
-            <Ionicons name="chevron-forward" size={20} color={COLORS.TEXT.SECONDARY} />
-          </TouchableOpacity>
-
-          {/* Add New Address */}
+          {/* Add New Address Button */}
           <TouchableOpacity
             style={styles.addNewButton}
             onPress={handleAddNewAddress}
           >
-            <Ionicons name="add" size={24} color={COLORS.PRIMARY.MAIN} />
+            <View style={styles.addIconWrapper}>
+              <Ionicons name="add" size={20} color={COLORS.PRIMARY.MAIN} />
+            </View>
             <Text style={styles.addNewText}>Add new address</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.TEXT.SECONDARY} />
           </TouchableOpacity>
 
           {/* Saved Addresses Section */}
@@ -255,30 +183,45 @@ const AddressSelectionScreen = () => {
                     ]}
                     onPress={() => handleSelectAddress(address)}
                   >
-                    <View style={styles.addressHeader}>
-                      <View style={styles.addressTagContainer}>
-                        <MaterialIcons
+                    <View style={styles.addressContent}>
+                      <View style={styles.addressIconContainer}>
+                        <Ionicons
                           name={getTagIcon(address.tag)}
                           size={20}
-                          color={COLORS.TEXT.PRIMARY}
+                          color={selectedAddressId === address._id ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY}
                         />
-                        <Text style={styles.addressTag}>
-                          {address.tag.charAt(0).toUpperCase() + address.tag.slice(1)}
-                        </Text>
-                        {address.coordinates && (
-                          <Text style={styles.addressDistance}>
-                            • {getDistanceText(address.coordinates)}
-                          </Text>
-                        )}
-                        {selectedAddressId === address._id && (
-                          <View style={styles.selectedBadge}>
-                            <Text style={styles.selectedText}>CURRENTLY SELECTED</Text>
-                          </View>
-                        )}
                       </View>
+                      
+                      <View style={styles.addressDetails}>
+                        <View style={styles.addressHeaderRow}>
+                          <Text style={styles.addressTag}>
+                            {address.tag.charAt(0).toUpperCase() + address.tag.slice(1)}
+                          </Text>
+                          {selectedAddressId === address._id && (
+                            <View style={styles.selectedBadge}>
+                              <Text style={styles.selectedText}>SELECTED</Text>
+                            </View>
+                          )}
+                        </View>
+                        
+                        <Text style={styles.addressLine1}>{address.addressLine1}</Text>
+                        {address.addressLine2 && (
+                          <Text style={styles.addressLine2}>{address.addressLine2}</Text>
+                        )}
+                        <Text style={styles.addressFullDetails}>
+                          {[
+                            address.village,
+                            address.district,
+                            address.state,
+                            address.pincode
+                          ].filter(Boolean).join(', ')}
+                        </Text>
+                      </View>
+
                       <TouchableOpacity
                         style={styles.menuButton}
-                        onPress={() => {
+                        onPress={(e) => {
+                          e.stopPropagation();
                           Alert.alert(
                             'Address Options',
                             '',
@@ -294,28 +237,24 @@ const AddressSelectionScreen = () => {
                           );
                         }}
                       >
-                        <Ionicons name="ellipsis-vertical" size={20} color={COLORS.TEXT.SECONDARY} />
+                        <Ionicons name="ellipsis-vertical" size={18} color={COLORS.TEXT.SECONDARY} />
                       </TouchableOpacity>
                     </View>
-                    
-                    <Text style={styles.addressLine1}>{address.addressLine1}</Text>
-                    {address.addressLine2 && (
-                      <Text style={styles.addressLine2}>{address.addressLine2}</Text>
-                    )}
-                    <Text style={styles.addressDetails}>
-                      {[
-                        address.village,
-                        address.tehsil,
-                        address.district,
-                        address.state,
-                        address.pincode,
-                        'India'
-                      ].filter(Boolean).join(', ')}
-                    </Text>
                   </TouchableOpacity>
                 ))
               )}
             </>
+          )}
+
+          {/* Empty State */}
+          {!loading && addresses.length === 0 && (
+            <View style={styles.emptyState}>
+              <Ionicons name="location-outline" size={64} color={COLORS.TEXT.PLACEHOLDER} />
+              <Text style={styles.emptyStateTitle}>No addresses saved</Text>
+              <Text style={styles.emptyStateText}>
+                Add your first address to get started
+              </Text>
+            </View>
           )}
         </ScrollView>
       </View>
@@ -343,68 +282,41 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  searchContainer: {
-    padding: SPACING.MD,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    borderRadius: BORDER_RADIUS.LG,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: SPACING.SM,
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.REGULAR,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
   },
   scrollContent: {
     paddingBottom: SPACING['4XL'],
   },
-  currentLocationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingVertical: SPACING.LG,
-    paddingHorizontal: SPACING.MD,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
-  },
-  currentLocationText: {
-    flex: 1,
-    marginLeft: SPACING.MD,
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.PRIMARY.MAIN,
-  },
   addNewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingVertical: SPACING.LG,
+    paddingVertical: SPACING.MD,
     paddingHorizontal: SPACING.MD,
-    marginBottom: SPACING.MD,
+    marginTop: SPACING.SM,
+    marginBottom: SPACING.SM,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.BORDER.PRIMARY,
   },
+  addIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.MD,
+  },
   addNewText: {
-    marginLeft: SPACING.SM,
+    flex: 1,
     fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.PRIMARY.MAIN,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.SECONDARY,
     paddingHorizontal: SPACING.MD,
     paddingVertical: SPACING.SM,
@@ -416,69 +328,99 @@ const styles = StyleSheet.create({
   },
   addressCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingVertical: SPACING.MD,
-    paddingHorizontal: SPACING.MD,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
+    marginHorizontal: SPACING.MD,
+    marginBottom: SPACING.SM,
+    borderRadius: BORDER_RADIUS.LG,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
   },
   selectedAddressCard: {
-    backgroundColor: '#F0FDF4',
+    borderColor: COLORS.PRIMARY.MAIN,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
   },
-  addressHeader: {
+  addressContent: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.SM,
+    padding: SPACING.MD,
   },
-  addressTagContainer: {
-    flexDirection: 'row',
+  addressIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginRight: SPACING.MD,
+  },
+  addressDetails: {
     flex: 1,
+    marginRight: SPACING.SM,
+  },
+  addressHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.XS,
   },
   addressTag: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
-    marginLeft: SPACING.SM,
-  },
-  addressDistance: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-    marginLeft: SPACING.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginRight: SPACING.SM,
   },
   selectedBadge: {
-    backgroundColor: COLORS.SUCCESS.MAIN,
+    backgroundColor: COLORS.PRIMARY.MAIN,
     paddingHorizontal: SPACING.SM,
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.SM,
-    marginLeft: SPACING.SM,
   },
   selectedText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: 10,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.NEUTRAL.WHITE,
-  },
-  menuButton: {
-    padding: SPACING.XS,
+    letterSpacing: 0.3,
   },
   addressLine1: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 2,
   },
   addressLine2: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
     marginBottom: 2,
   },
-  addressDetails: {
+  addressFullDetails: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  menuButton: {
+    padding: SPACING.XS,
+    marginTop: -4,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING['4XL'],
+  },
+  emptyStateTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginTop: SPACING.MD,
+    marginBottom: SPACING.SM,
+  },
+  emptyStateText: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
-    lineHeight: 18,
+    textAlign: 'center',
+    paddingHorizontal: SPACING['2XL'],
   },
 });
 
