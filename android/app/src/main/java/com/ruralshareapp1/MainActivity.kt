@@ -1,4 +1,4 @@
-package com.ruralshareapp
+package com.ruralshareapp1
 
 import android.os.Bundle;
 
