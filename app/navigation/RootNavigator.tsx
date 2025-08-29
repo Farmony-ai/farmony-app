@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useDispatch, useSelector } from 'react-redux';
@@ -6,6 +6,7 @@ import { RootState, AppDispatch } from '../store';
 import { checkAuth } from '../store/slices/authSlice';
 
 // Screens
+import SplashScreen from '../screens/SplashScreen';
 import AuthScreen from '../screens/AuthScreen';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
@@ -28,17 +29,33 @@ import MyListingsScreen from '../screens/MyListingsScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
 import AddressSelectionScreen from '../screens/AddressSelectionScreen';
 import AddAddressScreen from '../screens/AddAddressScreen';
+import PaymentSelectionScreen from '../screens/PaymentSelectionScreen';
 
 const Stack = createStackNavigator();
 
 const RootNavigator = () => {
   const { isAuthenticated, isLoading } = useSelector((state: RootState) => state.auth);
   const dispatch: AppDispatch = useDispatch();
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
+    // Check auth while splash is showing
     dispatch(checkAuth());
+    
+    // Hide splash after minimum display time
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 3000);
+    
+    return () => clearTimeout(timer);
   }, [dispatch]);
 
+  // Show splash screen
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
+
+  // Show loading after splash if still checking auth
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -68,6 +85,7 @@ const RootNavigator = () => {
             <Stack.Screen name="Checkout" component={CheckoutScreen} />
             <Stack.Screen name="AddressSelection" component={AddressSelectionScreen} />
             <Stack.Screen name="AddAddress" component={AddAddressScreen} />
+            <Stack.Screen name="PaymentSelection" component={PaymentSelectionScreen} />
           </>
         ) : (
           <>

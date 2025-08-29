@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,21 +8,23 @@ import {
   Platform,
   KeyboardAvoidingView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import Button from '../components/Button';
+import AddressService, { Address } from '../services/AddressService';
 
 const CheckoutScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { listing, dateRange } = route.params;
+  const { listing, dateRange, selectedAddressId } = route.params;
   const { user } = useSelector((state: RootState) => state.auth);
   
   // Get date from Redux if not passed in params
@@ -33,14 +35,61 @@ const CheckoutScreen = () => {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [notes, setNotes] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('cod'); // cod, upi, card
-  const [address, setAddress] = useState('');
-  const [phone, setPhone] = useState(user?.phone || '');
   const [loading, setLoading] = useState(false);
+
+  // Address state
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
+  const [loadingAddresses, setLoadingAddresses] = useState(true);
+  const [showAllAddresses, setShowAllAddresses] = useState(false);
 
   const unitPrice = listing.price;
   const totalAmount = unitPrice * quantity;
   const unitOfMeasure = listing.unitOfMeasure;
+
+  // Load addresses on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchAddresses();
+    }, [user])
+  );
+
+  // Handle address selection from route params (when returning from AddAddress)
+  useEffect(() => {
+    if (selectedAddressId && addresses.length > 0) {
+      const address = addresses.find(addr => addr._id === selectedAddressId);
+      if (address) {
+        setSelectedAddress(address);
+      }
+    }
+  }, [selectedAddressId, addresses]);
+
+  const fetchAddresses = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingAddresses(true);
+      const userAddresses = await AddressService.getUserAddresses(user.id);
+      setAddresses(userAddresses);
+      
+      // Set default address or first address as selected
+      if (!selectedAddress && !selectedAddressId) {
+        const defaultAddress = userAddresses.find(addr => addr.isDefault);
+        setSelectedAddress(defaultAddress || userAddresses[0] || null);
+      }
+    } catch (error) {
+      console.error('Error fetching addresses:', error);
+    } finally {
+      setLoadingAddresses(false);
+    }
+  };
+
+  const handleAddNewAddress = () => {
+    navigation.navigate('AddAddress', { 
+      fromCheckout: true,
+      listingDetails: listing 
+    });
+  };
 
   const incrementQuantity = () => {
     setQuantity(prev => prev + 1);
@@ -52,39 +101,41 @@ const CheckoutScreen = () => {
     }
   };
 
-  const handlePlaceOrder = async () => {
+  const handleProceedToPayment = async () => {
     // Validation
     if (!selectedDate || !selectedTime) {
       Alert.alert('Missing Information', 'Please select date and time for the service.');
       return;
     }
     
-    if (!address) {
-      Alert.alert('Missing Information', 'Please provide your address.');
-      return;
-    }
-    
-    if (!phone) {
-      Alert.alert('Missing Information', 'Please provide your phone number.');
+    if (!selectedAddress) {
+      Alert.alert('Missing Information', 'Please select an address.');
       return;
     }
 
-    setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert(
-        'Order Placed Successfully!',
-        'Your booking has been sent to the service provider. They will contact you shortly.',
-        [
-          { 
-            text: 'OK', 
-            onPress: () => navigation.navigate('Home')
-          }
-        ]
-      );
-    }, 1500);
+    // Navigate to payment screen with user's verified phone
+    navigation.navigate('PaymentSelection', {
+      listing,
+      quantity,
+      address: selectedAddress,
+      serviceDate: selectedDate,
+      serviceTime: selectedTime,
+      phone: user?.phone || '', // Use verified phone from user state
+      notes,
+      totalAmount,
+      orderDetails: {
+        listingId: listing._id,
+        seekerId: user?.id,
+        providerId: listing.providerId,
+        orderType: listing.type,
+        totalAmount,
+        serviceStartDate: selectedDate,
+        quantity,
+        unitOfMeasure: listing.unitOfMeasure,
+        coordinates: selectedAddress?.coordinates,
+        addressId: selectedAddress?._id,
+      }
+    });
   };
 
   const timeSlots = [
@@ -162,6 +213,15 @@ const CheckoutScreen = () => {
     }
   }, []);
 
+  const getAddressIcon = (tag: string) => {
+    switch (tag) {
+      case 'home': return 'home-outline';
+      case 'work': return 'business-outline';
+      case 'personal': return 'person-outline';
+      default: return 'location-outline';
+    }
+  };
+
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
       <KeyboardAvoidingView
@@ -216,8 +276,6 @@ const CheckoutScreen = () => {
                 </TouchableOpacity>
               </View>
             </View>
-
-            
           </View>
 
           {/* Bill Summary */}
@@ -314,86 +372,117 @@ const CheckoutScreen = () => {
             </View>
           </View>
 
-          {/* Service Details */}
+          {/* Address Selection Card - Compact */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Service Details</Text>
+            <Text style={styles.cardTitle}>Your Address</Text>
             
-            <Text style={styles.inputLabel}>Service Address *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Enter complete address where service is needed"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              value={address}
-              onChangeText={setAddress}
-              multiline
-              numberOfLines={3}
-            />
+            {loadingAddresses ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+              </View>
+            ) : addresses.length > 0 ? (
+              <>
+                {/* Selected Address - Compact */}
+                {selectedAddress && (
+                  <TouchableOpacity 
+                    style={styles.compactAddressCard}
+                    onPress={() => setShowAllAddresses(!showAllAddresses)}
+                  >
+                    <View style={styles.compactAddressLeft}>
+                      <Ionicons 
+                        name={getAddressIcon(selectedAddress.tag)} 
+                        size={18} 
+                        color={COLORS.PRIMARY.MAIN} 
+                      />
+                    </View>
+                    <View style={styles.compactAddressContent}>
+                      <Text style={styles.compactAddressTag}>
+                        {selectedAddress.tag.charAt(0).toUpperCase() + selectedAddress.tag.slice(1)}
+                        {selectedAddress.isDefault && ' • Default'}
+                      </Text>
+                      <Text style={styles.compactAddressText} numberOfLines={2}>
+                        {[
+                          selectedAddress.addressLine1,
+                          selectedAddress.addressLine2,
+                          selectedAddress.village,
+                          selectedAddress.district,
+                          selectedAddress.pincode
+                        ].filter(Boolean).join(', ')}
+                      </Text>
+                    </View>
+                    <Ionicons 
+                      name={showAllAddresses ? 'chevron-up' : 'chevron-down'} 
+                      size={18} 
+                      color={COLORS.TEXT.SECONDARY} 
+                    />
+                  </TouchableOpacity>
+                )}
 
-            <Text style={styles.inputLabel}>Phone Number *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Enter contact number"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-            />
+                {/* Other Addresses (Expandable) */}
+                {showAllAddresses && addresses.length > 0 && (
+                  <View style={styles.expandedAddresses}>
+                    {addresses.filter(addr => addr._id !== selectedAddress?._id).map((address) => (
+                      <TouchableOpacity 
+                        key={address._id}
+                        style={styles.compactAddressOption}
+                        onPress={() => {
+                          setSelectedAddress(address);
+                          setShowAllAddresses(false);
+                        }}
+                      >
+                        <View style={styles.radioButton}>
+                          <View style={styles.radioOuter} />
+                        </View>
+                        <View style={styles.compactAddressContent}>
+                          <Text style={styles.compactAddressTag}>
+                            {address.tag.charAt(0).toUpperCase() + address.tag.slice(1)}
+                          </Text>
+                          <Text style={styles.compactAddressText} numberOfLines={2}>
+                            {[
+                              address.addressLine1,
+                              address.village,
+                              address.district,
+                              address.pincode
+                            ].filter(Boolean).join(', ')}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    
+                    {/* Add New Address Option */}
+                    <TouchableOpacity 
+                      style={styles.compactAddNewButton}
+                      onPress={handleAddNewAddress}
+                    >
+                      <Ionicons name="add-circle-outline" size={18} color={COLORS.PRIMARY.MAIN} />
+                      <Text style={styles.compactAddNewText}>Add New Address</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            ) : (
+              <TouchableOpacity 
+                style={styles.emptyAddressButton}
+                onPress={handleAddNewAddress}
+              >
+                <Ionicons name="add-circle-outline" size={20} color={COLORS.PRIMARY.MAIN} />
+                <Text style={styles.emptyAddressText}>Add Your Address</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-            <Text style={styles.inputLabel}>Additional Notes (Optional)</Text>
+          {/* Additional Notes Card - Separate */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Additional Information</Text>
             <TextInput
-              style={styles.textInput}
-              placeholder="Any special instructions or requirements"
+              style={styles.notesInput}
+              placeholder="Any special instructions or requirements (Optional)"
               placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
               value={notes}
               onChangeText={setNotes}
               multiline
-              numberOfLines={3}
+              numberOfLines={2}
             />
-          </View>
-
-          {/* Payment Method */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Payment Method</Text>
-            
-            <TouchableOpacity
-              style={[
-                styles.paymentOption,
-                paymentMethod === 'cod' && styles.paymentOptionActive
-              ]}
-              onPress={() => setPaymentMethod('cod')}
-            >
-              <View style={styles.paymentOptionContent}>
-                <MaterialIcons name="payments" size={24} color={COLORS.PRIMARY.MAIN} />
-                <View style={styles.paymentOptionText}>
-                  <Text style={styles.paymentOptionTitle}>Cash on Delivery</Text>
-                  <Text style={styles.paymentOptionSubtitle}>Pay when service is completed</Text>
-                </View>
-              </View>
-              <View style={[
-                styles.radioButton,
-                paymentMethod === 'cod' && styles.radioButtonActive
-              ]} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.paymentOption,
-                paymentMethod === 'upi' && styles.paymentOptionActive
-              ]}
-              onPress={() => setPaymentMethod('upi')}
-            >
-              <View style={styles.paymentOptionContent}>
-                <MaterialIcons name="account-balance" size={24} color={COLORS.PRIMARY.MAIN} />
-                <View style={styles.paymentOptionText}>
-                  <Text style={styles.paymentOptionTitle}>UPI Payment</Text>
-                  <Text style={styles.paymentOptionSubtitle}>Pay using Google Pay, PhonePe, etc</Text>
-                </View>
-              </View>
-              <View style={[
-                styles.radioButton,
-                paymentMethod === 'upi' && styles.radioButtonActive
-              ]} />
-            </TouchableOpacity>
           </View>
 
           {/* Bottom Spacing */}
@@ -403,8 +492,8 @@ const CheckoutScreen = () => {
         {/* Bottom Payment Button */}
         <View style={styles.bottomContainer}>
           <Button
-            title={`Pay ₹${totalAmount.toLocaleString('en-IN')}`}
-            onPress={handlePlaceOrder}
+            title={`Proceed to Payment • ₹${totalAmount.toLocaleString('en-IN')}`}
+            onPress={handleProceedToPayment}
             loading={loading}
             style={styles.payButton}
           />
@@ -506,28 +595,6 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.MD,
     minWidth: 30,
     textAlign: 'center',
-  },
-  optionsRow: {
-    flexDirection: 'row',
-    gap: SPACING.MD,
-    marginTop: SPACING.MD,
-  },
-  optionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.XS,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-  },
-  optionText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.SECONDARY,
   },
   card: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
@@ -657,51 +724,6 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT.PRIMARY,
     backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
-  paymentOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    marginBottom: SPACING.SM,
-  },
-  paymentOptionActive: {
-    borderColor: COLORS.PRIMARY.MAIN,
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-  },
-  paymentOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  paymentOptionText: {
-    marginLeft: SPACING.MD,
-    flex: 1,
-  },
-  paymentOptionTitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  paymentOptionSubtitle: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-    marginTop: 2,
-  },
-  radioButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: COLORS.BORDER.PRIMARY,
-  },
-  radioButtonActive: {
-    borderColor: COLORS.PRIMARY.MAIN,
-    backgroundColor: COLORS.PRIMARY.MAIN,
-  },
   bottomContainer: {
     position: 'absolute',
     bottom: 0,
@@ -742,6 +764,115 @@ const styles = StyleSheet.create({
   payButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
     borderRadius: BORDER_RADIUS.LG,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: SPACING.MD,
+  },
+  compactAddressCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.SM,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderRadius: BORDER_RADIUS.MD,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  compactAddressLeft: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.SM,
+  },
+  compactAddressContent: {
+    flex: 1,
+    marginRight: SPACING.SM,
+  },
+  compactAddressTag: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+    marginBottom: 2,
+  },
+  compactAddressText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    lineHeight: 16,
+  },
+  expandedAddresses: {
+    marginTop: SPACING.SM,
+    paddingTop: SPACING.SM,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+  },
+  compactAddressOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: SPACING.SM,
+    marginBottom: SPACING.XS,
+    borderRadius: BORDER_RADIUS.SM,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
+  radioButton: {
+    marginRight: SPACING.SM,
+    paddingTop: 2,
+  },
+  radioOuter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  compactAddNewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.SM,
+    marginTop: SPACING.XS,
+    borderRadius: BORDER_RADIUS.SM,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
+    borderStyle: 'dashed',
+  },
+  compactAddNewText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+    marginLeft: SPACING.XS,
+  },
+  emptyAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.MD,
+    borderRadius: BORDER_RADIUS.MD,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
+    borderStyle: 'dashed',
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+  },
+  emptyAddressText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+    marginLeft: SPACING.SM,
+  },
+  notesInput: {
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    borderRadius: BORDER_RADIUS.MD,
+    padding: SPACING.SM,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    minHeight: 60,
+    textAlignVertical: 'top',
   },
 });
 
