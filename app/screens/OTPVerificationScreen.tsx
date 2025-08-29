@@ -16,11 +16,9 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useDispatch, useSelector} from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
-import LinearGradient from 'react-native-linear-gradient';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import Button from '../components/Button';
-import {COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS} from '../utils';
+import {COLORS, SPACING, BORDER_RADIUS, FONTS} from '../utils';
 import {verifyOTP, clearError, updateUserVerification, otpLogin, setOtpChannel} from '../store/slices/authSlice';
 import {RootState, AppDispatch} from '../store';
 import otplessService from '../services/otpless';
@@ -224,11 +222,16 @@ const OTPVerificationScreen = () => {
     }
   };
 
-    // ✅ Handle successful OTP verification
+  // ✅ Handle successful OTP verification
   const handleSuccessfulOTPVerification = async (token?: string) => {
     try {
       if (isForgotPassword) {
-        await dispatch(otpLogin({ phone: pendingUserPhone || '' }));
+        // For forgot password flow, just verify the OTP
+        // The ForgotPasswordScreen will handle the next step
+        await dispatch(verifyOTP({ 
+          phone: pendingUserPhone || '', 
+          otp: otp.join('') 
+        }));
         return;
       }
 
@@ -388,67 +391,75 @@ const OTPVerificationScreen = () => {
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
       <View style={styles.container}>
-        {/* Gradient Header */}
-        <LinearGradient
-          colors={[COLORS.PRIMARY.MAIN, COLORS.PRIMARY.DARK]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.headerGradient}
-        >
-          {/* Decorative circles */}
-          <View style={styles.headerCircle1} />
-          <View style={styles.headerCircle2} />
+        {/* Minimal Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
+          </TouchableOpacity>
           
-          <View style={styles.headerContent}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.NEUTRAL.WHITE} />
-            </TouchableOpacity>
-            
-            <Animated.View style={[styles.logoContainer, {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }]}>
-              <View style={styles.logoBackground}>
-                <Image
-                  source={require('../assets/logo.png')}
-                  style={styles.headerImage}
-                  resizeMode="contain"
-                />
-              </View>
-            </Animated.View>
-            
-            <Animated.View style={[styles.titleContainer, {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }]}>
-              <Text style={styles.appName}>Verify OTP</Text>
-              <Text style={styles.tagline}>
-                We sent a code to +91 {pendingUserPhone?.slice(-10) || 'your phone'}
-              </Text>
-            </Animated.View>
+          <View style={styles.logoSection}>
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.brandName}>Farmony</Text>
           </View>
-        </LinearGradient>
+        </View>
 
         {/* OTP Card */}
-        <Animated.View style={[styles.otpCard, {
-          opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }, { translateX: shakeAnim }]
-        }]}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.keyboardAvoid}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoid}
+        >
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <ScrollView 
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
+            <Animated.View style={[styles.otpCard, {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }, { translateX: shakeAnim }]
+            }]}>
+              {/* Icon and Title */}
+              <View style={styles.cardHeader}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="shield-checkmark-outline" size={36} color={COLORS.PRIMARY.MAIN} />
+                </View>
+                <Text style={styles.title}>Verification Code</Text>
+                <Text style={styles.subtitle}>
+                  Enter the 6-digit code sent to{'\n'}
+                  <Text style={styles.phoneNumber}>+91 {pendingUserPhone?.slice(-10) || 'your phone'}</Text>
+                </Text>
+              </View>
+
+              {/* OTP Input Grid */}
+              <View style={styles.otpContainer}>
+                {otp.map((digit, index) => (
+                  <TextInput
+                    key={index}
+                    ref={ref => { inputRefs.current[index] = ref; }}
+                    style={[
+                      styles.otpInput,
+                      digit && styles.otpInputFilled,
+                      otpError && styles.otpInputError,
+                    ]}
+                    value={digit}
+                    onChangeText={text => handleOTPChange(text, index)}
+                    onKeyPress={({nativeEvent}) => handleKeyPress(nativeEvent.key, index)}
+                    keyboardType="numeric"
+                    maxLength={1}
+                    textAlign="center"
+                    editable={!isVerifyingOTP}
+                    selectTextOnFocus
+                  />
+                ))}
+              </View>
+
               {/* Status Display */}
               {authStatus && !otpError && (
                 <View style={styles.statusContainer}>
-                  <View style={styles.statusIcon}>
-                    <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
-                  </View>
+                  <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
                   <Text style={styles.statusText}>{authStatus}</Text>
                 </View>
               )}
@@ -456,38 +467,10 @@ const OTPVerificationScreen = () => {
               {/* Error Display */}
               {otpError && (
                 <View style={styles.errorContainer}>
-                  <View style={styles.errorIcon}>
-                    <Ionicons name="alert-circle" size={16} color="#EF4444" />
-                  </View>
+                  <Ionicons name="alert-circle" size={16} color="#EF4444" />
                   <Text style={styles.errorText}>{otpError}</Text>
                 </View>
               )}
-
-              {/* OTP Input Grid */}
-              <View style={styles.otpContainer}>
-                <Text style={styles.otpLabel}>Enter Verification Code</Text>
-                <View style={styles.otpInputs}>
-                  {otp.map((digit, index) => (
-                    <TextInput
-                      key={index}
-                      ref={ref => { inputRefs.current[index] = ref; }}
-                      style={[
-                        styles.otpInput,
-                        digit && styles.otpInputFilled,
-                        otpError && styles.otpInputError,
-                      ]}
-                      value={digit}
-                      onChangeText={text => handleOTPChange(text, index)}
-                      onKeyPress={({nativeEvent}) => handleKeyPress(nativeEvent.key, index)}
-                      keyboardType="numeric"
-                      maxLength={1}
-                      textAlign="center"
-                      editable={!isVerifyingOTP}
-                      selectTextOnFocus
-                    />
-                  ))}
-                </View>
-              </View>
 
               {/* Verify Button */}
               <TouchableOpacity
@@ -500,7 +483,7 @@ const OTPVerificationScreen = () => {
                   <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
                 ) : (
                   <>
-                    <Text style={styles.verifyButtonText}>Verify OTP</Text>
+                    <Text style={styles.verifyButtonText}>Verify Code</Text>
                     <Ionicons name="checkmark-circle" size={20} color={COLORS.NEUTRAL.WHITE} />
                   </>
                 )}
@@ -540,11 +523,11 @@ const OTPVerificationScreen = () => {
 
               {/* Help Text */}
               <Text style={styles.helpText}>
-                Having trouble? Check your SMS or WhatsApp messages, or ensure you have a stable internet connection.
+                Check your SMS or WhatsApp messages. The code expires in 10 minutes.
               </Text>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </Animated.View>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </SafeAreaWrapper>
   );
@@ -555,152 +538,92 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
-  headerGradient: {
-    height: screenHeight * 0.32, // Reduced from 0.35 to match other screens
-    borderBottomLeftRadius: 15, // Reduced from 30 to match other screens
-    borderBottomRightRadius: 15,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  headerCircle1: {
-    position: 'absolute',
-    width: 150, // Reduced from 200 to match other screens
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    top: -30, // Adjusted from -50
-    right: -30,
-  },
-  headerCircle2: {
-    position: 'absolute',
-    width: 120, // Reduced from 150 to match other screens
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    bottom: -20, // Adjusted from -30
-    left: -20,
-  },
-  headerContent: {
-    flex: 1,
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40, // Adjusted padding to match other screens
-    position: 'relative',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
   },
   backButton: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to match other screens
-    left: SPACING.MD,
     width: 40,
     height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
   },
-  logoContainer: {
-    marginBottom: SPACING.SM, // Reduced from MD to match other screens
-  },
-  logoBackground: {
-    width: 80, // Reduced from 100 to match other screens
-    height: 80,
-    borderRadius: 30, // Adjusted from 50 to match other screens
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SPACING.SM, // Reduced from MD
-  },
-  headerImage: {
-    width: 40, // Reduced from 60 to match other screens
-    height: 40,
-  },
-  titleContainer: {
-    alignItems: 'center',
-  },
-  appName: {
-    fontSize: 24, // Reduced from 28 to match other screens
-    fontFamily: FONTS.POPPINS.SEMIBOLD, // Changed from BOLD to match other screens
-    color: COLORS.NEUTRAL.WHITE,
-    marginBottom: 2, // Reduced from 8
-  },
-  tagline: {
-    fontSize: 11, // Reduced from 14 to match other screens
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
-    paddingHorizontal: SPACING.LG,
-    letterSpacing: 1.5, // Added to match other screens
-  },
-  otpCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    marginTop: -20, // Reduced from -30 to match other screens
-    marginHorizontal: SPACING.MD,
-    marginBottom: SPACING.LG, // Added to match other screens
-    borderRadius: 15, // Reduced from 20 to match other screens
+  logoSection: {
     flex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 }, // Reduced shadow to match other screens
-    shadowOpacity: 0.08, // Reduced from 0.1
-    shadowRadius: 4, // Reduced from 8
-    elevation: 2, // Reduced from 5
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 40, // To center logo accounting for back button
+  },
+  logo: {
+    width: 28,
+    height: 28,
+    marginRight: SPACING.SM,
+  },
+  brandName: {
+    fontSize: 18,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
   },
   keyboardAvoid: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    padding: SPACING.XL, // Kept the same as original
+    paddingHorizontal: SPACING.MD,
+    paddingTop: SPACING.XL,
+    paddingBottom: SPACING.XXL,
   },
-  statusContainer: {
-    flexDirection: 'row',
+  otpCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: SPACING.XL,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  cardHeader: {
     alignItems: 'center',
+    marginBottom: SPACING.XXL,
+  },
+  iconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: COLORS.PRIMARY.LIGHT,
-    borderRadius: 12,
-    padding: SPACING.MD,
-    marginBottom: SPACING.LG,
-  },
-  statusIcon: {
-    marginRight: SPACING.SM,
-  },
-  statusText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.PRIMARY.MAIN,
-  },
-  errorContainer: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    borderRadius: 12,
-    padding: SPACING.MD,
     marginBottom: SPACING.LG,
-    borderLeftWidth: 4,
-    borderLeftColor: '#EF4444',
   },
-  errorIcon: {
-    marginRight: SPACING.SM,
-  },
-  errorText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#EF4444',
-  },
-  otpContainer: {
-    marginBottom: SPACING.XL,
-  },
-  otpLabel: {
-    fontSize: 16,
+  title: {
+    fontSize: 22,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    textAlign: 'center',
-    marginBottom: SPACING.LG,
+    marginBottom: SPACING.SM,
   },
-  otpInputs: {
+  subtitle: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  phoneNumber: {
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  otpContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.SM,
+    marginBottom: SPACING.XL,
+    paddingHorizontal: SPACING.XS,
   },
   otpInput: {
     width: 48,
@@ -719,18 +642,48 @@ const styles = StyleSheet.create({
     borderColor: COLORS.PRIMARY.MAIN,
     shadowColor: COLORS.PRIMARY.MAIN,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   otpInputError: {
     borderColor: '#EF4444',
     backgroundColor: '#FEF2F2',
   },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.SM,
+    paddingVertical: SPACING.MD,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderRadius: 12,
+    marginBottom: SPACING.MD,
+  },
+  statusText: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.SM,
+    paddingVertical: SPACING.MD,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    marginBottom: SPACING.MD,
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: '#EF4444',
+  },
   verifyButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
-    borderRadius: 10, // Reduced from 14 to match other screens
-    paddingVertical: 12, // Reduced from 16
+    borderRadius: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -741,7 +694,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   verifyButtonText: {
-    fontSize: 14, // Reduced from 16 to match other screens
+    fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
   },
@@ -750,7 +703,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.LG,
   },
   resendPrompt: {
-    fontSize: 12, // Reduced from 14 to match other screens
+    fontSize: 13,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
     marginBottom: SPACING.MD,
@@ -775,12 +728,12 @@ const styles = StyleSheet.create({
     borderColor: '#25D366',
   },
   resendButtonText: {
-    fontSize: 12, // Reduced from 14 to match other screens
+    fontSize: 13,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.PRIMARY.MAIN,
   },
   helpText: {
-    fontSize: 11, // Reduced from 12
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PLACEHOLDER,
     textAlign: 'center',

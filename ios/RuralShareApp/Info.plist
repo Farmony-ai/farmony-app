@@ -34,10 +34,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>firebase</string>
+			<string></string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.89534038928-hc3uco908c9l2bs18ku0rfqcflkeqnbh</string>
+				<string>com.googleusercontent.apps.383808719248-pbjq3smi9k2gtb8qer8rdua48v4g08as</string>
 			</array>
 		</dict>
 		<dict>
@@ -50,10 +50,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>firebase-auth</string>
+			<string></string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.89534038928-hc3uco908c9l2bs18ku0rfqcflkeqnbh</string>
+				<string>com.googleusercontent.apps.383808719248-pbjq3smi9k2gtb8qer8rdua48v4g08as</string>
 			</array>
 		</dict>
 	</array>

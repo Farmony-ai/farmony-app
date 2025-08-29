@@ -34,24 +34,34 @@ target 'RuralShareApp' do
       target.build_configurations.each do |config|
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
         config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
-        config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
-        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
-
-        # 👇 Important: Exclude arm64 for simulator builds (M1/M2/M4 Macs)
+        
+        # ✅ Fixed: Single EXCLUDED_ARCHS configuration for simulator
         config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
-
+        
+        # ✅ Changed: Use YES for debug builds to avoid architecture conflicts
+        if config.name == 'Debug'
+          config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+        else
+          config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+        end
+        
         config.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
         config.build_settings['OTHER_LDFLAGS'] << '-ObjC'
         config.build_settings['GCC_NO_COMMON_BLOCKS'] = 'YES'
       end
     end
 
-    # Toolchain fix
+    # ✅ Toolchain fix
     installer.aggregate_targets.each do |target|
       target.xcconfigs.each do |variant_name, xcconfig|
         xcconfig_path = target.client_root + target.xcconfig_relative_path(variant_name)
         IO.write(xcconfig_path, IO.read(xcconfig_path).gsub("DT_TOOLCHAIN_DIR", "TOOLCHAIN_DIR"))
       end
+    end
+    
+    # ✅ Additional fix for M1/M2/M4 Macs
+    installer.pods_project.build_configurations.each do |config|
+      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
     end
   end
 end

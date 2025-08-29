@@ -31,7 +31,7 @@ import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, FONT_SIZES } from '../utils';
 import { isValidEmail, isRequired, isValidPassword } from '../utils/validators';
-import { registerUser, setCurrentScreen, clearError, setOtpChannel, verifyOTP } from '../store/slices/authSlice';
+import { registerUser, setCurrentScreen, clearError, setOtpChannel, verifyOTP, setPendingUserPhone } from '../store/slices/authSlice';
 import { RootState, AppDispatch } from '../store';
 import { checkPhoneExists } from '../services/api';
 import firebaseSMSService from '../services/firebaseSMS';
@@ -135,6 +135,7 @@ const SignUpScreen = () => {
   const [authStatus, setAuthStatus] = useState<string>('');
   const [isWhatsAppLoading, setIsWhatsAppLoading] = useState(false);
   const [isOTPLessInitialized, setIsOTPLessInitialized] = useState(false);
+   const [isOTPVerified, setIsOTPVerified] = useState(false);
   const inputRefs = useRef<Array<TextInput | null>>([]);
 
   // Animations
@@ -367,6 +368,7 @@ const SignUpScreen = () => {
         setOTPError('Phone number required for OTP');
         return;
       }
+      console.log('Starting Firebase SMS Auth for phone:', phone);
       let phoneE164: string;
       if (phone.startsWith('+')) {
         phoneE164 = phone;
@@ -376,6 +378,7 @@ const SignUpScreen = () => {
         phoneE164 = `+${phone}`;
       }
       setAuthStatus('Sending SMS OTP...');
+      console.log('Sending OTP to', phoneE164);
       const confirmation = await firebaseSMSService.sendOTP(phoneE164);
       setSMSConfirmation(confirmation);
       setAuthStatus('OTP sent successfully');
@@ -562,59 +565,154 @@ const SignUpScreen = () => {
   };
 
   const handleNext = async () => {
-    if (await validateStep(currentStep)) {
-      if (currentStep < 4) {
-        if (currentStep === 3) {
-          // After password step, register user with all collected data
-          try {
-            setAuthStatus('Creating account...');
-            
-            // Only include address if basic fields are filled
-            const registrationData: any = {
-              name,
-              email,
-              phone,
-              password,
-              role: 'individual',
-            };
-            
-            // Add address if it's properly filled
-            if (addressLine1 && village && district && state && pincode) {
-              registrationData.address = {
-                tag: addressTag,
-                addressLine1,
-                addressLine2,
-                village,
-                tehsil,
-                district,
-                state,
-                pincode,
-                coordinates: [mapRegion.longitude, mapRegion.latitude],
-              };
-            }
-
-            const result = await dispatch(registerUser(registrationData));
-
-            if (registerUser.fulfilled.match(result)) {
-              setRegisteredUserId(result.payload.userId);
-              startFirebaseSMSAuth();
-              setCurrentStep(currentStep + 1);
-            } else {
-              Alert.alert('Error', result.error?.message || 'Account creation failed');
-              setAuthStatus('');
-            }
-          } catch (err: any) {
-            Alert.alert('Error', err.message || 'An error occurred');
-            setAuthStatus('');
+  if (await validateStep(currentStep)) {
+    if (currentStep < 4) {
+      if (currentStep === 1) {
+        // Step 1: Validate phone availability and move to address
+        setIsValidatingPhone(true);
+        try {
+          const result = await checkPhoneExists(phone);
+          if (result.exists) {
+            setPhoneError('This phone number is already registered');
+            setIsValidatingPhone(false);
+            return;
           }
-        } else {
-          setCurrentStep(currentStep + 1);
+          // Phone is available, proceed to address step
+          setCurrentStep(2);
+        } catch (error) {
+          setPhoneError('Unable to verify phone number');
+        } finally {
+          setIsValidatingPhone(false);
         }
-      } else if (currentStep === 4) {
-        handleVerifyOTP();
+      } else if (currentStep === 2) {
+        // Step 2: Address collected, move to password
+        setCurrentStep(3);
+      } else if (currentStep === 3) {
+        console.log('Password set, proceeding to OTP verification');
+        console.log('User Details:', { name, phone, email });
+        // Step 3: Password collected, send OTP for verification
+        dispatch(setPendingUserPhone(phone));
+        dispatch(clearError());
+        
+        // Start OTP verification
+        try {
+          await startFirebaseSMSAuth();
+          setCurrentStep(4);
+        } catch (error) {
+          console.error('Failed to send OTP:', error);
+          Alert.alert('Error', 'Failed to send verification code. Please try again.');
+        }
       }
     }
+  }
+};
+
+
+  const handleVerifyOTPThenRegister = async () => {
+    if (!validateOTPFormat()) return;
+    
+    dispatch(clearError());
+    setOTPError('');
+    const otpString = otp.join('');
+
+    try {
+      setAuthStatus('Verifying OTP...');
+      let verificationSuccessful = false;
+      let lastError: string | null = null;
+
+      // First, verify the OTP with Firebase/WhatsApp
+      if (otpChannel === 'sms') {
+        if (!smsConfirmation) {
+          setOTPError('SMS confirmation not found. Please resend OTP.');
+          return;
+        }
+        try {
+          // Firebase verifies internally, no need to store OTP
+          await firebaseSMSService.verifyOTP(smsConfirmation, otpString);
+          verificationSuccessful = true;
+          setAuthStatus('OTP verified successfully!');
+        } catch (smsError: any) {
+          lastError = smsError.message || 'Invalid OTP code';
+        }
+      } else if (otpChannel === 'whatsapp') {
+        try {
+          const cleanedInput = phone.replace(/[^\d+]/g, '');
+          let countryCode = '91';
+          let phoneNumber = cleanedInput;
+
+          if (cleanedInput.startsWith('+')) {
+            const match = cleanedInput.match(/^\+(\d{1,3})(\d+)/);
+            if (match) {
+              countryCode = match[1];
+              phoneNumber = match[2];
+            }
+          }
+          await otplessService.verifyOTP(phoneNumber, countryCode, otpString);
+          verificationSuccessful = true;
+          setAuthStatus('OTP verified successfully!');
+        } catch (whatsappError: any) {
+          lastError = whatsappError.message || 'Invalid OTP code';
+        }
+      }
+
+      if (verificationSuccessful) {
+        // NOW that OTP is verified, create the account
+        setIsOTPVerified(true);
+        setAuthStatus('Creating your account...');
+        
+        const registrationData: any = {
+          name,
+          email,
+          phone,
+          password,
+          role: 'individual',
+          isVerified: true, // Mark as verified since we just verified the OTP
+          preferences: {
+            defaultLandingPage: 'provider', // or 'seeker'
+            defaultProviderTab: 'active',
+            notificationsEnabled: true,
+            preferredLanguage: 'en',
+          },
+        };
+        
+        // Add address if it's properly filled
+        if (addressLine1 && village && district && state && pincode) {
+          registrationData.address = {
+            tag: addressTag,
+            addressLine1,
+            addressLine2,
+            village,
+            tehsil,
+            district,
+            state,
+            pincode,
+            coordinates: [mapRegion.longitude, mapRegion.latitude],
+          };
+        }
+
+        const result = await dispatch(registerUser(registrationData));
+
+        if (registerUser.fulfilled.match(result)) {
+          setAuthStatus('Account created successfully! 🎉');
+          // If the register endpoint returns tokens (auto-login), the auth state will update
+          // Otherwise navigation will be handled by auth state change
+        } else {
+          setOTPError(result.error?.message || 'Failed to create account. Please try again.');
+          setAuthStatus('');
+          setIsOTPVerified(false);
+        }
+      } else {
+        setOTPError(lastError || 'Invalid OTP. Please try again.');
+        setAuthStatus('');
+      }
+    } catch (error: any) {
+      setOTPError(error.message || 'Verification failed');
+      setAuthStatus('');
+      setIsOTPVerified(false);
+    }
   };
+
+
 
   const handleBack = () => {
     if (currentStep > 1) {
@@ -1225,6 +1323,12 @@ const SignUpScreen = () => {
           </View>
         </View>
       </View>
+      <View style={styles.infoNote}>
+          <Ionicons name="information-circle" size={16} color={COLORS.PRIMARY.MAIN} />
+          <Text style={styles.infoNoteText}>
+            After setting your password, we'll verify your phone number via OTP
+          </Text>
+      </View>
     </Animated.View>
   );
 
@@ -1238,7 +1342,12 @@ const SignUpScreen = () => {
         <Text style={styles.stepNumber}>04</Text>
         <View style={styles.stepTitleContainer}>
           <Text style={styles.stepTitle}>Verify Your Number</Text>
-          <Text style={styles.stepSubtitle}>We sent a code to +91 {phone}</Text>
+          <Text style={styles.stepSubtitle}>
+            {isOTPVerified 
+              ? 'Creating your account...' 
+              : `We sent a code to +91 ${phone}`
+            }
+          </Text>
         </View>
       </View>
 
@@ -1303,10 +1412,17 @@ const SignUpScreen = () => {
           </View>
         </View>
       </View>
+      {isOTPVerified && (
+          <View style={styles.successContainer}>
+            <Ionicons name="checkmark-circle" size={48} color={COLORS.SUCCESS.MAIN} />
+            <Text style={styles.successText}>Phone Verified Successfully!</Text>
+            <Text style={styles.successSubtext}>Setting up your account...</Text>
+          </View>
+        )}
     </Animated.View>
   );
 
-  return (
+ return (
   <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
     <View style={styles.container}>
       {/* Header - Hide for Step 2 */}
@@ -1370,7 +1486,6 @@ const SignUpScreen = () => {
         </View>
       )}
 
-
       {/* Content - Special handling for Step 2 */}
       {currentStep === 2 ? (
         renderStep2()
@@ -1396,6 +1511,7 @@ const SignUpScreen = () => {
       {/* Bottom Actions - Hide for Step 2 as it has its own Continue button */}
       {currentStep !== 2 && (
         <View style={styles.bottomActions}>
+          {/* Steps 1 and 3 - Continue buttons */}
           {currentStep < 4 ? (
             <TouchableOpacity
               style={[styles.primaryButton, (isSigningUp || isValidatingPhone) && styles.primaryButtonLoading]}
@@ -1408,28 +1524,41 @@ const SignUpScreen = () => {
               ) : (
                 <>
                   <Text style={styles.primaryButtonText}>
-                    {currentStep === 3 ? 'Create Account' : 'Continue'}
+                    {currentStep === 1 && 'Continue'}
+                    {currentStep === 3 && 'Send Verification Code'}
                   </Text>
                   <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
                 </>
               )}
             </TouchableOpacity>
           ) : (
+            /* Step 4 - OTP Verification and Account Creation */
             <TouchableOpacity
-              style={[styles.primaryButton, isVerifyingOTP && styles.primaryButtonLoading]}
-              onPress={handleVerifyOTP}
-              disabled={isVerifyingOTP}
+              style={[
+                styles.primaryButton, 
+                (isVerifyingOTP || isSigningUp || isOTPVerified) && styles.primaryButtonLoading
+              ]}
+              onPress={handleVerifyOTPThenRegister}
+              disabled={isVerifyingOTP || isSigningUp || isOTPVerified}
               activeOpacity={0.8}
             >
-              {isVerifyingOTP ? (
-                <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+              {(isVerifyingOTP || isSigningUp || isOTPVerified) ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                  {isOTPVerified && (
+                    <Text style={styles.loadingText}>Creating account...</Text>
+                  )}
+                </View>
               ) : (
-                <Text style={styles.primaryButtonText}>Verify & Complete</Text>
+                <>
+                  <Text style={styles.primaryButtonText}>Verify & Create Account</Text>
+                  <Ionicons name="checkmark-circle" size={20} color={COLORS.NEUTRAL.WHITE} />
+                </>
               )}
             </TouchableOpacity>
           )}
 
-          {/* Sign In Link */}
+          {/* Sign In Link - Only show on Step 1 */}
           {currentStep === 1 && (
             <View style={styles.signInContainer}>
               <Text style={styles.signInPrompt}>Already have an account?</Text>
@@ -1438,6 +1567,15 @@ const SignUpScreen = () => {
               </TouchableOpacity>
             </View>
           )}
+
+          {/* Privacy Policy Note - Show on Step 4 */}
+          {/* {currentStep === 4 && (
+            <Text style={styles.privacyText}>
+              By creating an account, you agree to our{' '}
+              <Text style={styles.privacyLink}>Terms & Conditions</Text> and{' '}
+              <Text style={styles.privacyLink}>Privacy Policy</Text>
+            </Text>
+          )} */}
         </View>
       )}
     </View>
@@ -1447,6 +1585,62 @@ const SignUpScreen = () => {
 };
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.SM,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.NEUTRAL.WHITE,
+    marginLeft: SPACING.SM,
+  },
+  privacyText: {
+    fontSize: 11,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    textAlign: 'center',
+    marginTop: SPACING.MD,
+    paddingHorizontal: SPACING.LG,
+    lineHeight: 16,
+  },
+  privacyLink: {
+    color: COLORS.PRIMARY.MAIN,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    textDecorationLine: 'underline',
+  },
+  infoNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    padding: SPACING.MD,
+    borderRadius: 12,
+    marginTop: SPACING.MD,
+    gap: SPACING.SM,
+  },
+  infoNoteText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.PRIMARY.MAIN,
+  },
+  successContainer: {
+    alignItems: 'center',
+    marginVertical: SPACING.XL,
+  },
+  successText: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.SUCCESS.MAIN,
+    marginTop: SPACING.MD,
+  },
+  successSubtext: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginTop: SPACING.XS,
+  },
   progressContainerStep2: {
   position: 'absolute',
   left: 0,
@@ -2545,6 +2739,8 @@ const enhancedStyles = StyleSheet.create({
   placesDescription: { fontFamily: FONTS.POPPINS.REGULAR, color: COLORS.TEXT.PRIMARY },
 
   });
+
+
 
 
 export default SignUpScreen;
