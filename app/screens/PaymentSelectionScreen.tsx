@@ -98,31 +98,57 @@ const PaymentSelectionScreen = () => {
     setProcessingPayment(true);
 
     try {
-      // Create the order
+      // Create the order with proper fields
       const orderData = {
-        ...params.orderDetails,
+        listingId: params.orderDetails.listingId,
+        seekerId: params.orderDetails.seekerId,
+        providerId: params.orderDetails.providerId,
+        orderType: params.orderDetails.orderType || 'hiring', // Default to hiring if not set
+        totalAmount: params.totalAmount,
+        serviceStartDate: params.serviceDate,
+        serviceEndDate: params.orderDetails.serviceEndDate || params.serviceDate,
+        quantity: params.quantity,
+        unitOfMeasure: params.orderDetails.unitOfMeasure,
+        coordinates: params.orderDetails.coordinates,
         paymentMethod: selectedPayment,
         paymentDetails: selectedPayment === 'upi' ? { upiId } : {},
-        specialInstructions: params.specialInstructions,
+        specialInstructions: params.notes || params.orderDetails.specialInstructions,
+        addressId: params.orderDetails.addressId,
       };
+
+      console.log('Creating order with data:', orderData); // Debug log
 
       const response = await ordersAPI.create(orderData);
 
       if (response.success) {
-        // Navigate to order confirmation
-        navigation.reset({
-          index: 0,
-          routes: [
-            { name: 'Home' },
-            { 
-              name: 'OrderConfirmation', 
-              params: { 
-                orderId: response.data._id,
-                orderDetails: response.data 
-              } 
+        // Show success alert and navigate back
+        Alert.alert(
+          'Order Placed Successfully!',
+          `Your order #${response.data._id.slice(-8).toUpperCase()} has been placed. The service provider will contact you soon.`,
+          [
+            {
+              text: 'View Order',
+              onPress: () => {
+                navigation.reset({
+                  index: 1,
+                  routes: [
+                    { name: 'Home' },
+                    { name: 'Orders' } // Navigate to Orders screen to see the new order
+                  ],
+                });
+              }
+            },
+            {
+              text: 'Go Home',
+              onPress: () => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Home' }],
+                });
+              }
             }
-          ],
-        });
+          ]
+        );
       } else {
         throw new Error(response.error || 'Failed to create order');
       }
