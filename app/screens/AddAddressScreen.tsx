@@ -146,6 +146,8 @@ const AddAddressScreen = () => {
 
   // Validation errors
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+ 
+  const regionRef = useRef<Region>(mapRegion);
 
   const toggleSheet = useCallback(() => {
     const toValue = isSheetExpanded ? 0 : 1;
@@ -183,7 +185,7 @@ const AddAddressScreen = () => {
           latitudeDelta: 0.005,
           longitudeDelta: 0.005,
         };
-        setMapRegion(newRegion);
+        regionRef.current = newRegion; // Keep ref in sync
         mapRef.current?.animateToRegion(newRegion, 800);
         await reverseGeocodeLocation(location.latitude, location.longitude);
       }
@@ -267,7 +269,7 @@ const AddAddressScreen = () => {
     // Only handle region changes if sheet is not expanded
     if (!isSheetExpanded) {
       console.log('Region changed to:', region);
-      setMapRegion(region);
+      regionRef.current = region; // Update ref instead of state
       debouncedReverseGeocode(region);
       bouncePin();
     }
@@ -290,16 +292,8 @@ const AddAddressScreen = () => {
       Alert.alert('Location not available', 'Could not fetch location details for the selected place.');
       return;
     }
-    
-    const newRegion = { 
-      latitude: lat, 
-      longitude: lng, 
-      latitudeDelta: 0.005, 
-      longitudeDelta: 0.005 
-    };
-    
-    console.log('Setting new region:', newRegion);
-    setMapRegion(newRegion);
+    const newRegion = { latitude: lat, longitude: lng, latitudeDelta: 0.005, longitudeDelta: 0.005 };
+    regionRef.current = newRegion; // Keep ref in sync
     mapRef.current?.animateToRegion(newRegion, 800);
 
     if (details.address_components) {
@@ -337,7 +331,7 @@ const AddAddressScreen = () => {
         district,
         state,
         pincode,
-        coordinates: [mapRegion.longitude, mapRegion.latitude],
+        coordinates: [regionRef.current.longitude, regionRef.current.latitude],
         isDefault: false,
       };
 
@@ -412,79 +406,82 @@ const AddAddressScreen = () => {
         ]}
         pointerEvents={isSheetExpanded ? 'none' : 'auto'}
       >
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={22} color={COLORS.TEXT.PRIMARY} />
-          </TouchableOpacity>
+        <View>
+          <View style={styles.headerRow}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={22} color={COLORS.TEXT.PRIMARY} />
+            </TouchableOpacity>
 
-          <View style={styles.searchWrapper}>
-            {GOOGLE_API_KEY ? (
-              <GooglePlacesAutocomplete
-                ref={placesRef}
-                placeholder="Search for area, street name..."
-                fetchDetails={true}
-                predefinedPlaces={[]}
-                predefinedPlacesAlwaysVisible={false}
-                textInputProps={{ 
-                  placeholderTextColor: COLORS.TEXT.PLACEHOLDER,
-                  returnKeyType: 'search',
-                  autoCorrect: false,
-                  autoCapitalize: 'none',
-                  style: styles.searchInputWithIcon,
-                  editable: !isSheetExpanded,
-                }}
-                minLength={2}
-                debounce={150}
-                enablePoweredByContainer={false}
-                keyboardShouldPersistTaps="handled"
-                listViewDisplayed="auto"
-                keepResultsAfterBlur={false}
-                nearbyPlacesAPI="GooglePlacesSearch"
-                GooglePlacesSearchQuery={{ rankby: 'distance' }}
-                GooglePlacesDetailsQuery={{ 
-                  fields: 'geometry,address_components,formatted_address,name' 
-                }}
-                GoogleReverseGeocodingQuery={{}}
-                timeout={20000}
-                onPress={(data, details = null) => handlePlaceSelected(data, details)}
-                query={{
-                  key: GOOGLE_API_KEY,
-                  language: 'en',
-                }}
-                styles={{
-                  container: { flex: 1 },
-                  textInput: styles.searchInputWithIcon,
-                  listView: styles.listView,
-                  row: styles.resultRow,
-                  separator: styles.resultSeparator,
-                  description: styles.resultText,
-                }}
-                renderLeftButton={() => (
-                  <View style={styles.searchIconButton}>
-                    <Ionicons name="search" size={18} color={COLORS.TEXT.SECONDARY} />
-                  </View>
-                )}
-              />
-            ) : (
-              <View style={styles.searchInputContainer}>
-                <View style={styles.searchIcon}>
-                  <Ionicons name="search" size={18} color={COLORS.TEXT.PLACEHOLDER} />
-                </View>
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Enter location manually"
-                  placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                  editable={false}
+            <View style={styles.searchWrapper}>
+              {GOOGLE_API_KEY ? (
+                <GooglePlacesAutocomplete
+                  ref={placesRef}
+                  placeholder="Search for area, street name..."
+                  fetchDetails={true}
+                  predefinedPlaces={[]}
+                  predefinedPlacesAlwaysVisible={false}
+                  textInputProps={{ 
+                    placeholderTextColor: COLORS.TEXT.PLACEHOLDER,
+                    returnKeyType: 'search',
+                    autoCorrect: false,
+                    autoCapitalize: 'none',
+                    style: styles.searchInputWithIcon,
+                    editable: !isSheetExpanded,
+                  }}
+                  minLength={2}
+                  debounce={150}
+                  enablePoweredByContainer={false}
+                  keyboardShouldPersistTaps="handled"
+                  listViewDisplayed="auto"
+                  keepResultsAfterBlur={false}
+                  nearbyPlacesAPI="GooglePlacesSearch"
+                  GooglePlacesSearchQuery={{ rankby: 'distance' }}
+                  GooglePlacesDetailsQuery={{ 
+                    fields: 'geometry,address_components,formatted_address,name' 
+                  }}
+                  GoogleReverseGeocodingQuery={{}}
+                  timeout={20000}
+                  onPress={(data, details = null) => handlePlaceSelected(data, details)}
+                  query={{
+                    key: GOOGLE_API_KEY,
+                    language: 'en',
+                    components: 'country:in',
+                  }}
+                  styles={{
+                    container: { flex: 1 },
+                    textInput: styles.searchInputWithIcon,
+                    listView: styles.listView,
+                    row: styles.resultRow,
+                    separator: styles.resultSeparator,
+                    description: styles.resultText,
+                  }}
+                  renderLeftButton={() => (
+                    <View style={styles.searchIconButton}>
+                      <Ionicons name="search" size={18} color={COLORS.TEXT.SECONDARY} />
+                    </View>
+                  )}
                 />
-              </View>
-            )}
+              ) : (
+                <View style={styles.searchInputContainer}>
+                  <View style={styles.searchIcon}>
+                    <Ionicons name="search" size={18} color={COLORS.TEXT.PLACEHOLDER} />
+                  </View>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Enter location manually"
+                    placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+                    editable={false}
+                  />
+                </View>
+              )}
+            </View>
           </View>
-        </View>
 
-        {/* Map Instruction Chip */}
-        <View style={styles.mapChip}>
-          <Ionicons name="hand-left-outline" size={14} color={COLORS.NEUTRAL.WHITE} />
-          <Text style={styles.mapChipText}>Move pin to set exact location</Text>
+          {/* Map Instruction Chip */}
+          <View style={styles.mapChip}>
+            <Ionicons name="hand-left-outline" size={14} color={COLORS.NEUTRAL.WHITE} />
+            <Text style={styles.mapChipText}>Move pin to set exact location</Text>
+          </View>
         </View>
       </Animated.View>
 

@@ -16,7 +16,8 @@
       android:roundIcon="@mipmap/ic_launcher_round"
       android:allowBackup="false"
       android:theme="@style/AppTheme"
-      android:supportsRtl="true">
+      android:supportsRtl="true"
+      android:networkSecurityConfig="@xml/network_security_config">
       <!-- Disable automatic Crashlytics initialization to prevent startup crash -->
       <meta-data
           android:name="firebase_crashlytics_collection_enabled"
@@ -28,7 +29,6 @@
         android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
         android:launchMode="singleTop"
         android:exported="true"
-        android:networkSecurityConfig="@xml/otpless_network_security_config"  
         android:windowSoftInputMode="adjustResize">
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />

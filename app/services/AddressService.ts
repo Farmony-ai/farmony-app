@@ -154,7 +154,25 @@ class AddressService {
       );
       return response.data;
     } catch (error: any) {
-      console.error('Error in reverse geocoding:', error);
+      console.error('--- DETAILED REVERSE GEOCODING ERROR ---');
+      if (error.isAxiosError) {
+        console.error('Axios Error:', {
+          message: error.message,
+          code: error.code,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+          },
+          request: error.request ? 'Request object exists' : 'No request object',
+          response: error.response ? {
+            data: error.response.data,
+            status: error.response.status,
+          } : 'No response object',
+        });
+      } else {
+        console.error('Non-Axios Error:', error);
+      }
+      console.error('-----------------------------------------');
       throw error;
     }
   }
@@ -167,7 +185,25 @@ class AddressService {
       );
       return response.data;
     } catch (error: any) {
-      console.error('Error searching places:', error);
+      console.error('--- DETAILED SEARCH PLACES ERROR ---');
+       if (error.isAxiosError) {
+        console.error('Axios Error:', {
+          message: error.message,
+          code: error.code,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+          },
+          request: error.request ? 'Request object exists' : 'No request object',
+          response: error.response ? {
+            data: error.response.data,
+            status: error.response.status,
+          } : 'No response object',
+        });
+      } else {
+        console.error('Non-Axios Error:', error);
+      }
+      console.error('------------------------------------');
       throw error;
     }
   }
