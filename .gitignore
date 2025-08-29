@@ -1,6 +1,9 @@
 # OSX
 #
 .DS_Store
+.env
+.env.local
+logs.txt
 
 # Xcode
 #
@@ -38,6 +41,7 @@ local.properties
 # node.js
 #
 node_modules/
+docs/
 npm-debug.log
 yarn-error.log
 

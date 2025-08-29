@@ -7,6 +7,9 @@ import {
   Switch,
   Image,
   RefreshControl,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
@@ -21,9 +24,13 @@ import Button from '../components/Button';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { logout } from '../store/slices/authSlice';
-import ProviderService, { ProviderPreferencesPayload } from '../services/ProviderService';
+// Removed direct ProviderService usage for preferences; using centralized API interceptor
 import { useEffect } from 'react';
-import UserService, { UserProfile } from '../services/UserService';
+import { usersAPI, ordersAPI } from '../services/api';
+import apiInterceptor from '../services/apiInterceptor';
+import { setUser, STORAGE_KEYS } from '../store/slices/authSlice';
+import { useNavigation } from '@react-navigation/native';
+import type { ProviderDashboardResponse } from '../services/ProviderService';
 
 type ProfileSectionItem = {
   icon: string;
@@ -45,23 +52,71 @@ const ProfileScreen = () => {
   const [defaultTab, setDefaultTab] = useState<'seeker' | 'provider'>('seeker');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [profileImage, setProfileImage] = useState<ImagePickerResult | null>(null);
-  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<'en' | 'te' | 'hi'>('en');
-  const [defaultProviderTab, setDefaultProviderTab] = useState<'active' | 'inactive' | 'all'>('active');
-  const [fetchedUser, setFetchedUser] = useState<UserProfile | null>(null);
+  // Align with backend: 'active' | 'completed' | 'review'
+  const [defaultProviderTab, setDefaultProviderTab] = useState<'active' | 'completed' | 'review'>('active');
+  const [fetchedUser, setFetchedUser] = useState<any | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [providerDashboard, setProviderDashboard] = useState<ProviderDashboardResponse | null>(null);
+  const [seekerBookingsCount, setSeekerBookingsCount] = useState<number>(0);
+  const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
+  const [editedName, setEditedName] = useState<string>('');
+  const [isSavingName, setIsSavingName] = useState<boolean>(false);
+  const [editedEmail, setEditedEmail] = useState<string>('');
 
   const { user } = useSelector((state: RootState) => state.auth);
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
 
-  // Fetch fresh user profile on mount to reflect latest server data
+  // Fetch fresh user profile, provider dashboard, and seeker bookings count
   const refreshUser = async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
-      const token = await AsyncStorage.getItem('token');
       if (!user?.id) return;
-      const result = await UserService.getUserById(user.id, token || undefined);
-      setFetchedUser(result);
+
+      // Get latest profile using centralized API (auto-handles token refresh)
+      const profileRes = await usersAPI.getProfile(user.id);
+      if (profileRes?.success && profileRes.data) {
+        setFetchedUser(profileRes.data);
+        // Sync local UI preferences with server values so screen reflects actual settings
+        const prefs = (profileRes.data as any)?.preferences || {};
+        const serverDefaultLanding: any = prefs.defaultLandingPage;
+        if (serverDefaultLanding === 'seeker' || serverDefaultLanding === 'provider') {
+          setDefaultTab(serverDefaultLanding);
+          // Persist locally so next app start respects server preference
+          try { await AsyncStorage.setItem('defaultTab', serverDefaultLanding); } catch {}
+        }
+        const serverProviderTab: any = prefs.defaultProviderTab;
+        if (serverProviderTab === 'active' || serverProviderTab === 'completed' || serverProviderTab === 'review') {
+          setDefaultProviderTab(serverProviderTab);
+        }
+        const serverLang: any = prefs.preferredLanguage;
+        if (serverLang === 'en' || serverLang === 'te' || serverLang === 'hi') {
+          setPreferredLanguage(serverLang);
+        }
+        if (typeof prefs.notificationsEnabled === 'boolean') {
+          setNotificationsEnabled(prefs.notificationsEnabled);
+        }
+      }
+
+      // Provider dashboard (provider-focused stats). Use interceptor directly for predictable shape
+      const dashboardRes = await apiInterceptor.makeAuthenticatedRequest<ProviderDashboardResponse>(
+        `/providers/${user.id}/dashboard`,
+        { method: 'GET' }
+      );
+      if (dashboardRes.success && dashboardRes.data) {
+        setProviderDashboard(dashboardRes.data as ProviderDashboardResponse);
+      } else {
+        setProviderDashboard(null);
+      }
+
+      // Seeker bookings count (simple length of orders array)
+      const seekerRes = await ordersAPI.getBySeeker(user.id);
+      if (seekerRes?.success && Array.isArray(seekerRes.data)) {
+        setSeekerBookingsCount((seekerRes.data as any[]).length);
+      } else {
+        setSeekerBookingsCount(0);
+      }
     } catch (e) {
       // Non-blocking
     } finally {
@@ -82,17 +137,82 @@ const ProfileScreen = () => {
     await persistPreferences({ defaultLandingPage: tab });
   };
 
-  const persistPreferences = async (partial: Partial<ProviderPreferencesPayload>) => {
+  // Local preferences payload aligned to backend
+  type PreferencesPayload = {
+    defaultLandingPage: 'seeker' | 'provider';
+    defaultProviderTab: 'active' | 'completed' | 'review' | string;
+    preferredLanguage: string;
+    notificationsEnabled: boolean;
+  };
+
+  const persistPreferences = async (partial: Partial<PreferencesPayload>) => {
     try {
-      const token = (await AsyncStorage.getItem('token')) || undefined;
       const existing = {
         defaultLandingPage: defaultTab,
         defaultProviderTab,
         preferredLanguage,
         notificationsEnabled,
       };
-      const payload: ProviderPreferencesPayload = { ...existing, ...partial };
-      await ProviderService.updatePreferences(payload, token);
+      const payload: PreferencesPayload = { ...existing, ...partial };
+
+      let updatedUser: any = null;
+
+      // 1) Preferred: update only preferences via /users/:id/preferences
+      if (user?.id) {
+        const prefsRes = await apiInterceptor.makeAuthenticatedRequest<any>(
+          `/users/${user.id}/preferences`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(partial), // send only what changed
+          }
+        );
+
+        if (prefsRes.success && (prefsRes.data?.preferences || prefsRes.data?.user)) {
+          // If API returns just preferences, merge them into the latest user object
+          if (prefsRes.data?.preferences) {
+            const baseUser = fetchedUser || user;
+            updatedUser = { ...(baseUser as any), preferences: prefsRes.data.preferences };
+          } else {
+            updatedUser = prefsRes.data.user ? prefsRes.data.user : prefsRes.data;
+          }
+        }
+      }
+
+      // 2) Fallback: existing providers/preferences endpoint (kept to avoid breaking current flows)
+      if (!updatedUser) {
+        const res = await apiInterceptor.makeAuthenticatedRequest<any>(
+          `/providers/preferences`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          }
+        );
+        if (res.success && res.data) {
+          updatedUser = (res.data.user) ? res.data.user : res.data;
+        }
+      }
+
+      // 3) Final fallback: PATCH /users/:id with preferences nested
+      if (!updatedUser && user?.id) {
+        const userPatch = await apiInterceptor.makeAuthenticatedRequest<any>(
+          `/users/${user.id}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ preferences: payload }),
+          }
+        );
+        if (userPatch.success && userPatch.data) {
+          updatedUser = userPatch.data.user ? userPatch.data.user : userPatch.data;
+        }
+      }
+
+      if (updatedUser) {
+        // Update global auth.user and persist
+        dispatch(setUser(updatedUser));
+        await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser)); // legacy
+        setFetchedUser(updatedUser);
+      }
     } catch (e) {
       console.log('Failed to update preferences', e);
     }
@@ -113,25 +233,12 @@ const ProfileScreen = () => {
     );
   };
 
-  const languages: Array<{ code: 'en' | 'te' | 'hi'; label: string }> = [
-    { code: 'en', label: 'English' },
-    { code: 'te', label: 'తెలుగు' },
-    { code: 'hi', label: 'हिंदी' },
-  ];
+  // Language selection UI removed as requested. We keep local state only for reading server prefs.
 
-  const languageLabel = languages.find(l => l.code === preferredLanguage)?.label || 'English';
-
-  const cycleLanguage = async () => {
-    const idx = languages.findIndex(l => l.code === preferredLanguage);
-    const next = languages[(idx + 1) % languages.length].code;
-    setPreferredLanguage(next);
-    await persistPreferences({ preferredLanguage: next });
-  };
-
-  const providerTabs: Array<{ key: 'active' | 'inactive' | 'all'; label: string }> = [
+  const providerTabs: Array<{ key: 'active' | 'completed' | 'review'; label: string }> = [
     { key: 'active', label: 'Active' },
-    { key: 'inactive', label: 'Inactive' },
-    { key: 'all', label: 'All' },
+    { key: 'completed', label: 'Completed' },
+    { key: 'review', label: 'To Review' },
   ];
 
   const providerTabLabel = providerTabs.find(t => t.key === defaultProviderTab)?.label || 'Active';
@@ -147,16 +254,15 @@ const ProfileScreen = () => {
     {
       title: 'Account Settings',
       items: [
-        { icon: 'person-outline', label: 'Edit Profile', onPress: () => {} },
+        { icon: 'person-outline', label: 'Edit Profile', onPress: openEditModal },
         { icon: 'call-outline', label: 'Phone Number', value: (fetchedUser?.phone || user?.phone) || 'N/A' },
         { icon: 'mail-outline', label: 'Email', value: (fetchedUser?.email || user?.email) || 'N/A' },
-        { icon: 'location-outline', label: 'Address', onPress: () => {} },
+        { icon: 'location-outline', label: 'Address', onPress: () => navigation.navigate('AddressSelection') },
       ],
     },
     {
       title: 'Preferences',
       items: [
-        { icon: 'language-outline', label: 'Language', value: languageLabel, onPress: cycleLanguage },
         { icon: 'albums-outline', label: 'Default Provider Tab', value: providerTabLabel, onPress: cycleProviderTab },
         {
           icon: 'notifications-outline',
@@ -164,13 +270,6 @@ const ProfileScreen = () => {
           toggle: true,
           toggleValue: notificationsEnabled,
            onToggle: onToggleNotifications,
-        },
-        {
-          icon: 'moon-outline',
-          label: 'Dark Mode',
-          toggle: true,
-          toggleValue: darkModeEnabled,
-           onToggle: setDarkModeEnabled,
         },
       ],
     },
@@ -184,6 +283,92 @@ const ProfileScreen = () => {
       ],
     },
   ];
+
+  // Derived stats for the header stats row
+  const providerSummary = providerDashboard?.summary;
+  const providerBookings = providerSummary?.totalBookings ?? 0;
+  const providerActiveListings = providerSummary?.activeListings ?? 0;
+  const providerRating = providerSummary?.averageRating ?? 0;
+  const providerTotalRatings = providerSummary?.totalRatings ?? 0;
+  const hasProviderStats = !!providerSummary && (
+    (providerSummary.totalBookings ?? 0) > 0 ||
+    (providerSummary.activeListings ?? 0) > 0 ||
+    (providerSummary.totalRatings ?? 0) > 0
+  );
+
+  const bookingsStatValue = hasProviderStats ? providerBookings : seekerBookingsCount;
+  const listingsStatValue = hasProviderStats ? providerActiveListings : 0;
+  const ratingStatValue = hasProviderStats ? providerRating : 0;
+
+  // Prepare edit modal with current name
+  function openEditModal() {
+    const currentName = (fetchedUser?.name || user?.name) || '';
+    setEditedName(currentName);
+    const currentEmail = (fetchedUser?.email || user?.email) || '';
+    setEditedEmail(currentEmail);
+    setIsEditOpen(true);
+  }
+
+  // Simple and readable email validation: allow empty, otherwise must look like an email
+  const isEmailValid = (email: string) => {
+    if (!email) return true;
+    const trimmed = email.trim();
+    // Very relaxed check: one @ and at least one dot after
+    return /.+@.+\..+/.test(trimmed);
+  };
+
+  const saveName = async () => {
+    const trimmed = editedName.trim();
+    const emailTrimmed = editedEmail.trim();
+    if (!trimmed || trimmed.length < 2) {
+      return;
+    }
+    if (!isEmailValid(emailTrimmed)) {
+      return;
+    }
+    if (!user?.id) return;
+    try {
+      setIsSavingName(true);
+      const res = await apiInterceptor.makeAuthenticatedRequest<any>(
+        `/users/${user.id}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ name: trimmed, email: emailTrimmed }),
+        }
+      );
+      if (res.success && res.data) {
+        let updatedUser = res.data.user ? res.data.user : res.data;
+        // If server ignored email in combined update, try updating email alone as a safe fallback
+        if (emailTrimmed && updatedUser && (updatedUser.email ?? '') !== emailTrimmed) {
+          const emailOnly = await apiInterceptor.makeAuthenticatedRequest<any>(
+            `/users/${user.id}`,
+            {
+              method: 'PATCH',
+              body: JSON.stringify({ email: emailTrimmed }),
+            }
+          );
+          if (emailOnly.success && emailOnly.data) {
+            updatedUser = emailOnly.data.user ? emailOnly.data.user : emailOnly.data;
+          }
+        }
+
+        // As a final truth source, refetch the profile so UI and storage reflect DB
+        const fresh = await usersAPI.getProfile(user.id);
+        const finalUser = fresh?.success && fresh.data ? fresh.data : updatedUser;
+        if (finalUser) {
+          dispatch(setUser(finalUser));
+          await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(finalUser));
+          await AsyncStorage.setItem('user', JSON.stringify(finalUser));
+          setFetchedUser(finalUser);
+          setIsEditOpen(false);
+        }
+      }
+    } catch (e) {
+      // Non-blocking; could show toast
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   return (
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
@@ -238,7 +423,7 @@ const ProfileScreen = () => {
             </TouchableOpacity>
           </View>
           <Text style={styles.userName}>
-            {user?.name || 'John Doe'}
+            {(fetchedUser?.name || user?.name) || 'John Doe'}
           </Text>
           <View style={styles.roleChip}>
             <Ionicons name="shield-checkmark-outline" size={14} color={COLORS.PRIMARY.MAIN} />
@@ -254,7 +439,7 @@ const ProfileScreen = () => {
               size="small"
               variant="outline"
               leftIcon={<Ionicons name="create-outline" size={16} color={COLORS.PRIMARY.MAIN} />}
-              onPress={() => {}}
+              onPress={openEditModal}
               style={styles.quickActionButton}
               textStyle={styles.quickActionText}
             />
@@ -263,7 +448,7 @@ const ProfileScreen = () => {
               size="small"
               variant="outline"
               leftIcon={<Ionicons name="book-outline" size={16} color={COLORS.PRIMARY.MAIN} />}
-              onPress={() => {}}
+              onPress={() => navigation.navigate('Bookings')}
               style={styles.quickActionButton}
               textStyle={styles.quickActionText}
             />
@@ -272,7 +457,7 @@ const ProfileScreen = () => {
               size="small"
               variant="outline"
               leftIcon={<Ionicons name="briefcase-outline" size={16} color={COLORS.PRIMARY.MAIN} />}
-              onPress={() => {}}
+              onPress={() => navigation.navigate('MyListings')}
               style={styles.quickActionButton}
               textStyle={styles.quickActionText}
             />
@@ -281,17 +466,17 @@ const ProfileScreen = () => {
           {/* Stats Row */}
           <View style={styles.statsCard}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>12</Text>
+              <Text style={styles.statValue}>{bookingsStatValue}</Text>
               <Text style={styles.statLabel}>Bookings</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>5</Text>
+              <Text style={styles.statValue}>{listingsStatValue}</Text>
               <Text style={styles.statLabel}>Listings</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>4.8</Text>
+              <Text style={styles.statValue}>{ratingStatValue}</Text>
               <Text style={styles.statLabel}>Rating</Text>
             </View>
           </View>
@@ -426,6 +611,50 @@ const ProfileScreen = () => {
           Version 1.0.0
         </Text>
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      <Modal visible={isEditOpen} transparent animationType="fade" onRequestClose={() => setIsEditOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
+            <TextInput
+              value={editedName}
+              onChangeText={setEditedName}
+              placeholder="Your name"
+              placeholderTextColor={COLORS.TEXT.SECONDARY}
+              style={styles.modalInput}
+            />
+            <TextInput
+              value={editedEmail}
+              onChangeText={setEditedEmail}
+              placeholder="Email (optional)"
+              placeholderTextColor={COLORS.TEXT.SECONDARY}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.modalInput}
+            />
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => setIsEditOpen(false)}
+                style={[styles.modalButton, { marginRight: 8 }]}
+              />
+              <Button
+                title={isSavingName ? 'Saving...' : 'Save'}
+                onPress={saveName}
+                disabled={
+                  isSavingName ||
+                  editedName.trim().length < 2 ||
+                  (!(!editedEmail || /.+@.+\..+/.test(editedEmail.trim())))
+                }
+                style={styles.modalButton}
+                leftIcon={isSavingName ? <ActivityIndicator size={16} color={COLORS.NEUTRAL.WHITE} /> : undefined}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaWrapper>
   );
 };
@@ -738,6 +967,44 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT.SECONDARY,
     textAlign: 'center',
     marginBottom: SPACING.MD,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.MD,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: BORDER_RADIUS.LG,
+    padding: SPACING.LG,
+    ...SHADOWS.MD,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.SM,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.SECONDARY,
+    borderRadius: BORDER_RADIUS.MD,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.MD,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  modalButton: {
+    minWidth: 100,
   },
 });
 

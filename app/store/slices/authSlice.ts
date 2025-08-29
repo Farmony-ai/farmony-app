@@ -4,7 +4,7 @@ import { API_BASE_URL } from '../../config/api';
 import apiInterceptor from '../../services/apiInterceptor';
 
 // Storage keys constants - matching apiInterceptor
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'access_token',
   REFRESH_TOKEN: 'refresh_token',
   USER: 'user',
@@ -86,6 +86,7 @@ interface AuthState {
   isVerifyingOTP: boolean;
   isUpdatingUserVerification: boolean;
   isCreatingProfile: boolean;
+  isResettingPassword: boolean; // Added for password reset
   
   // Error handling
   error: string | null;
@@ -94,11 +95,13 @@ interface AuthState {
   isOTPRequired: boolean;
   pendingUserPhone: string | null;
   pendingUserId: string | null;
-  // Forgot-password flow flag
+  
+  // Authentication flow flags
   isForgotPassword: boolean;
+  isOtpLogin: boolean; // Added for OTP login flow
   
   // Screen navigation state
-  currentScreen: 'signIn' | 'signUp' | 'otp' | 'authenticated' | 'forgotPassword';
+  currentScreen: 'signIn' | 'signUp' | 'otp' | 'authenticated' | 'forgotPassword' | 'otpLogin';
   otpChannel: 'sms' | 'whatsapp' | null;
 }
 
@@ -115,6 +118,7 @@ const initialState: AuthState = {
   isVerifyingOTP: false,
   isUpdatingUserVerification: false,
   isCreatingProfile: false,
+  isResettingPassword: false,
   
   error: null,
   
@@ -122,6 +126,7 @@ const initialState: AuthState = {
   pendingUserPhone: null,
   pendingUserId: null,
   isForgotPassword: false,
+  isOtpLogin: false,
   
   currentScreen: 'signIn',
   otpChannel: null,
@@ -176,7 +181,6 @@ export const checkAuth = createAsyncThunk('auth/checkAuth', async (_, { rejectWi
     return rejectWithValue(error.message || 'Failed to check auth status');
   }
 });
-
 
 export const registerUser = createAsyncThunk(
   'auth/registerUser',
@@ -238,7 +242,7 @@ export const registerUser = createAsyncThunk(
       }
       
       // Legacy response format
-      const userId = result._id || result.id;
+      const userId = result.user?._id;
       if (!userId) {
         console.error('❌ registerUser: User ID not found in registration response.', result);
         return rejectWithValue('User ID not found after registration.');
@@ -423,14 +427,26 @@ export const signIn = createAsyncThunk(
 // Async action for OTP verification
 export const verifyOTP = createAsyncThunk(
   'auth/verifyOTP',
-  async (otpData: {phone: string; otp: string; password: string; userId: string | null}, { getState, dispatch }) => {
+  async (otpData: {phone: string; otp: string; password?: string; userId?: string | null}, { getState, dispatch }) => {
     try {
       console.log('🔄 Verifying OTP for phone:', otpData.phone);
       
       const state = getState() as { auth: AuthState };
+      
+      // For forgot password flow, we just verify the OTP
+      if (state.auth.isForgotPassword) {
+        console.log('✅ OTP verification successful for forgot password flow');
+        return {
+          success: true,
+          phone: otpData.phone,
+          requiresPasswordReset: true,
+        };
+      }
+      
+      // For registration flow
       const pendingUserId = otpData.userId || state.auth.pendingUserId;
       
-      if (!pendingUserId) {
+      if (!pendingUserId || !otpData.password) {
         throw new Error('No pending user found. Please restart the authentication process.');
       }
       
@@ -452,7 +468,7 @@ export const verifyOTP = createAsyncThunk(
   }
 );
 
-// Async action for OTP login (forgot-password / passwordless sign-in)
+// Async action for OTP login (passwordless sign-in)
 export const otpLogin = createAsyncThunk(
   'auth/otpLogin',
   async (payload: { phone: string }) => {
@@ -512,6 +528,45 @@ export const otpLogin = createAsyncThunk(
   }
 );
 
+// Reset Password Action - NEW
+export const resetPassword = createAsyncThunk(
+  'auth/resetPassword',
+  async ({ phone, newPassword }: { phone: string; newPassword: string }, { rejectWithValue }) => {
+    try {
+      console.log('🔄 Attempting to reset password for phone:', phone);
+      
+      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone,
+          newPassword,
+        }),
+      });
+      
+      console.log('📡 Reset password response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Password reset failed:', errorData);
+        return rejectWithValue(errorData.message || 'Failed to reset password');
+      }
+      
+      const result = await response.json();
+      console.log('✅ Password reset successful:', result);
+      
+      // Don't automatically log in - just return success
+      return { 
+        success: true,
+        message: result.message || 'Password reset successfully'
+      };
+    } catch (error: any) {
+      console.error('🔥 Network error during password reset:', error);
+      return rejectWithValue(error.message || 'Failed to reset password');
+    }
+  }
+);
+
 // The main auth slice
 const authSlice = createSlice({
   name: 'auth',
@@ -527,18 +582,41 @@ const authSlice = createSlice({
       state.currentScreen = action.payload;
     },
 
+    // Set OTP login flag - NEW
+    setIsOtpLogin: (state, action: PayloadAction<boolean>) => {
+      state.isOtpLogin = action.payload;
+    },
+    
+    // Set pending user phone - NEW
+    setPendingUserPhone: (state, action: PayloadAction<string>) => {
+      state.pendingUserPhone = action.payload;
+    },
+    
+    // Set forgot password flag - NEW
+    setIsForgotPassword: (state, action: PayloadAction<boolean>) => {
+      state.isForgotPassword = action.payload;
+    },
+
     // Start forgot-password flow
     startForgotPassword: (state, action) => {
       state.error = null;
       state.pendingUserPhone = action.payload;
       state.isForgotPassword = true;
-      state.currentScreen = 'otp';
+      state.currentScreen = 'forgotPassword';
     },
 
     // Reset forgot-password flags on completion
     finishForgotPassword: (state) => {
       state.isForgotPassword = false;
       state.pendingUserPhone = null;
+    },
+    
+    // Update user verification status
+    updateUserVerification: (state, action) => {
+      if (state.user) {
+        state.user.isVerified = true;
+      }
+      state.isUpdatingUserVerification = false;
     },
     
     // Logout user completely
@@ -552,6 +630,8 @@ const authSlice = createSlice({
       state.pendingUserId = null;
       state.currentScreen = 'signIn';
       state.error = null;
+      state.isForgotPassword = false;
+      state.isOtpLogin = false;
       // Use apiInterceptor's logout method which handles clearing tokens
       apiInterceptor.logout();
     },
@@ -563,10 +643,11 @@ const authSlice = createSlice({
       state.isSigningUp = false;
       state.isVerifyingOTP = false;
       state.isUpdatingUserVerification = false;
+      state.isResettingPassword = false;
     },
 
     // Set the active OTP channel
-    setOtpChannel: (state, action: PayloadAction<'sms' | 'whatsapp'>) => {
+    setOtpChannel: (state, action: PayloadAction<'sms' | 'whatsapp' | null>) => {
       state.otpChannel = action.payload;
     },
     
@@ -574,6 +655,11 @@ const authSlice = createSlice({
     updateTokens: (state, action: PayloadAction<{ accessToken: string; refreshToken: string }>) => {
       state.token = action.payload.accessToken;
       state.refreshToken = action.payload.refreshToken;
+    },
+    
+    // Update the in-memory user object (used after profile/preference edits)
+    setUser: (state, action: PayloadAction<User>) => {
+      state.user = action.payload;
     },
   },
   
@@ -672,7 +758,11 @@ const authSlice = createSlice({
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.isVerifyingOTP = false;
         
-        if (action.payload.requiresUserVerification) {
+        if (action.payload.requiresPasswordReset) {
+          // For forgot password flow
+          console.log('✅ OTP verified for password reset');
+          // Keep the state as is, let the component handle navigation
+        } else if (action.payload.requiresUserVerification) {
           state.isUpdatingUserVerification = true;
           console.log('✅ OTP verified, updating user verification status...');
         } else {
@@ -727,12 +817,31 @@ const authSlice = createSlice({
         state.refreshToken = action.payload.refreshToken || null;
         state.currentScreen = 'authenticated';
         state.isForgotPassword = false;
+        state.isOtpLogin = false;
+        state.pendingUserPhone = null;
         console.log('✅ otpLogin.fulfilled: OTP login successful, auth state set.');
       })
       .addCase(otpLogin.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.error.message || 'OTP login failed';
+      });
+    
+    // Reset Password reducers - NEW
+    builder
+      .addCase(resetPassword.pending, (state) => {
+        state.isResettingPassword = true;
+        state.error = null;
+      })
+      .addCase(resetPassword.fulfilled, (state) => {
+        state.isResettingPassword = false;
         state.isForgotPassword = false;
+        state.pendingUserPhone = null;
+        state.error = null;
+        console.log('✅ resetPassword.fulfilled: Password reset successfully');
+      })
+      .addCase(resetPassword.rejected, (state, action) => {
+        state.isResettingPassword = false;
+        state.error = action.payload as string || 'Failed to reset password';
       });
   },
 });
@@ -745,7 +854,12 @@ export const {
   startForgotPassword, 
   finishForgotPassword, 
   setOtpChannel,
-  updateTokens
+  updateTokens,
+  setUser,
+  setIsOtpLogin,
+  setPendingUserPhone,
+  setIsForgotPassword,
+  updateUserVerification
 } = authSlice.actions;
 
 export default authSlice.reducer;

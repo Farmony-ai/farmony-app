@@ -17,6 +17,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ProviderService, { ProviderDashboardResponse } from '../services/ProviderService';
 import Button from '../components/Button';
+import BookingService from '../services/BookingService';
 
 const backgroundImg = require('../assets/provider-bg.png');
 
@@ -76,6 +77,24 @@ const ProviderScreen = () => {
 
   // quickActions placeholder removed (inline JSX is used)
 
+  const handleAcceptBooking = async (bookingId: string) => {
+  try {
+    await BookingService.acceptBooking(bookingId);
+    fetchDashboard(); // Refresh the dashboard
+  } catch (error) {
+    console.error('Error accepting booking:', error);
+  }
+};
+
+const handleRejectBooking = async (bookingId: string) => {
+  try {
+    await BookingService.rejectBooking(bookingId);
+    fetchDashboard(); // Refresh the dashboard
+  } catch (error) {
+    console.error('Error rejecting booking:', error);
+  }
+};
+
 
   const fetchDashboard = async (isRefresh = false) => {
     if (!user?.id) {
@@ -85,6 +104,7 @@ const ProviderScreen = () => {
     try {
       if (isRefresh) setRefreshing(true);
       const data = await ProviderService.getDashboard(user.id, token || undefined);
+      console.log('Provider Dashboard Data:', data);
       setDashboard(data);
     } finally {
       if (isRefresh) setRefreshing(false);
@@ -195,24 +215,85 @@ const ProviderScreen = () => {
           </View>
         )}
 
-        {/* Upcoming Bookings */}
+        {/* Pending Bookings - To Be Reviewed */}
+        {(dashboard?.pendingBookings || []).map((booking, index) => (
+          <View key={index} style={styles.bookingCard}>
+            {/* Listing Image */}
+            {booking.listing?.thumbnailUrl && (
+              <Image 
+                source={{ uri: booking.listing.thumbnailUrl }}
+                style={styles.bookingImage}
+              />
+            )}
+            
+            <View style={styles.bookingContent}>
+              <View style={styles.bookingHeader}>
+                <View style={styles.bookingInfo}>
+                  <Text style={styles.bookingTitle}>
+                    {booking.listing?.title || 'Service'}
+                  </Text>
+                  <Text style={styles.customerName}>
+                    {booking.seeker?.name || 'Customer'}
+                  </Text>
+                  <View style={styles.bookingMeta}>
+                    <Ionicons name="location-outline" size={12} color="#6B7280" />
+                    <Text style={styles.metaText}>
+                      {booking.seeker?.location || 'Location'}
+                      {booking.distance && ` • ${booking.distance} km`}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.priceContainer}>
+                  <Text style={styles.priceAmount}>₹{booking.totalAmount}</Text>
+                  <Text style={styles.priceUnit}>
+                    {booking.quantity && `${booking.quantity} ${booking.unitOfMeasure}`}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.bookingTime}>
+                <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+                <Text style={styles.timeText}>
+                  Service: {new Date(booking.serviceStartDate).toLocaleDateString()}
+                </Text>
+              </View>
+              
+              <View style={styles.actionButtons}>
+                <TouchableOpacity 
+                  style={styles.acceptButton}
+                  onPress={() => handleAcceptBooking(booking._id)}
+                >
+                  <Text style={styles.acceptButtonText}>Accept</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.rejectButton}
+                  onPress={() => handleRejectBooking(booking._id)}
+                >
+                  <Text style={styles.rejectButtonText}>Decline</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        ))}
+
+        {/* Upcoming Bookings - Accepted Requests */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Upcoming Bookings</Text>
-            {(dashboard?.recentBookings?.length || 0) > 0 && (
-              <TouchableOpacity onPress={() => navigation.navigate('ProviderBookings')}>
+            {(dashboard?.upcomingBookings?.length || 0) > 0 && (
+              <TouchableOpacity onPress={() => navigation.navigate('ProviderBookings', { tab: 'upcoming' })}>
                 <Text style={styles.viewAllText}>View All</Text>
               </TouchableOpacity>
             )}
           </View>
           
-          {(dashboard?.recentBookings || []).length === 0 ? (
+          {(dashboard?.upcomingBookings || []).length === 0 ? (
             <View style={styles.emptyBookingsCard}>
               <View style={styles.emptyIconBadge}>
                 <Ionicons name="calendar-clear-outline" size={24} color={COLORS.PRIMARY.MAIN} />
               </View>
               <Text style={styles.emptyTitle}>No upcoming bookings</Text>
-              <Text style={styles.emptySubtitle}>You don't have any scheduled bookings at the moment. Check back later for new bookings.</Text>
+              <Text style={styles.emptySubtitle}>Accepted bookings will appear here.</Text>
               <Button
                 title="Go to Bookings"
                 variant="outline"
@@ -222,33 +303,34 @@ const ProviderScreen = () => {
               />
             </View>
           ) : (
-          (dashboard?.recentBookings || []).map((booking, index) => (
-            <View key={index} style={styles.bookingCard}>
-              <View style={styles.bookingHeader}>
-                <View style={styles.bookingInfo}>
-                  <Text style={styles.bookingTitle}>
-                    {booking.service || booking.listingTitle || 'Service'}
-                  </Text>
-                  <Text style={styles.customerName}>
-                    {booking.customer || booking.customerName || ''}
-                  </Text>
+            dashboard?.upcomingBookings.map((booking, index) => (
+              <View key={index} style={styles.bookingCard}>
+                <View style={styles.bookingHeader}>
+                  <View style={styles.bookingInfo}>
+                    <Text style={styles.bookingTitle}>
+                      {booking.service || booking.listingTitle || 'Service'}
+                    </Text>
+                    <Text style={styles.customerName}>
+                      {booking.customer || booking.customerName || ''}
+                    </Text>
+                  </View>
+                  <View style={[styles.statusBadge, styles.acceptedBadge]}>
+                    <Text style={[styles.statusText, styles.acceptedText]}>
+                      {booking.status === 'paid' ? 'Paid' : 'Accepted'}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.statusBadge}>
-                  <Text style={styles.statusText}>
-                    {booking.status || '—'}
+                <View style={styles.bookingTime}>
+                  <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+                  <Text style={styles.timeText}>
+                    {booking.scheduledAt || booking.serviceDate || 
+                    `Scheduled: ${new Date(booking.createdAt).toLocaleDateString()}`}
                   </Text>
                 </View>
               </View>
-              <View style={styles.bookingTime}>
-                <Ionicons name="time-outline" size={12} color="#6B7280" />
-                <Text style={styles.timeText}>
-                  {booking.time || booking.scheduledAt || ''}
-                </Text>
-              </View>
-            </View>
-          )))}
+            ))
+          )}
         </View>
-
         {/* Bottom Padding */}
         <View style={styles.bottomPad} />
       </ScrollView>
@@ -257,6 +339,80 @@ const ProviderScreen = () => {
 };
 
 const styles = StyleSheet.create({
+    bookingImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  bookingContent: {
+    flex: 1,
+  },
+  bookingMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  metaText: {
+    fontSize: FONT_SIZES.XS,
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  priceContainer: {
+    alignItems: 'flex-end',
+  },
+  priceAmount: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.PRIMARY.MAIN,
+  },
+  priceUnit: {
+    fontSize: FONT_SIZES.XS,
+    color: '#6B7280',
+  },
+  pendingBadge: {
+    backgroundColor: '#fef3c7',
+  },
+  pendingText: {
+    color: '#92400e',
+  },
+  acceptedBadge: {
+    backgroundColor: '#d4edda',
+  },
+  acceptedText: {
+    color: '#155724',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 10,
+  },
+  acceptButton: {
+    flex: 1,
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  acceptButtonText: {
+    color: COLORS.NEUTRAL.WHITE,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  rejectButton: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  rejectButtonText: {
+    color: '#6B7280',
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
   flex: { flex: 1 },
   container: {
     flexGrow: 1,
@@ -302,9 +458,9 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.SM,
   },
   providerName: {
-    fontSize: FONT_SIZES.XL,
+    fontSize: FONT_SIZES.LG,
     color: COLORS.NEUTRAL.WHITE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontFamily: FONTS.POPPINS.MEDIUM,
   },
   notificationButton: {
     width: 36,
@@ -362,19 +518,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statValue: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.BOLD,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
-    lineHeight: 28,
+    lineHeight: 24,
     marginBottom: 2,
   },
   statLabel: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 16,
-    fontWeight: '500',
   },
   section: {
     paddingHorizontal: 20,
@@ -387,14 +542,13 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
-    fontWeight: '500',
   },
   viewAllText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.PRIMARY.MAIN,
   },
   bookingCard: {
@@ -423,20 +577,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   emptyTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 4,
   },
   emptySubtitle: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
     textAlign: 'center',
     marginBottom: 12,
   },
   emptyCta: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
   },
   createListingCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
@@ -463,8 +617,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   createListingTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 4,
   },
@@ -484,13 +638,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bookingTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 2,
   },
   customerName: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
   },
@@ -502,7 +656,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: '#155724',
   },
   bookingTime: {

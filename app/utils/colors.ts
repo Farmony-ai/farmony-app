@@ -44,6 +44,7 @@ export const COLORS = {
   BACKGROUND: {
     PRIMARY: '#F8F9FA', // App background
     CARD: '#F3F4F6', // Card backgrounds
+    SECONDARY: '#FFFFFF', // Secondary background
     HIGHLIGHT: '#ECFAE5', // Highlighted card
     NAV: '#E9F9F2', // Bottom nav background
   },

@@ -20,27 +20,25 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	
-	<!-- URL Schemes for OTPless and Firebase -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleURLName</key>
+			<string>otpless</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>otpless.com.Farmonyapp</string>
 			</array>
-			<key>CFBundleURLName</key>
-			<string>otpless</string>
 		</dict>
 		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string></string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.89534038928-drd9nklu7n5m3ofc8st8nfpgah0r0k6d</string>
+				<string>com.googleusercontent.apps.383808719248-pbjq3smi9k2gtb8qer8rdua48v4g08as</string>
 			</array>
-			<key>CFBundleURLName</key>
-			<string>firebase</string>
 		</dict>
 		<dict>
 			<key>CFBundleURLSchemes</key>
@@ -48,25 +46,28 @@
 				<string>org.reactjs.native.example.FarmonyApp</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string></string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.383808719248-pbjq3smi9k2gtb8qer8rdua48v4g08as</string>
+			</array>
+		</dict>
 	</array>
-	
-	<!-- LSApplicationQueriesSchemes for OTPless -->
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>whatsapp</string>
-		<string>otpless</string>
-		<string>gmail</string>
-		<string>googlegmail</string>
-	</array>
-	
-	<!-- Disable Firebase Phone Auth on iOS -->
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>FirebasePhoneAuthAutoVerifyDisabled</key>
 	<true/>
-	
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>googlechromes</string>
+		<string>comgooglemaps</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	
-	<!-- Network Security Configuration -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -75,12 +76,12 @@
 		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
-			<key>otpless.com</key>
+			<key>127.0.0.1</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
 			</dict>
 			<key>localhost</key>
 			<dict>
@@ -89,33 +90,45 @@
 				<key>NSExceptionRequiresForwardSecrecy</key>
 				<false/>
 			</dict>
-			<key>127.0.0.1</key>
+			<key>otpless.com</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
 			</dict>
 		</dict>
 	</dict>
-	
-	<!-- Location Permissions -->
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Farmony needs access to your location to show nearby services</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Farmony needs access to your location to show nearby services and provide better recommendations</string>
-	
-	<!-- Camera Permission (Often needed for authentication) -->
 	<key>NSCameraUsageDescription</key>
 	<string>Farmony needs camera access to capture photos for profile and service listings</string>
-	
-	<!-- Photo Library Permissions -->
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Farmony needs access to your photos to upload profile pictures and service images</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Farmony needs access to your location to show nearby services and provide better recommendations</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Farmony needs access to your location to show nearby services</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Farmony needs permission to save photos to your library</string>
-	
-	<!-- UI Configuration -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Farmony needs access to your photos to upload profile pictures and service images</string>
+	<key>RCTNewArchEnabled</key>
+	<true/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Poppins-Thin.ttf</string>
+		<string>Poppins-ExtraLight.ttf</string>
+		<string>Poppins-Light.ttf</string>
+		<string>Poppins-Regular.ttf</string>
+		<string>Poppins-Medium.ttf</string>
+		<string>Poppins-SemiBold.ttf</string>
+		<string>Poppins-Bold.ttf</string>
+		<string>Poppins-ExtraBold.ttf</string>
+		<string>Poppins-Black.ttf</string>
+		<string>Ionicons.ttf</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>processing</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -130,24 +143,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	
-	<!-- Font Configuration -->
-	<key>UIAppFonts</key>
-	<array>
-		<string>Poppins-Thin.ttf</string>
-		<string>Poppins-ExtraLight.ttf</string>
-		<string>Poppins-Light.ttf</string>
-		<string>Poppins-Regular.ttf</string>
-		<string>Poppins-Medium.ttf</string>
-		<string>Poppins-SemiBold.ttf</string>
-		<string>Poppins-Bold.ttf</string>
-		<string>Poppins-ExtraBold.ttf</string>
-		<string>Poppins-Black.ttf</string>
-		<string>Ionicons.ttf</string>
-	</array>
-	
-	<!-- React Native New Architecture -->
-	<key>RCTNewArchEnabled</key>
-	<true/>
 </dict>
 </plist>

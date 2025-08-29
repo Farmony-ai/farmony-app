@@ -1,0 +1,41 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-Black.ttf",
+      "sha1": "425d6efbe4709a1c641d4345a7dbff8a9f8ceb2f"
+    },
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-Bold.ttf",
+      "sha1": "45e4d582cbb4dab2bbad3f624fad9ae567c66547"
+    },
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-ExtraBold.ttf",
+      "sha1": "dd3b4a7629e386f2562ba90622e4ed6de545c12b"
+    },
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-ExtraLight.ttf",
+      "sha1": "861ad5ae2fb84e1cbdf8a3df87b3de4e2366acf1"
+    },
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-Light.ttf",
+      "sha1": "942f703a54d603f65bb2f2eb587431406dc1ae3f"
+    },
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-Medium.ttf",
+      "sha1": "e837165aedb031ea74872c5983a3217d1c190a1a"
+    },
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-Regular.ttf",
+      "sha1": "86a425be5a919d86729b85b2bc1d07da5ce413d4"
+    },
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-SemiBold.ttf",
+      "sha1": "622ca6ccbe2f22c5611dffa016b745bd26be154c"
+    },
+    {
+      "path": "ios/RuralShareApp/Fonts/Poppins-Thin.ttf",
+      "sha1": "7d372ce82249ce605a8350d956c22657f78f08a0"
+    }
+  ]
+}

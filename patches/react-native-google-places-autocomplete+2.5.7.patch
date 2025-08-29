@@ -1,0 +1,21 @@
+diff --git a/node_modules/react-native-google-places-autocomplete/GooglePlacesAutocomplete.js b/node_modules/react-native-google-places-autocomplete/GooglePlacesAutocomplete.js
+index 60836de..8a6e4c2 100644
+--- a/node_modules/react-native-google-places-autocomplete/GooglePlacesAutocomplete.js
++++ b/node_modules/react-native-google-places-autocomplete/GooglePlacesAutocomplete.js
+@@ -897,6 +897,7 @@ export const GooglePlacesAutocomplete = forwardRef((props, ref) => {
+     return null;
+   };
+ 
++  // Guard against React 19 defaultProps removal where textInputProps may be undefined
+   let {
+     onFocus,
+     onBlur,
+@@ -904,7 +905,7 @@ export const GooglePlacesAutocomplete = forwardRef((props, ref) => {
+     clearButtonMode,
+     InputComp,
+     ...userProps
+-  } = props.textInputProps;
++  } = props.textInputProps || {};
+   const TextInputComp = InputComp || TextInput;
+   return (
+     <View

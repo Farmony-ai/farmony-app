@@ -76,10 +76,14 @@ const Button: React.FC<ButtonProps> = ({
         break;
       case 'outline':
         baseStyle.push(styles.buttonOutline);
+        // Outline buttons should not have shadow; remove it to avoid grey padding
+        baseStyle.push(styles.noShadow);
         if (isDisabled) baseStyle.push(styles.buttonOutlineDisabled);
         break;
       case 'text':
         baseStyle.push(styles.buttonText);
+        // Text buttons should not have shadow; remove it to avoid grey padding
+        baseStyle.push(styles.noShadow);
         if (isDisabled) baseStyle.push(styles.buttonTextDisabled);
         break;
       case 'danger':
@@ -202,7 +206,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    ...SHADOWS.SM,
+  },
+
+  // Remove all shadow/elevation when needed (for outline/text variants)
+  noShadow: {
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
   },
   
   // Size variants
@@ -230,16 +242,20 @@ const styles = StyleSheet.create({
   // Visual variants
   buttonPrimary: {
     backgroundColor: COLORS.PRIMARY.MAIN,
+    ...SHADOWS.SM,
   },
   buttonPrimaryDisabled: {
     backgroundColor: COLORS.NEUTRAL.GRAY[300],
+    ...SHADOWS.SM,
   },
   
   buttonSecondary: {
     backgroundColor: COLORS.SECONDARY.MAIN,
+    ...SHADOWS.SM,
   },
   buttonSecondaryDisabled: {
     backgroundColor: COLORS.NEUTRAL.GRAY[200],
+    ...SHADOWS.SM,
   },
   
   buttonOutline: {
@@ -260,9 +276,11 @@ const styles = StyleSheet.create({
   
   buttonDanger: {
     backgroundColor: '#EF4444',
+    ...SHADOWS.SM,
   },
   buttonDangerDisabled: {
     backgroundColor: COLORS.NEUTRAL.GRAY[300],
+    ...SHADOWS.SM,
   },
   
   // Button content layout

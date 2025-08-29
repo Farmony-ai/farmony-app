@@ -153,18 +153,45 @@ export const usersAPI = {
   
   // Check if phone exists
   checkPhone: async (phone: string) => {
-    const response = await fetch(`${API_BASE_URL}/users/check-phone/${phone}`, {
+    const url = `${API_BASE_URL}/users/check-phone/${phone}`;
+    console.log('[usersAPI.checkPhone] ➜ GET', url);
+    const startedAt = Date.now();
+    const response = await fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
-    
+    const durationMs = Date.now() - startedAt;
+    console.log('[usersAPI.checkPhone] ⇦ status:', response.status, 'in', durationMs + 'ms');
+
+    let body: any = null;
+    try {
+      body = await response.json();
+    } catch (e) {
+      console.log('[usersAPI.checkPhone] ⚠️ Non-JSON response or parse error:', e);
+    }
+
     if (!response.ok) {
+      console.log('[usersAPI.checkPhone] ❌ Error body:', body);
       throw new Error(`Phone check failed: ${response.status}`);
     }
-    
-    return response.json();
+    console.log('[usersAPI.checkPhone] ✅ Body:', body);
+    return body;
   },
 };
+
+export const checkPhoneExists = async (phone: string) => {
+  const response = await fetch(`${API_BASE_URL}/users/check-phone/${phone}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Phone check failed: ${response.status}`);
+  }
+  
+  return response.json();
+};
+
 
 // 📦 Listings API
 export const listingsAPI = {
@@ -428,3 +455,4 @@ export default {
   addresses: addressesAPI,
   chat: chatAPI,
 };
+

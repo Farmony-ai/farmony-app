@@ -2,5 +2,10 @@ pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
 plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'RuralShareApp'
+include(
+  ':react-native-firebase_app',
+  ':react-native-firebase_auth',
+  ':react-native-gesture-handler'
+)
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')

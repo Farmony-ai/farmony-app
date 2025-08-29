@@ -1,11 +1,11 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, GOOGLE_MAPS_API_KEY } from '../config/api';
 
 export interface Address {
   _id: string;
   userId: string;
-  tag: 'home' | 'work' | 'personal' | 'other';
+  tag: string; // Changed from enum to string to allow free-text names
   addressLine1: string;
   addressLine2?: string;
   village?: string;
@@ -21,7 +21,7 @@ export interface Address {
 
 export interface CreateAddressDto {
   userId?: string;
-  tag: 'home' | 'work' | 'personal' | 'other';
+  tag: string; // Changed from enum to string
   addressLine1: string;
   addressLine2?: string;
   village?: string;
@@ -34,7 +34,7 @@ export interface CreateAddressDto {
 }
 
 export interface UpdateAddressDto {
-  tag?: 'home' | 'work' | 'personal' | 'other';
+  tag?: string; // Changed from enum to string
   addressLine1?: string;
   addressLine2?: string;
   village?: string;
@@ -48,7 +48,7 @@ export interface UpdateAddressDto {
 
 class AddressService {
   private async getAuthHeaders() {
-    const token = await AsyncStorage.getItem('authToken');
+    const token = await AsyncStorage.getItem('access_token');
     if (!token) throw new Error('Authentication token not found');
     return {
       'Authorization': `Bearer ${token}`,
@@ -143,15 +143,36 @@ class AddressService {
     }
   }
 
+
+  
+
   async reverseGeocode(latitude: number, longitude: number): Promise<any> {
     try {
       // This will need Google Maps API key configuration
       const response = await axios.get(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=YOUR_GOOGLE_MAPS_API_KEY`
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`
       );
       return response.data;
     } catch (error: any) {
-      console.error('Error in reverse geocoding:', error);
+      console.error('--- DETAILED REVERSE GEOCODING ERROR ---');
+      if (error.isAxiosError) {
+        console.error('Axios Error:', {
+          message: error.message,
+          code: error.code,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+          },
+          request: error.request ? 'Request object exists' : 'No request object',
+          response: error.response ? {
+            data: error.response.data,
+            status: error.response.status,
+          } : 'No response object',
+        });
+      } else {
+        console.error('Non-Axios Error:', error);
+      }
+      console.error('-----------------------------------------');
       throw error;
     }
   }
@@ -160,11 +181,29 @@ class AddressService {
     try {
       // This will need Google Maps API key configuration
       const response = await axios.get(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${query}&key=YOUR_GOOGLE_MAPS_API_KEY&components=country:in`
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${query}&key=${GOOGLE_MAPS_API_KEY}&components=country:in`
       );
       return response.data;
     } catch (error: any) {
-      console.error('Error searching places:', error);
+      console.error('--- DETAILED SEARCH PLACES ERROR ---');
+       if (error.isAxiosError) {
+        console.error('Axios Error:', {
+          message: error.message,
+          code: error.code,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+          },
+          request: error.request ? 'Request object exists' : 'No request object',
+          response: error.response ? {
+            data: error.response.data,
+            status: error.response.status,
+          } : 'No response object',
+        });
+      } else {
+        console.error('Non-Axios Error:', error);
+      }
+      console.error('------------------------------------');
       throw error;
     }
   }
