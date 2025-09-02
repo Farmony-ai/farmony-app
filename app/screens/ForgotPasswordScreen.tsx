@@ -31,7 +31,6 @@ import {
 import { RootState, AppDispatch } from '../store';
 import { checkPhoneExists } from '../services/api';
 import firebaseSMSService from '../services/firebaseSMS';
-import otplessService from '../services/otpless';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -54,8 +53,6 @@ const ForgotPasswordScreen = () => {
   const [otpError, setOTPError] = useState('');
   const [smsConfirmation, setSMSConfirmation] = useState<any>(null);
   const [authStatus, setAuthStatus] = useState<string>('');
-  const [isWhatsAppLoading, setIsWhatsAppLoading] = useState(false);
-  const [isOTPLessInitialized, setIsOTPLessInitialized] = useState(false);
   const inputRefs = useRef<Array<TextInput | null>>([]);
 
   // New Password step state
@@ -172,86 +169,6 @@ const ForgotPasswordScreen = () => {
     }
   };
 
-  const initializeOTPLess = async () => {
-    setIsWhatsAppLoading(true);
-    try {
-      setAuthStatus('Initializing WhatsApp OTP service...');
-      otplessService.setResultCallback(handleOTPLessResult);
-      await otplessService.initialize();
-      setIsOTPLessInitialized(true);
-      setAuthStatus('WhatsApp OTP service ready.');
-    } catch (error) {
-      console.error('Failed to initialize OTPLess:', error);
-      setOTPError('Failed to initialize WhatsApp OTP service.');
-      setAuthStatus('');
-    } finally {
-      setIsWhatsAppLoading(false);
-    }
-  };
-
-  const handleWhatsAppOTP = async () => {
-    if (!isOTPLessInitialized) {
-      initializeOTPLess();
-      return;
-    }
-    sendWhatsAppOTP();
-  };
-
-  const sendWhatsAppOTP = async () => {
-    try {
-      const cleanedInput = phone.replace(/[^\d+]/g, '');
-      let countryCode = '91';
-      let phoneNumber = cleanedInput;
-
-      if (cleanedInput.startsWith('+')) {
-        const match = cleanedInput.match(/^\+(\d{1,3})(\d+)/);
-        if (match) {
-          countryCode = match[1];
-          phoneNumber = match[2];
-        }
-      }
-      setAuthStatus('Sending WhatsApp OTP...');
-      await otplessService.startPhoneAuth(phoneNumber, countryCode);
-      dispatch(setOtpChannel('whatsapp'));
-    } catch (error) {
-      console.error('Failed to send WhatsApp OTP:', error);
-      setOTPError('Failed to send WhatsApp OTP.');
-      setAuthStatus('');
-    }
-  };
-
-  const handleOTPLessResult = (result: any) => {
-    if (result.success) {
-      switch (result.message) {
-        case 'SDK is ready for authentication':
-          setAuthStatus('WhatsApp OTP service ready.');
-          sendWhatsAppOTP();
-          break;
-        case 'Authentication initiated':
-          setAuthStatus(`OTP sent via WhatsApp`);
-          break;
-        case 'OTP automatically detected':
-          if (result.otp) {
-            const otpDigits = result.otp.split('');
-            setOTP(otpDigits);
-            setAuthStatus('OTP automatically detected');
-          }
-          break;
-        case 'One-tap authentication successful':
-        case 'OTP verified successfully':
-          setAuthStatus('OTP verified successfully');
-          setCurrentStep('newPassword');
-          break;
-        default:
-          setAuthStatus(result.message || 'Ready');
-      }
-      setOTPError('');
-    } else {
-      setOTPError(result.error || 'OTP verification failed');
-      setAuthStatus('');
-    }
-  };
-
   const handleOTPChange = (value: string, index: number) => {
     if (value.length > 1) return;
     if (value !== '' && !/^\d$/.test(value)) return;
@@ -307,25 +224,6 @@ const ForgotPasswordScreen = () => {
         } catch (smsError: any) {
           lastError = smsError.message || 'SMS verification failed.';
         }
-      } else if (otpChannel === 'whatsapp') {
-        try {
-          const cleanedInput = phone.replace(/[^\d+]/g, '');
-          let countryCode = '91';
-          let phoneNumber = cleanedInput;
-
-          if (cleanedInput.startsWith('+')) {
-            const match = cleanedInput.match(/^\+(\d{1,3})(\d+)/);
-            if (match) {
-              countryCode = match[1];
-              phoneNumber = match[2];
-            }
-          }
-          await otplessService.verifyOTP(phoneNumber, countryCode, otpString);
-          verificationSuccessful = true;
-          setAuthStatus('OTP verified via WhatsApp.');
-        } catch (whatsappError: any) {
-          lastError = whatsappError.message || 'WhatsApp verification failed.';
-        }
       }
 
       if (verificationSuccessful) {
@@ -350,8 +248,6 @@ const ForgotPasswordScreen = () => {
       setOTP(['', '', '', '', '', '']);
       if (otpChannel === 'sms') {
         await startFirebaseSMSAuth();
-      } else if (otpChannel === 'whatsapp') {
-        await sendWhatsAppOTP();
       } else {
         await startFirebaseSMSAuth();
       }
@@ -592,22 +488,6 @@ const ForgotPasswordScreen = () => {
           >
             <Ionicons name="refresh" size={18} color={COLORS.PRIMARY.MAIN} />
             <Text style={styles.resendButtonText}>Resend SMS</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.resendButton, styles.whatsappButton]}
-            onPress={handleWhatsAppOTP}
-            disabled={isVerifyingOTP || isWhatsAppLoading}
-            activeOpacity={0.7}
-          >
-            {isWhatsAppLoading ? (
-              <ActivityIndicator size="small" color="#25D366" />
-            ) : (
-              <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
-            )}
-            <Text style={[styles.resendButtonText, { color: '#25D366' }]}>
-              WhatsApp
-            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1189,9 +1069,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.SM,
     borderRadius: 20,
     backgroundColor: COLORS.PRIMARY.LIGHT,
-  },
-  whatsappButton: {
-    backgroundColor: '#E8F8F0',
   },
   resendButtonText: {
     fontSize: 13,

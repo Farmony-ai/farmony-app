@@ -16,6 +16,11 @@ export const COLORS = {
     LIGHT: '#D4EDDA', // Lighter shade for backgrounds
     DARK: '#1E7E34', // Darker shade for text/icons
   },
+  DANGER: {
+    MAIN: '#DC3545', // A standard red for errors and warnings
+    LIGHT: '#F8D7DA', // Lighter shade for backgrounds
+    DARK: '#721C24', // Darker shade for text/icons
+  },
   NEUTRAL: {
     WHITE: '#FFFFFF',
     BLACK: '#222222',

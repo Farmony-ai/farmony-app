@@ -35,7 +35,7 @@ import { registerUser, setCurrentScreen, clearError, setOtpChannel, verifyOTP, s
 import { RootState, AppDispatch } from '../store';
 import { checkPhoneExists } from '../services/api';
 import firebaseSMSService from '../services/firebaseSMS';
-import otplessService from '../services/otpless';
+// import otplessService from '../services/otpless';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
@@ -798,8 +798,6 @@ const SignUpScreen = () => {
       setOTP(['', '', '', '', '', '']);
       if (otpChannel === 'sms') {
         await startFirebaseSMSAuth();
-      } else if (otpChannel === 'whatsapp') {
-        await sendWhatsAppOTP();
       } else {
         await startFirebaseSMSAuth();
       }
@@ -2702,7 +2700,7 @@ const enhancedStyles = StyleSheet.create({
     zIndex: 30, // above map; below list if you prefer, set to 10
   },
 
-  // Full-width container for GPlaces (we’ll shift the input itself)
+  // Full-width container for GPlaces (we'll shift the input itself)
   placesContainerFull: {
     paddingHorizontal: SPACING.MD,
   },
