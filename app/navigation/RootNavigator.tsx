@@ -23,13 +23,19 @@ import OrderDetailScreen from '../screens/OrderDetailScreen';
 import ChatScreen from '../screens/ChatScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { COLORS } from '../utils';
-import ProfileScreen from '../screens/ProfileScreen';
 import CreateListingScreen from '../screens/CreateListingScreen';
 import MyListingsScreen from '../screens/MyListingsScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
 import AddressSelectionScreen from '../screens/AddressSelectionScreen';
 import AddAddressScreen from '../screens/AddAddressScreen';
 import PaymentSelectionScreen from '../screens/PaymentSelectionScreen';
+import SettingsScreen from '../screens/Settings/SettingsScreen';
+import AccountSettingsScreen from '../screens/Settings/AccountSettingsScreen';
+import PersonalizationScreen from '../screens/Settings/PersonalizationScreen';
+import PaymentSettingsScreen from '../screens/Settings/PaymentSettingsScreen';
+import HelpScreen from '../screens/Settings/HelpScreen';
+import LegalScreen from '../screens/Settings/LegalScreen';
+import AdvancedSettingsScreen from '../screens/Settings/AdvancedSettingsScreen';
 
 const Stack = createStackNavigator();
 
@@ -79,13 +85,19 @@ const RootNavigator = () => {
             
             <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
-            <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="CreateListing" component={CreateListingScreen} />
             <Stack.Screen name="MyListings" component={MyListingsScreen} />
             <Stack.Screen name="Checkout" component={CheckoutScreen} />
             <Stack.Screen name="AddressSelection" component={AddressSelectionScreen} />
             <Stack.Screen name="AddAddress" component={AddAddressScreen} />
             <Stack.Screen name="PaymentSelection" component={PaymentSelectionScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+            <Stack.Screen name="Personalization" component={PersonalizationScreen} />
+            <Stack.Screen name="PaymentSettings" component={PaymentSettingsScreen} />
+            <Stack.Screen name="Help" component={HelpScreen} />
+            <Stack.Screen name="Legal" component={LegalScreen} />
+            <Stack.Screen name="AdvancedSettings" component={AdvancedSettingsScreen} />
           </>
         ) : (
           <>

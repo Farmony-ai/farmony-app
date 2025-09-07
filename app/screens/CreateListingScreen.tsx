@@ -28,6 +28,7 @@ import MultiImagePicker from '../components/MultiImagePicker';
 import { ImagePickerResult } from '../services/ImagePickerService';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 90 : 75; // keep in sync with BottomTabNavigator
 
 interface ListingFormData {
   providerId: string;
@@ -301,7 +302,7 @@ const CreateListingScreen = () => {
       <ScrollView 
         style={styles.formSection} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
         <View style={styles.categoryGrid}>
           {availableCategories.map((category) => (
@@ -362,7 +363,7 @@ const CreateListingScreen = () => {
       <ScrollView 
         style={styles.formSection} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -443,7 +444,7 @@ const CreateListingScreen = () => {
       <ScrollView 
         style={styles.formSection} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Service Price</Text>
@@ -551,7 +552,7 @@ const CreateListingScreen = () => {
       <ScrollView 
         style={styles.formSection} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Service Photos</Text>
@@ -682,12 +683,15 @@ const CreateListingScreen = () => {
           </Animated.View>
         </View>
 
-        {/* Bottom Actions */}
+        {/* The bottom action button is now consistently rendered across all steps */}
         <View style={styles.bottomActions}>
           <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.primaryButtonLoading]}
+            style={[
+              styles.primaryButton,
+              (!validateStep(currentStep) || loading) && styles.primaryButtonDisabled
+            ]}
             onPress={handleNext}
-            disabled={loading}
+            disabled={!validateStep(currentStep) || loading}
             activeOpacity={0.8}
           >
             {loading ? (
@@ -695,7 +699,7 @@ const CreateListingScreen = () => {
             ) : (
               <>
                 <Text style={styles.primaryButtonText}>
-                  {currentStep === 4 ? (isEditMode ? 'Update' : 'Create') : 'Continue'}
+                  {currentStep === 4 ? (isEditMode ? 'Update Listing' : 'Create Listing') : 'Continue'}
                 </Text>
                 {currentStep < 4 && (
                   <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
@@ -703,15 +707,6 @@ const CreateListingScreen = () => {
               </>
             )}
           </TouchableOpacity>
-
-          {currentStep === 1 && (
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
     </SafeAreaWrapper>
@@ -1131,6 +1126,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderTopWidth: 1,
     borderTopColor: COLORS.BORDER.PRIMARY,
+    paddingBottom: SPACING.MD + 12,
+    marginBottom: TAB_BAR_HEIGHT, // ensure we sit above the tab bar
   },
   primaryButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
@@ -1140,6 +1137,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.SM,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    opacity: 0.5,
   },
   primaryButtonLoading: {
     opacity: 0.8,
