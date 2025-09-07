@@ -12,6 +12,9 @@ export interface CreateListingPayload {
   description: string;
   categoryId: string;
   subCategoryId: string;
+  // Optional human-readable category and subcategory names mapped from their IDs
+  category?: string;
+  subcategory?: string;
   photos: ImagePickerResult[];
   coordinates: [number, number]; // [longitude, latitude]
   price: number;
@@ -78,6 +81,9 @@ class ListingService {
         description: payload.description,
         categoryId: payload.categoryId,
         subCategoryId: payload.subCategoryId,
+        // Include mapped names if present
+        ...(payload.category ? { category: payload.category } : {}),
+        ...(payload.subcategory ? { subcategory: payload.subcategory } : {}),
         coordinates: payload.coordinates,
         price: payload.price,
         unitOfMeasure: payload.unitOfMeasure,
@@ -162,7 +168,13 @@ class ListingService {
       }
       
       // Create a copy of payload without photos for JSON data
-      const { photos, ...listingData } = payload;
+      const { photos, ...rest } = payload;
+
+      const listingData = {
+        ...rest,
+        ...(rest?.category ? { category: rest.category } : {}),
+        ...(rest?.subcategory ? { subcategory: rest.subcategory } : {}),
+      };
       
       // Add other data as JSON string
       formData.append('data', JSON.stringify(listingData));

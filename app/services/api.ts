@@ -27,6 +27,10 @@ interface User {
   role: 'individual' | 'SHG' | 'FPO' | 'admin';
   isVerified: boolean;
   kycStatus: 'pending' | 'approved' | 'rejected' | 'none';
+  // Newly supported optional fields from backend
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  // ISO string (e.g., "1995-09-22T00:00:00.000Z") or date-only string ("YYYY-MM-DD")
+  dateOfBirth?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -36,6 +40,10 @@ interface UserUpdateRequest {
   phone?: string;
   isVerified?: boolean;
   kycStatus?: 'pending' | 'approved' | 'rejected';
+  // Allow minimal partial updates for profile fields per backend docs
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  // Send as YYYY-MM-DD per backend examples
+  dateOfBirth?: string;
 }
 
 // 📧 Helper functions for easier usage

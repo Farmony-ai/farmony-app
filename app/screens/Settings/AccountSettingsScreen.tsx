@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Image, Modal, Platform } from 'react-native';
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import Text from '../../components/Text';
@@ -11,9 +11,19 @@ import { setUser } from '../../store/slices/authSlice';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import DatePicker from 'react-native-date-picker';
+import { usersAPI } from '../../services/api';
 
 // A vastly improved, reusable component for form inputs, now with leading icons.
-const IconFormInput = ({ icon, label, value, onChangeText, placeholder, editable = true, ...props }) => (
+type IconFormInputProps = {
+    icon: string;
+    label: string;
+    value: string;
+    onChangeText?: (text: string) => void;
+    placeholder?: string;
+    editable?: boolean;
+    [key: string]: any;
+};
+const IconFormInput = ({ icon, label, value, onChangeText, placeholder, editable = true, ...props }: IconFormInputProps) => (
     <View style={styles.inputContainer}>
         <Text style={styles.label}>{label}</Text>
         <View style={[styles.inputWrapper, !editable && styles.inputDisabled]}>
@@ -32,7 +42,12 @@ const IconFormInput = ({ icon, label, value, onChangeText, placeholder, editable
 );
 
 // A new, dedicated component for gender selection using stylish tabs.
-const GenderSelector = ({ label, selected, onSelect }) => {
+type GenderSelectorProps = {
+    label: string;
+    selected: string;
+    onSelect: (value: string) => void;
+};
+const GenderSelector = ({ label, selected, onSelect }: GenderSelectorProps) => {
     const options = ['Male', 'Female', 'Other'];
     return (
         <View style={styles.inputContainer}>
@@ -68,26 +83,99 @@ const AccountSettingsScreen = () => {
     // State for form fields
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
-    const [dob, setDob] = useState(() => {
-        const date = new Date();
-        date.setFullYear(date.getFullYear() - 20);
-        return date;
-    });
-    const [gender, setGender] = useState('');
+    // Initialize gender and date of birth strictly from the user profile, without changing other behavior
+    const initialGender = useMemo(() => {
+        const g = (user as any)?.gender as string | undefined;
+        if (!g) return '';
+        const normalized = g.toLowerCase();
+        if (normalized === 'male') return 'Male';
+        if (normalized === 'female') return 'Female';
+        if (normalized === 'other') return 'Other';
+        return '';
+    }, [user]);
+    const initialDob = useMemo(() => {
+        const dobStr = (user as any)?.dateOfBirth as string | undefined;
+        if (!dobStr) return null as Date | null;
+        const parsed = new Date(dobStr);
+        return isNaN(parsed.getTime()) ? null : parsed;
+    }, [user]);
+
+    const [dob, setDob] = useState<Date | null>(initialDob);
+    const [gender, setGender] = useState(initialGender);
+    const [dobTouched, setDobTouched] = useState(false);
+    const [genderTouched, setGenderTouched] = useState(false);
+    const originalGenderRef = useRef(initialGender);
+    const originalDobRef = useRef(initialDob);
     const [occupation, setOccupation] = useState('');
     const [bio, setBio] = useState('');
     const [avatarUrl, setAvatarUrl] = useState('https://i.pravatar.cc/150?u=a042581f4e29026704d');
     
     // State for the date picker modal
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
-    const handleSaveChanges = () => {
-        // Functionality remains the same
-        console.log('Profile changes saved (simulated).');
+    const formatDateForApi = (date: Date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`; // YYYY-MM-DD as per backend examples
+    };
+
+    const handleSaveChanges = async () => {
+        try {
+            if (!user?.id) return;
+            // Build minimal update payload: only include fields the user actually changed
+            const updates: any = {};
+
+            // Gender
+            const currentGender = gender;
+            const originalGender = originalGenderRef.current;
+            if (genderTouched && currentGender !== originalGender) {
+                const normalized = currentGender ? currentGender.toLowerCase() : undefined;
+                if (normalized === 'male' || normalized === 'female' || normalized === 'other') {
+                    updates.gender = normalized;
+                }
+            }
+
+            // Date of Birth
+            const currentDob = dob;
+            const originalDob = originalDobRef.current;
+            const dobChanged = dobTouched && (
+                (!!currentDob && !originalDob) ||
+                (!currentDob && !!originalDob) ||
+                (!!currentDob && !!originalDob && currentDob.toDateString() !== originalDob.toDateString())
+            );
+            if (dobChanged && currentDob) {
+                updates.dateOfBirth = formatDateForApi(currentDob);
+            }
+
+            // If nothing changed, exit quietly
+            if (Object.keys(updates).length === 0) {
+                return;
+            }
+
+            setIsSaving(true);
+            const result = await usersAPI.updateUser(user.id, updates);
+            setIsSaving(false);
+
+            if (result?.success) {
+                const returnedUser = (result as any).data?.user;
+                if (returnedUser) {
+                    // Merge minimally to avoid disturbing any other fields
+                    dispatch(setUser({ ...(user as any), ...returnedUser }));
+                } else {
+                    // Fallback: merge the minimal updates
+                    dispatch(setUser({ ...(user as any), ...updates }));
+                }
+            }
+        } catch (error) {
+            setIsSaving(false);
+            console.error('Failed to update profile:', error);
+        }
     };
     
     // Formats the date to DD MM YYYY for display purposes.
-    const formatDisplayDate = (date) => {
+    const formatDisplayDate = (date: Date | null) => {
         if (!date) return '';
         const day = String(date.getDate()).padStart(2, '0');
         const month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
@@ -153,11 +241,12 @@ const AccountSettingsScreen = () => {
                 <DatePicker
                     modal
                     open={isDatePickerVisible}
-                    date={dob}
+                    date={dob || new Date()}
                     mode="date"
-                    onConfirm={(date) => {
+                    onConfirm={(date: Date) => {
                         setDatePickerVisible(false);
                         setDob(date);
+                        setDobTouched(true);
                     }}
                     onCancel={() => {
                         setDatePickerVisible(false);
@@ -167,7 +256,7 @@ const AccountSettingsScreen = () => {
                 <GenderSelector
                     label="Gender (Optional)"
                     selected={gender}
-                    onSelect={setGender}
+                    onSelect={(g: string) => { setGender(g); setGenderTouched(true); }}
                 />
 
                 <IconFormInput
@@ -186,7 +275,7 @@ const AccountSettingsScreen = () => {
                     multiline
                 />
 
-                <Button title="Save Changes" onPress={handleSaveChanges} style={styles.saveButton} />
+                <Button title={isSaving ? 'Saving...' : 'Save Changes'} onPress={handleSaveChanges} style={styles.saveButton} disabled={isSaving} />
             </ScrollView>
         </SafeAreaWrapper>
     );
