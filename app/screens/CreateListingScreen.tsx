@@ -917,8 +917,8 @@ const styles = StyleSheet.create({
     padding: SPACING.MD,
   },
   subCategoryIconContainer: {
-    width: 44,
-    height: 44,
+    width: 56,
+    height: 56,
     borderRadius: 22,
     backgroundColor: COLORS.NEUTRAL.WHITE,
     justifyContent: 'center',
@@ -931,10 +931,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.PRIMARY.MAIN,
   },
   subCategoryIcon: {
-    width: 22,
-    height: 22,
+    width: 46,
+    height: 46,
     resizeMode: 'contain',
-    tintColor: COLORS.TEXT.SECONDARY,
+
   },
   subCategoryTextContainer: {
     flex: 1,
@@ -1127,7 +1127,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.BORDER.PRIMARY,
     paddingBottom: SPACING.MD + 12,
-    marginBottom: TAB_BAR_HEIGHT, // ensure we sit above the tab bar
+    marginBottom: 60, // ensure we sit above the tab bar
   },
   primaryButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
