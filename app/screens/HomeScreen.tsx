@@ -10,7 +10,8 @@ import {
   Platform,
   Dimensions,
   StatusBar,
-  Modal
+  Modal,
+  RefreshControl
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -58,6 +59,7 @@ export default function HomeScreen() {
   const [currentAddress, setCurrentAddress] = useState<Address | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -97,56 +99,76 @@ export default function HomeScreen() {
     fetchLocation();
   }, [dispatch]);
 
+  const fetchCategories = async () => {
+    try {
+      const fetchedCategories = await CatalogueService.getCategories();
+      setCategories(fetchedCategories);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const fetchedCategories = await CatalogueService.getCategories();
-        setCategories(fetchedCategories);
-      } catch (error) {
-        console.error('Error fetching categories:', error);
-      }
-    };
     fetchCategories();
   }, []);
 
-  useEffect(() => {
-    const fetchWeatherData = async () => {
-      if (latitude && longitude) {
-        setWeatherLoading(true);
-        try {
-          const data = await ClimateService.getWeatherData(latitude, longitude);
-          setWeatherData(data);
-        } catch (error) {
-          console.error('Error fetching weather data:', error);
-        } finally {
-          setWeatherLoading(false);
-        }
+  const fetchWeatherData = async () => {
+    if (latitude && longitude) {
+      setWeatherLoading(true);
+      try {
+        const data = await ClimateService.getWeatherData(latitude, longitude);
+        setWeatherData(data);
+      } catch (error) {
+        console.error('Error fetching weather data:', error);
+      } finally {
+        setWeatherLoading(false);
       }
-    };
+    }
+  };
+
+  useEffect(() => {
     fetchWeatherData();
   }, [latitude, longitude]);
 
-  useEffect(() => {
-    const fetchDefaultAddress = async () => {
-      if (user?.id) {
-        try {
-          const addresses = await AddressService.getUserAddresses(user.id);
-          const defaultAddr = addresses.find(addr => addr.isDefault);
-          if (defaultAddr) {
-            setCurrentAddress(defaultAddr);
-            dispatch(setLocation({
-              latitude: defaultAddr.coordinates[1],
-              longitude: defaultAddr.coordinates[0],
-              city: defaultAddr.district || defaultAddr.state,
-            }));
-          }
-        } catch (error) {
-          console.error('Error fetching default address:', error);
+  const fetchDefaultAddress = async () => {
+    if (user?.id) {
+      try {
+        const addresses = await AddressService.getUserAddresses(user.id);
+        const defaultAddr = addresses.find(addr => addr.isDefault);
+        if (defaultAddr) {
+          setCurrentAddress(defaultAddr);
+          dispatch(setLocation({
+            latitude: defaultAddr.coordinates[1],
+            longitude: defaultAddr.coordinates[0],
+            city: defaultAddr.district || defaultAddr.state,
+          }));
         }
+      } catch (error) {
+        console.error('Error fetching default address:', error);
       }
-    };
+    }
+  };
+
+  useEffect(() => {
     fetchDefaultAddress();
   }, [user, dispatch]);
+
+  // Pull to refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Refresh all data
+      await Promise.all([
+        fetchCategories(),
+        fetchWeatherData(),
+        fetchDefaultAddress()
+      ]);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const getDayLabel = (date: Date) => {
     const today = new Date();
@@ -177,6 +199,11 @@ export default function HomeScreen() {
 
   const handleDateRangeConfirm = (start: string, end: string) => {
     dispatch(setDateRange({ startDate: start, endDate: end }));
+    
+    // Update selectedDate to the start date
+    const newSelectedDate = new Date(start);
+    setSelectedDate(newSelectedDate);
+    
     setShowCalendarModal(false);
   };
 
@@ -216,7 +243,16 @@ export default function HomeScreen() {
       <ScrollView 
         contentContainerStyle={styles.scrollContent} 
         showsVerticalScrollIndicator={false}
-        bounces={false}
+        bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS_MINIMAL.accent]}
+            tintColor={COLORS_MINIMAL.accent}
+            progressBackgroundColor={COLORS_MINIMAL.surface}
+          />
+        }
       >
         {/* Minimal Header */}
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
@@ -278,7 +314,7 @@ export default function HomeScreen() {
             contentContainerStyle={styles.dateScrollContent}
           >
             {dates.map((date, index) => {
-              const isSelected = selectedDate.getDate() === date.getDate();
+              const isSelected = selectedDate.toDateString() === date.toDateString();
               return (
                 <TouchableOpacity
                   key={index}
@@ -496,8 +532,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   dateButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 20,
     backgroundColor: COLORS_MINIMAL.surface,
     alignItems: 'center',
@@ -531,6 +567,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 80,
+    flexDirection: 'row',
+    gap: 4,
   },
   moreDatesText: {
     fontFamily: FONTS.POPPINS.MEDIUM,
