@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -18,7 +18,7 @@ import Text from '../components/Text';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import LocationService from '../services/locationService';
 import CatalogueService, { Category } from '../services/CatalogueService';
 import { useDispatch, useSelector } from 'react-redux';
@@ -149,9 +149,21 @@ export default function HomeScreen() {
     }
   };
 
+  // Initial load
   useEffect(() => {
-    fetchDefaultAddress();
-  }, [user, dispatch]);
+    if (user?.id) {
+      fetchDefaultAddress();
+    }
+  }, [user]);
+
+  // Refresh address when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) {
+        fetchDefaultAddress();
+      }
+    }, [user])
+  );
 
   // Pull to refresh handler
   const onRefresh = async () => {
@@ -228,6 +240,16 @@ export default function HomeScreen() {
     });
   };
 
+  // Format address display
+  const getAddressDisplay = () => {
+    if (currentAddress) {
+      const tag = currentAddress.tag.charAt(0).toUpperCase() + currentAddress.tag.slice(1);
+      const location = currentAddress.district || currentAddress.state || city;
+      return `${tag} • ${location}`;
+    }
+    return city || 'Add location';
+  };
+
   // Generate dates for picker
   const dates = [];
   for (let i = 0; i < 5; i++) {
@@ -265,10 +287,7 @@ export default function HomeScreen() {
               <Text style={styles.locationSubtext}>Current Location</Text>
               <View style={styles.locationMain}>
                 <Text style={styles.locationText} numberOfLines={1}>
-                  {currentAddress 
-                    ? `${currentAddress.tag} • ${currentAddress.district || city}`
-                    : city || 'Add location'
-                  }
+                  {getAddressDisplay()}
                 </Text>
                 <Ionicons name="chevron-down" size={16} color={COLORS_MINIMAL.text.primary} />
               </View>
@@ -517,27 +536,27 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   dateSection: {
-    paddingTop: 16,
-    paddingBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   dateLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.secondary,
-    marginBottom: 12,
+    marginBottom: 10,
     paddingHorizontal: 16,
   },
   dateScrollContent: {
     paddingHorizontal: 16,
-    gap: 10,
+    gap: 8,
   },
   dateButton: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 20,
+    borderRadius: 18,
     backgroundColor: COLORS_MINIMAL.surface,
     alignItems: 'center',
-    minWidth: 80,
+    minWidth: 72,
   },
   selectedDateButton: {
     backgroundColor: COLORS_MINIMAL.text.primary,
@@ -545,7 +564,7 @@ const styles = StyleSheet.create({
   dayText: {
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.secondary,
-    fontSize: 13,
+    fontSize: 11,
   },
   selectedDayText: {
     color: COLORS_MINIMAL.background,
@@ -553,33 +572,33 @@ const styles = StyleSheet.create({
   dateText: {
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 10,
+    marginTop: 1,
   },
   selectedDateText: {
     color: COLORS_MINIMAL.background,
   },
   moreDatesButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 18,
     backgroundColor: COLORS_MINIMAL.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 80,
+    minWidth: 72,
     flexDirection: 'row',
-    gap: 4,
+    gap: 3,
   },
   moreDatesText: {
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.secondary,
-    fontSize: 13,
+    fontSize: 11,
   },
   selectedFullDate: {
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
-    marginTop: 8,
+    marginTop: 6,
     paddingHorizontal: 16,
   },
   searchBar: {
@@ -620,7 +639,7 @@ const styles = StyleSheet.create({
   serviceIconContainer: {
     width: 72,
     height: 72,
-    borderRadius: 12, // Squarish with rounded corners
+    borderRadius: 12,
     backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
