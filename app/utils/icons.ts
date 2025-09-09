@@ -20,7 +20,7 @@ const categoryIcons: { [key: string]: any } = {
   processor: require('../assets/Icons/Categories/oil-press.png'),
   
   // Tools & Equipment
-  tools: require('../assets/Icons/Categories/tools.png'),
+  tools: require('../assets/Icons/Categories/construction-tools.png'),
   'hand-tools': require('../assets/Icons/Categories/hand-tools.png'),
   'power-tools': require('../assets/Icons/Categories/power-tools.png'),
   'construction-tools': require('../assets/Icons/Categories/construction-tools.png'),

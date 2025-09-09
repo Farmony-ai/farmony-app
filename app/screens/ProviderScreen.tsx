@@ -25,6 +25,11 @@ import PendingRequestCard from '../components/PendingRequestCard';
 const { width: screenWidth } = Dimensions.get('window');
 const backgroundImg = require('../assets/provider-bg.png');
 
+// Import custom icons
+const bookingsIcon = require('../assets/bookings.png');
+const listingsIcon = require('../assets/listings.png');
+const ratingsIcon = require('../assets/ratings.png');
+
 // Animation constants
 const HORIZONTAL_SWIPE_THRESHOLD = 80;
 const SWIPE_OUT_DURATION = 300;
@@ -53,19 +58,19 @@ const ProviderScreen = () => {
       {
         label: 'Bookings',
         value: String(summary?.totalBookings ?? 0),
-        icon: 'calendar-outline',
+        icon: bookingsIcon,
         onPress: () => navigation.navigate('ProviderBookings'),
       },
       {
         label: 'Listings',
         value: String(summary?.activeListings ?? 0),
-        icon: 'list-outline',
+        icon: listingsIcon,
         onPress: () => navigation.navigate('MyListings'),
       },
       {
         label: 'Rating',
         value: String(summary?.averageRating ?? 0),
-        icon: 'star-outline',
+        icon: ratingsIcon,
         onPress: () => {},
       },
     ];
@@ -279,7 +284,7 @@ const ProviderScreen = () => {
                 activeOpacity={0.7}
               >
                 <View style={styles.summaryIconBox}>
-                  <Ionicons name={stat.icon as any} size={16} color={COLORS.PRIMARY.MAIN} />
+                  <Image source={stat.icon} style={styles.summaryIcon} resizeMode="contain" />
                 </View>
                 <Text style={styles.summaryValue}>{stat.value}</Text>
                 <Text style={styles.summaryLabel}>{stat.label}</Text>
@@ -392,16 +397,18 @@ const styles = StyleSheet.create({
     ...SHADOWS.SM,
   },
   summaryIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FEF3E2',
+    width: 64,
+    height: 64,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom:2,
+  },
+  summaryIcon: {
+    width: 54,
+    height: 54,
   },
   summaryValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 1,
