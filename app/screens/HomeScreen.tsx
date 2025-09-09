@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
     color: COLORS_MINIMAL.text.muted,
   },
   servicesSection: {
-    paddingBottom: 20,
+
   },
   sectionTitle: {
     fontSize: 18,
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   serviceDesc: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
