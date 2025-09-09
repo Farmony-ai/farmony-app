@@ -130,8 +130,7 @@ const SettingsScreen = () => {
       title: 'Preferences',
       items: [
         { icon: 'color-palette-outline', label: 'Personalization', onPress: () => navigation.navigate('Personalization') },
-        { icon: 'notifications-outline', label: 'Notifications', onPress: () => {} },
-        { icon: 'language-outline', label: 'Language', onPress: () => {} },
+
       ],
     },
     {
