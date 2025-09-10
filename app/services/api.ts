@@ -291,6 +291,13 @@ export const listingsAPI = {
 export const ordersAPI = {
   // Create order
   create: async (data: any) => {
+    // 🧾 DEBUG: Log the payload at the API layer as well
+    try {
+      const pretty = JSON.stringify(data, null, 2);
+      console.log('[ordersAPI.create] ➜ POST /orders with body:\n', pretty);
+    } catch (e) {
+      console.log('[ordersAPI.create] ➜ POST /orders with body (raw object):', data);
+    }
     return apiInterceptor.makeAuthenticatedRequest('/orders', {
       method: 'POST',
       body: JSON.stringify(data),

@@ -106,6 +106,15 @@ const PaymentSelectionScreen = () => {
         specialInstructions: params.specialInstructions,
       };
 
+      // 🧾 DEBUG: Log the exact payload we are about to send to the server
+      // This helps us verify fields like providerId and orderType before the API call
+      try {
+        const prettyPayload = JSON.stringify(orderData, null, 2);
+        console.log('[PaymentSelection] Creating order with payload ->\n', prettyPayload);
+      } catch (e) {
+        console.log('[PaymentSelection] Creating order with payload (raw object):', orderData);
+      }
+
       const response = await ordersAPI.create(orderData);
 
       if (response.success) {
