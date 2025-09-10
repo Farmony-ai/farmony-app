@@ -8,10 +8,10 @@ export const API_CONFIG = {
     // For Android Emulator (most common)
     // android: 'http://localhost:3000',
     android: 'http://10.0.2.2:3000',
-    // android: 'http://192.168.137.1:3000', 
+    // android: 'http:// 192.168.1.101:3000', 
     
-    // For iOS Simulator (replace with your actual IP)
-    ios: 'http://localhost:3000',
+    // For iOS Simulator (replace with your actual IP)F
+    ios: 'http://192.168.1.59:3000',
     
     // For Physical Device (replace with your actual IP)
     device: 'http://192.168.1.101:3000', // Replace with your computer's IP
@@ -32,7 +32,7 @@ export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyA_d
 const getBaseURL = () => {
   // For now, we'll use Android emulator settings
   // You can make this more dynamic based on Platform.OS or __DEV__
-  return API_CONFIG.development.android;
+  return API_CONFIG.development.ios;
 };
 
 // 📡 Export the current base URL

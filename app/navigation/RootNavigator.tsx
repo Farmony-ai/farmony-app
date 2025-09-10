@@ -97,7 +97,6 @@ const RootNavigator = () => {
             <Stack.Screen name="PaymentSettings" component={PaymentSettingsScreen} />
             <Stack.Screen name="Help" component={HelpScreen} />
             <Stack.Screen name="Legal" component={LegalScreen} />
-            <Stack.Screen name="AdvancedSettings" component={AdvancedSettingsScreen} />
           </>
         ) : (
           <>

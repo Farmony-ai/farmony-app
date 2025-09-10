@@ -422,7 +422,8 @@ export const signIn = createAsyncThunk(
         user: user,
       };
     } catch (error) {
-      console.error('🔥 Network error during login:', error);
+      console.log(`${API_BASE_URL}/auth/login`)
+      console.error('🔥 Network error during login:', error, API_BASE_URL);
       throw error;
     }
   }

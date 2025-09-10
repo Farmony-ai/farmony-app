@@ -7,7 +7,7 @@ const categoryIcons: { [key: string]: any } = {
   rotavator: require('../assets/Icons/Categories/rotavator.png'),
   thresher: require('../assets/Icons/Categories/thresher.png'),
   drill: require('../assets/Icons/Categories/drill.png'),
-  'water-pump': require('../assets/Icons/Categories/water-pump.png'),
+  'water-pump': require('../assets/Icons/Categories/pump.png'),
   sprayer: require('../assets/Icons/Categories/sprayer.png'),
   drip: require('../assets/Icons/Categories/drip.png'),
   sprinkler: require('../assets/Icons/Categories/sprinkler.png'),
@@ -17,10 +17,10 @@ const categoryIcons: { [key: string]: any } = {
   'flour-mill': require('../assets/Icons/Categories/flour-mill.png'),
   'oil-press': require('../assets/Icons/Categories/oil-press.png'),
   mill: require('../assets/Icons/Categories/mill.png'),
-  processor: require('../assets/Icons/Categories/processor.png'),
+  processor: require('../assets/Icons/Categories/oil-press.png'),
   
   // Tools & Equipment
-  tools: require('../assets/Icons/Categories/tools.png'),
+  tools: require('../assets/Icons/Categories/construction-tools.png'),
   'hand-tools': require('../assets/Icons/Categories/hand-tools.png'),
   'power-tools': require('../assets/Icons/Categories/power-tools.png'),
   'construction-tools': require('../assets/Icons/Categories/construction-tools.png'),

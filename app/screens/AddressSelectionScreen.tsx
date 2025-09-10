@@ -7,10 +7,11 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  StatusBar,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS, FONT_SIZES } from '../utils';
+import { SPACING, FONTS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -18,6 +19,21 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { setLocation } from '../store/slices/locationSlice';
 import AddressService, { Address } from '../services/AddressService';
+
+// Ultra-minimal color scheme
+const COLORS_MINIMAL = {
+  background: '#FFFFFF',
+  surface: '#F8F9FA',
+  text: {
+    primary: '#000000',
+    secondary: '#4A5568',
+    muted: '#A0AEC0',
+  },
+  accent: '#10B981',
+  border: '#E2E8F0',
+  divider: '#F1F5F9',
+  danger: '#EF4444',
+};
 
 const AddressSelectionScreen = () => {
   const navigation = useNavigation<any>();
@@ -135,113 +151,130 @@ const AddressSelectionScreen = () => {
   };
 
   return (
-    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+    <SafeAreaWrapper backgroundColor={COLORS_MINIMAL.background}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS_MINIMAL.background} />
+      
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={22} color={COLORS.TEXT.PRIMARY} />
+          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={24} color={COLORS_MINIMAL.text.primary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Select address</Text>
+          <Text style={styles.headerTitle}>Select Address</Text>
+          <View style={{ width: 24 }} />
         </View>
 
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={handleRefresh}
+              colors={[COLORS_MINIMAL.accent]}
+              tintColor={COLORS_MINIMAL.accent}
+            />
           }
         >
           {/* Add New Address Button */}
           <TouchableOpacity
             style={styles.addNewButton}
             onPress={handleAddNewAddress}
+            activeOpacity={0.7}
           >
             <View style={styles.addIconWrapper}>
-              <Ionicons name="add" size={20} color={COLORS.PRIMARY.MAIN} />
+              <Ionicons name="add" size={20} color={COLORS_MINIMAL.accent} />
             </View>
             <Text style={styles.addNewText}>Add new address</Text>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.TEXT.SECONDARY} />
+            <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
           </TouchableOpacity>
 
           {/* Saved Addresses Section */}
           {addresses.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>SAVED ADDRESSES</Text>
+              <Text style={styles.sectionTitle}>Saved Addresses</Text>
               
               {loading ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+                  <ActivityIndicator size="large" color={COLORS_MINIMAL.accent} />
                 </View>
               ) : (
-                addresses.map((address) => (
-                  <TouchableOpacity
-                    key={address._id}
-                    style={[
-                      styles.addressCard,
-                      selectedAddressId === address._id && styles.selectedAddressCard
-                    ]}
-                    onPress={() => handleSelectAddress(address)}
-                  >
-                    <View style={styles.addressContent}>
-                      <View style={styles.addressIconContainer}>
-                        <Ionicons
-                          name={getTagIcon(address.tag)}
-                          size={20}
-                          color={selectedAddressId === address._id ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY}
-                        />
-                      </View>
-                      
-                      <View style={styles.addressDetails}>
-                        <View style={styles.addressHeaderRow}>
-                          <Text style={styles.addressTag}>
-                            {address.tag.charAt(0).toUpperCase() + address.tag.slice(1)}
-                          </Text>
-                          {selectedAddressId === address._id && (
-                            <View style={styles.selectedBadge}>
-                              <Text style={styles.selectedText}>SELECTED</Text>
-                            </View>
-                          )}
+                <View style={styles.addressList}>
+                  {addresses.map((address, index) => (
+                    <TouchableOpacity
+                      key={address._id}
+                      style={[
+                        styles.addressCard,
+                        selectedAddressId === address._id && styles.selectedAddressCard
+                      ]}
+                      onPress={() => handleSelectAddress(address)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.addressContent}>
+                        <View style={[
+                          styles.addressIconContainer,
+                          selectedAddressId === address._id && styles.selectedIconContainer
+                        ]}>
+                          <Ionicons
+                            name={getTagIcon(address.tag)}
+                            size={20}
+                            color={selectedAddressId === address._id ? COLORS_MINIMAL.accent : COLORS_MINIMAL.text.secondary}
+                          />
                         </View>
                         
-                        <Text style={styles.addressLine1}>{address.addressLine1}</Text>
-                        {address.addressLine2 && (
-                          <Text style={styles.addressLine2}>{address.addressLine2}</Text>
-                        )}
-                        <Text style={styles.addressFullDetails}>
-                          {[
-                            address.village,
-                            address.district,
-                            address.state,
-                            address.pincode
-                          ].filter(Boolean).join(', ')}
-                        </Text>
-                      </View>
+                        <View style={styles.addressDetails}>
+                          <View style={styles.addressHeaderRow}>
+                            <Text style={styles.addressTag}>
+                              {address.tag.charAt(0).toUpperCase() + address.tag.slice(1)}
+                            </Text>
+                            {selectedAddressId === address._id && (
+                              <View style={styles.selectedBadge}>
+                                <Ionicons name="checkmark-circle" size={14} color={COLORS_MINIMAL.accent} />
+                              </View>
+                            )}
+                          </View>
+                          
+                          <Text style={styles.addressLine1}>{address.addressLine1}</Text>
+                          {address.addressLine2 && (
+                            <Text style={styles.addressLine2}>{address.addressLine2}</Text>
+                          )}
+                          <Text style={styles.addressFullDetails}>
+                            {[
+                              address.village,
+                              address.district,
+                              address.state,
+                              address.pincode
+                            ].filter(Boolean).join(', ')}
+                          </Text>
+                        </View>
 
-                      <TouchableOpacity
-                        style={styles.menuButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          Alert.alert(
-                            'Address Options',
-                            '',
-                            [
-                              { text: 'Edit', onPress: () => handleEditAddress(address) },
-                              { 
-                                text: 'Delete', 
-                                onPress: () => handleDeleteAddress(address._id),
-                                style: 'destructive'
-                              },
-                              { text: 'Cancel', style: 'cancel' }
-                            ]
-                          );
-                        }}
-                      >
-                        <Ionicons name="ellipsis-vertical" size={18} color={COLORS.TEXT.SECONDARY} />
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
-                ))
+                        <TouchableOpacity
+                          style={styles.menuButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            Alert.alert(
+                              'Address Options',
+                              '',
+                              [
+                                { text: 'Edit', onPress: () => handleEditAddress(address) },
+                                { 
+                                  text: 'Delete', 
+                                  onPress: () => handleDeleteAddress(address._id),
+                                  style: 'destructive'
+                                },
+                                { text: 'Cancel', style: 'cancel' }
+                              ]
+                            );
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="ellipsis-vertical" size={18} color={COLORS_MINIMAL.text.muted} />
+                        </TouchableOpacity>
+                      </View>
+                      {index < addresses.length - 1 && <View style={styles.divider} />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
               )}
             </>
           )}
@@ -249,11 +282,20 @@ const AddressSelectionScreen = () => {
           {/* Empty State */}
           {!loading && addresses.length === 0 && (
             <View style={styles.emptyState}>
-              <Ionicons name="location-outline" size={64} color={COLORS.TEXT.PLACEHOLDER} />
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="location-outline" size={48} color={COLORS_MINIMAL.text.muted} />
+              </View>
               <Text style={styles.emptyStateTitle}>No addresses saved</Text>
               <Text style={styles.emptyStateText}>
                 Add your first address to get started
               </Text>
+              <TouchableOpacity 
+                style={styles.emptyAddButton}
+                onPress={handleAddNewAddress}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.emptyAddButtonText}>Add Address</Text>
+              </TouchableOpacity>
             </View>
           )}
         </ScrollView>
@@ -265,162 +307,175 @@ const AddressSelectionScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    backgroundColor: COLORS_MINIMAL.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
-  },
-  backButton: {
-    padding: SPACING.XS,
-    marginRight: SPACING.MD,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
+    fontSize: 18,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS_MINIMAL.text.primary,
   },
   scrollContent: {
-    paddingBottom: SPACING['4XL'],
+    paddingBottom: 100,
   },
   addNewButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingVertical: SPACING.MD,
-    paddingHorizontal: SPACING.MD,
-    marginTop: SPACING.SM,
-    marginBottom: SPACING.SM,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
+    backgroundColor: COLORS_MINIMAL.surface,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 24,
+    borderRadius: 12,
   },
   addIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.PRIMARY.LIGHT,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS_MINIMAL.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: SPACING.MD,
+    marginRight: 12,
   },
   addNewText: {
     flex: 1,
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
+    fontSize: 15,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS_MINIMAL.text.primary,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.XS,
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.SECONDARY,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    letterSpacing: 0.5,
+    color: COLORS_MINIMAL.text.muted,
+    paddingHorizontal: 20,
+    marginBottom: 8,
   },
   loadingContainer: {
-    paddingVertical: SPACING['2XL'],
+    paddingVertical: 60,
     alignItems: 'center',
   },
-  addressCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    marginHorizontal: SPACING.MD,
-    marginBottom: SPACING.SM,
-    borderRadius: BORDER_RADIUS.LG,
+  addressList: {
+    marginHorizontal: 20,
+    backgroundColor: COLORS_MINIMAL.background,
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  addressCard: {
+    backgroundColor: COLORS_MINIMAL.background,
   },
   selectedAddressCard: {
-    borderColor: COLORS.PRIMARY.MAIN,
-    backgroundColor: COLORS.PRIMARY.LIGHT,
+    backgroundColor: `${COLORS_MINIMAL.accent}08`,
   },
   addressContent: {
     flexDirection: 'row',
-    padding: SPACING.MD,
+    padding: 16,
   },
   addressIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: SPACING.MD,
+    marginRight: 12,
+  },
+  selectedIconContainer: {
+    backgroundColor: `${COLORS_MINIMAL.accent}15`,
   },
   addressDetails: {
     flex: 1,
-    marginRight: SPACING.SM,
+    marginRight: 8,
   },
   addressHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: SPACING.XS,
+    marginBottom: 4,
   },
   addressTag: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-    marginRight: SPACING.SM,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS_MINIMAL.text.primary,
+    marginRight: 8,
   },
   selectedBadge: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  selectedText: {
-    fontSize: 10,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.NEUTRAL.WHITE,
-    letterSpacing: 0.3,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   addressLine1: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
+    color: COLORS_MINIMAL.text.primary,
     marginBottom: 2,
   },
   addressLine2: {
-    fontSize: FONT_SIZES.XS,
+    fontSize: 13,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
+    color: COLORS_MINIMAL.text.secondary,
     marginBottom: 2,
   },
   addressFullDetails: {
-    fontSize: FONT_SIZES.XS,
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
+    color: COLORS_MINIMAL.text.muted,
     lineHeight: 16,
-    marginTop: 2,
+    marginTop: 4,
   },
   menuButton: {
-    padding: SPACING.XS,
+    padding: 4,
     marginTop: -4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS_MINIMAL.divider,
+    marginLeft: 68,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: SPACING['4XL'],
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS_MINIMAL.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   emptyStateTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-    marginTop: SPACING.MD,
-    marginBottom: SPACING.SM,
+    fontSize: 18,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS_MINIMAL.text.primary,
+    marginBottom: 8,
   },
   emptyStateText: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
+    color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
-    paddingHorizontal: SPACING['2XL'],
+    marginBottom: 24,
+  },
+  emptyAddButton: {
+    backgroundColor: COLORS_MINIMAL.accent,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  emptyAddButtonText: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS_MINIMAL.background,
   },
 });
 

@@ -113,6 +113,22 @@ const CheckoutScreen = () => {
       return;
     }
 
+    // Extract providerId properly (it might be populated object or string)
+    const providerId = typeof listing.providerId === 'object' 
+      ? listing.providerId._id || listing.providerId.id
+      : listing.providerId;
+
+    // Map listing type to order type enum (or use a default)
+    const getOrderType = () => {
+      // If listing has a specific type field that matches backend enum
+      if (listing.type && ['rental', 'hiring', 'purchase'].includes(listing.type.toLowerCase())) {
+        return listing.type.toLowerCase();
+      }
+      // Default based on category or other logic
+      // You can adjust this based on your business logic
+      return 'hiring'; // Default to hiring for services
+    };
+
     // Navigate to payment screen with user's verified phone
     navigation.navigate('PaymentSelection', {
       listing,
@@ -126,14 +142,16 @@ const CheckoutScreen = () => {
       orderDetails: {
         listingId: listing._id,
         seekerId: user?.id,
-        providerId: listing.providerId,
-        orderType: listing.type,
+        providerId: providerId, // Use extracted providerId
+        orderType: getOrderType(), // Use mapped orderType
         totalAmount,
         serviceStartDate: selectedDate,
+        serviceEndDate: selectedDate, // You can calculate end date based on duration if needed
         quantity,
         unitOfMeasure: listing.unitOfMeasure,
         coordinates: selectedAddress?.coordinates,
         addressId: selectedAddress?._id,
+        specialInstructions: notes,
       }
     });
   };

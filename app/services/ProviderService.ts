@@ -27,7 +27,9 @@ export interface ProviderRecentBooking {
 
 export interface ProviderDashboardResponse {
   summary: ProviderDashboardSummary;
-  recentBookings: ProviderRecentBooking[];
+  pendingBookings: ProviderRecentBooking[];
+  upcomingBookings: ProviderRecentBooking[];
+  recentBookings: ProviderRecentBooking[]; // Keep for backward compatibility
 }
 
 export interface ProviderPreferencesPayload {

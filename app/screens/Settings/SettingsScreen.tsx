@@ -1,9 +1,8 @@
-
 import React, { useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image, StatusBar } from 'react-native';
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import Text from '../../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS, FONT_SIZES } from '../../utils';
+import { SPACING, FONTS, FONT_SIZES } from '../../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
@@ -11,82 +10,78 @@ import { RootState, AppDispatch } from '../../store';
 import { usersAPI } from '../../services/api';
 import { setUser, logout } from '../../store/slices/authSlice';
 
-// Define a type for a single setting item for clarity and reusability.
+// Ultra-minimal color scheme matching HomeScreen
+const COLORS_MINIMAL = {
+  background: '#FFFFFF',
+  surface: '#F8F9FA',
+  text: {
+    primary: '#000000',
+    secondary: '#4A5568',
+    muted: '#A0AEC0',
+  },
+  accent: '#10B981',
+  border: '#E2E8F0',
+  divider: '#F1F5F9',
+  danger: '#EF4444',
+  dangerLight: '#FEE2E2',
+};
+
 type SettingRowProps = {
   icon: string;
   label: string;
   subtitle?: string;
   onPress: () => void;
+  isLast?: boolean;
 };
 
-/**
- * A reusable component to render a single row in a settings list.
- * This component standardizes the appearance of setting items, ensuring consistency.
- * It includes an icon, a label, an optional subtitle, and a chevron to indicate it's tappable.
- */
-const SettingRow: React.FC<SettingRowProps> = ({ icon, label, subtitle, onPress }) => (
-  <TouchableOpacity style={styles.settingItem} onPress={onPress}>
-    <Ionicons name={icon} size={24} color={COLORS.PRIMARY.MAIN} style={styles.settingIcon} />
-    <View style={styles.settingTextContainer}>
-      <Text style={styles.settingLabel}>{label}</Text>
-      {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
-    </View>
-    <Ionicons name="chevron-forward" size={22} color={COLORS.TEXT.SECONDARY} />
-  </TouchableOpacity>
+const SettingRow: React.FC<SettingRowProps> = ({ icon, label, subtitle, onPress, isLast }) => (
+  <>
+    <TouchableOpacity style={styles.settingItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.settingLeft}>
+        <View style={styles.iconContainer}>
+          <Ionicons name={icon} size={20} color={COLORS_MINIMAL.text.secondary} />
+        </View>
+        <View style={styles.settingTextContainer}>
+          <Text style={styles.settingLabel}>{label}</Text>
+          {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
+    </TouchableOpacity>
+    {!isLast && <View style={styles.separator} />}
+  </>
 );
 
-/**
- * SettingsScreen
- *
- * This screen serves as the main hub for all user-configurable settings in the app.
- * It fetches the latest user profile data when the screen is focused and provides
- * navigation to various sub-screens for detailed settings management.
- */
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch: AppDispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
-  /**
-   * Fetches the user's profile from the API.
-   * This function is called when the screen is focused or when the user performs a pull-to-refresh.
-   * It ensures that the displayed data is always up-to-date.
-   */
   const fetchUserProfile = async () => {
     if (!user?.id) return;
     try {
       const response = await usersAPI.getProfile(user.id);
       if (response.success && response.data) {
-        // Dispatch the fetched user data to update the Redux store.
         dispatch(setUser(response.data));
       }
     } catch (error) {
       console.error('Failed to fetch user profile:', error);
-      // Optionally, show a toast or message to the user.
     }
   };
 
-  // useFocusEffect is a hook from React Navigation that runs an effect when the screen comes into focus.
   useFocusEffect(
     useCallback(() => {
       fetchUserProfile();
     }, [])
   );
 
-  /**
-   * Handles the pull-to-refresh action.
-   * It sets the refreshing state and calls fetchUserProfile to reload the data.
-   */
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await fetchUserProfile();
     setIsRefreshing(false);
   }, []);
 
-  /**
-   * Dispatches the logout action to sign the user out of the application.
-   */
   const handleLogout = () => {
     dispatch(logout());
   };
@@ -95,97 +90,102 @@ const SettingsScreen = () => {
     name: user?.name ?? 'Guest User',
     phone: user?.phone ?? 'No phone number',
     email: user?.email ?? 'No email',
-    avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d', // Placeholder
+    avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
     isVerified: user?.isVerified ?? false,
   };
 
   const renderHeader = () => (
-    <TouchableOpacity style={styles.headerContainer} onPress={() => navigation.navigate('AccountSettings')}>
-        <Image source={{ uri: currentUser.avatarUrl }} style={styles.avatar} />
+    <TouchableOpacity 
+      style={styles.headerContainer} 
+      onPress={() => navigation.navigate('AccountSettings')}
+      activeOpacity={0.7}
+    >
+      <Image source={{ uri: currentUser.avatarUrl }} style={styles.avatar} />
       <View style={styles.headerTextContainer}>
-        <Text style={styles.headerName}>{currentUser.name}</Text>
-        <Text style={styles.headerSubtitle}>{currentUser.phone}</Text>
-        {currentUser.isVerified && (
-          <View style={styles.verifiedBadge}>
-            <Ionicons name="shield-checkmark" size={14} color={COLORS.SUCCESS.MAIN} />
-            <Text style={styles.verifiedText}>Verified</Text>
-          </View>
-        )}
+        <View style={styles.nameRow}>
+          <Text style={styles.headerName}>{currentUser.name}</Text>
+          {currentUser.isVerified && (
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="checkmark-circle" size={14} color={COLORS_MINIMAL.accent} />
+            </View>
+          )}
+        </View>
+        <Text style={styles.headerSubtitle}>View and edit profile</Text>
       </View>
-      <Ionicons name="chevron-forward" size={24} color={COLORS.TEXT.SECONDARY} />
+      <Ionicons name="chevron-forward" size={20} color={COLORS_MINIMAL.text.muted} />
     </TouchableOpacity>
-  );
-
-  const renderSection = (items: SettingRowProps[]) => (
-    <View style={styles.sectionCard}>
-      {items.map((item, index) => (
-        <React.Fragment key={item.label}>
-          <SettingRow {...item} />
-          {index < items.length - 1 && <View style={styles.separator} />}
-        </React.Fragment>
-      ))}
-    </View>
   );
 
   const sections = [
     {
-      title: 'Account & Profile',
+      title: 'Account',
       items: [
-        { icon: 'person-outline', label: 'Edit Profile', subtitle: 'Name, email, phone, bio', onPress: () => navigation.navigate('AccountSettings') },
-        { icon: 'location-outline', label: 'Addresses', subtitle: 'Manage your saved addresses', onPress: () => navigation.navigate('AddressSelection') },
-        { icon: 'shield-checkmark-outline', label: 'Security', subtitle: 'Change password', onPress: () => {} },
-        { icon: 'ribbon-outline', label: 'Verification', subtitle: 'KYC Status', onPress: () => {} },
+        { icon: 'person-outline', label: 'Edit Profile', onPress: () => navigation.navigate('AccountSettings') },
+        { icon: 'location-outline', label: 'Addresses', onPress: () => navigation.navigate('AddressSelection') },
+        { icon: 'shield-checkmark-outline', label: 'Security', onPress: () => {} },
+        { icon: 'card-outline', label: 'Payment Methods', onPress: () => navigation.navigate('PaymentSettings') },
       ],
     },
     {
-      title: 'Personalization',
+      title: 'Preferences',
       items: [
-        { icon: 'apps-outline', label: 'Personalization', subtitle: 'Theme, language, preferences', onPress: () => navigation.navigate('Personalization') },
+        { icon: 'color-palette-outline', label: 'Personalization', onPress: () => navigation.navigate('Personalization') },
+
       ],
     },
     {
-      title: 'Payments',
+      title: 'Support',
       items: [
-        { icon: 'card-outline', label: 'Payment Modes', subtitle: 'Manage saved cards, UPI', onPress: () => navigation.navigate('PaymentSettings') },
+        { icon: 'help-circle-outline', label: 'Help Center', onPress: () => navigation.navigate('Help') },
+        { icon: 'document-text-outline', label: 'Terms & Privacy', onPress: () => navigation.navigate('Legal') },
+        { icon: 'chatbubbles-outline', label: 'Contact Us', onPress: () => {} },
       ],
     },
-    {
-      title: 'Help & Support',
-      items: [
-        { icon: 'help-circle-outline', label: 'Help', subtitle: 'Get support, contact us', onPress: () => navigation.navigate('Help') },
-        { icon: 'document-text-outline', label: 'Legal', subtitle: 'Terms of Service, Privacy Policy', onPress: () => navigation.navigate('Legal') },
-      ],
-    },
-    {
-        title: 'Advanced',
-        items: [
-            { icon: 'settings-outline', label: 'Advanced', subtitle: 'Advanced application settings', onPress: () => navigation.navigate('AdvancedSettings') },
-        ]
-    }
   ];
 
   return (
-    <SafeAreaWrapper>
+    <SafeAreaWrapper backgroundColor={COLORS_MINIMAL.background}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS_MINIMAL.background} />
+      
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Settings</Text>
+      </View>
+
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={isRefreshing} 
+            onRefresh={onRefresh}
+            colors={[COLORS_MINIMAL.accent]}
+            tintColor={COLORS_MINIMAL.accent}
+          />
+        }
       >
         {renderHeader()}
-        {sections.map(section => (
-          <View key={section.title}>
+
+        {sections.map((section, sectionIndex) => (
+          <View key={section.title} style={styles.section}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
-            {renderSection(section.items)}
+            <View style={styles.sectionCard}>
+              {section.items.map((item, index) => (
+                <SettingRow
+                  key={item.label}
+                  {...item}
+                  isLast={index === section.items.length - 1}
+                />
+              ))}
+            </View>
           </View>
         ))}
 
-        {/* A clear and accessible Sign Out button, placed at the end of the settings list. */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={22} color={COLORS.DANGER.MAIN} />
-            <Text style={styles.logoutText}>Sign Out</Text>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color={COLORS_MINIMAL.danger} />
+          <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
 
-        {/* Displaying the app version at the very bottom. */}
         <Text style={styles.versionText}>Version 1.0.0</Text>
       </ScrollView>
     </SafeAreaWrapper>
@@ -195,125 +195,141 @@ const SettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    backgroundColor: COLORS_MINIMAL.background,
   },
   contentContainer: {
-    paddingVertical: SPACING.LG,
-    paddingBottom: 120, // Added extra padding to ensure content is scrollable above the bottom tab bar
+    paddingBottom: 100,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 16,
+    backgroundColor: COLORS_MINIMAL.background,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS_MINIMAL.text.primary,
   },
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    marginHorizontal: SPACING.MD,
-    padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.LG,
-    ...SHADOWS.SM,
-    marginBottom: SPACING.LG,
+    backgroundColor: COLORS_MINIMAL.surface,
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 24,
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: COLORS.NEUTRAL[200],
-    marginRight: SPACING.MD,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS_MINIMAL.border,
   },
   headerTextContainer: {
     flex: 1,
+    marginLeft: 14,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   headerName: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: FONT_SIZES.LG,
-    color: COLORS.TEXT.PRIMARY,
+    fontSize: 16,
+    color: COLORS_MINIMAL.text.primary,
   },
   headerSubtitle: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: FONT_SIZES.SM,
-    color: COLORS.TEXT.SECONDARY,
+    fontSize: 13,
+    color: COLORS_MINIMAL.text.muted,
+    marginTop: 2,
   },
   verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.SUCCESS.LIGHT,
-    borderRadius: BORDER_RADIUS.SM,
-    paddingHorizontal: SPACING.XS,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
-    marginTop: SPACING.XS,
+    backgroundColor: COLORS_MINIMAL.surface,
+    borderRadius: 12,
+    padding: 2,
   },
-  verifiedText: {
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: FONT_SIZES.XS,
-    color: COLORS.SUCCESS.MAIN,
-    marginLeft: SPACING.XS,
+  section: {
+    marginBottom: 24,
   },
   sectionTitle: {
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: FONT_SIZES.MD,
-    color: COLORS.TEXT.PRIMARY,
-    marginHorizontal: SPACING.MD,
-    marginBottom: SPACING.SM,
-    marginTop: SPACING.MD,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontSize: 14,
+    color: COLORS_MINIMAL.text.muted,
+    marginHorizontal: 20,
+    marginBottom: 8,
   },
   sectionCard: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    marginHorizontal: SPACING.MD,
-    borderRadius: BORDER_RADIUS.LG,
-    ...SHADOWS.SM,
+    backgroundColor: COLORS_MINIMAL.background,
+    marginHorizontal: 20,
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: SPACING.LG,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
-  settingIcon: {
-    marginRight: SPACING.MD,
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS_MINIMAL.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   settingTextContainer: {
     flex: 1,
   },
   settingLabel: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: FONT_SIZES.BASE,
-    color: COLORS.TEXT.PRIMARY,
+    fontSize: 15,
+    color: COLORS_MINIMAL.text.primary,
   },
   settingSubtitle: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: FONT_SIZES.SM,
-    color: COLORS.TEXT.SECONDARY,
-    marginTop: 2,
+    fontSize: 12,
+    color: COLORS_MINIMAL.text.muted,
+    marginTop: 1,
   },
   separator: {
     height: 1,
-    backgroundColor: COLORS.BORDER.PRIMARY,
-    marginLeft: SPACING.MD + 24 + SPACING.MD,
+    backgroundColor: COLORS_MINIMAL.divider,
+    marginLeft: 52,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.DANGER.LIGHT,
-    marginHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    marginTop: SPACING.XL,
+    backgroundColor: COLORS_MINIMAL.dangerLight,
+    marginHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 32,
+    gap: 8,
   },
   logoutText: {
-      fontFamily: FONTS.POPPINS.SEMIBOLD,
-      fontSize: FONT_SIZES.BASE,
-      color: COLORS.DANGER.MAIN,
-      marginLeft: SPACING.SM,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    fontSize: 15,
+    color: COLORS_MINIMAL.danger,
   },
   versionText: {
-      textAlign: 'center',
-      fontFamily: FONTS.POPPINS.REGULAR,
-      fontSize: FONT_SIZES.SM,
-      color: COLORS.TEXT.SECONDARY,
-      marginTop: SPACING.LG,
-      marginBottom: SPACING.SM,
+    textAlign: 'center',
+    fontFamily: FONTS.POPPINS.REGULAR,
+    fontSize: 12,
+    color: COLORS_MINIMAL.text.muted,
+    marginTop: 20,
+    marginBottom: 10,
   }
 });
 
