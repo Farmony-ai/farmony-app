@@ -17,6 +17,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import BookingService, { Booking } from '../services/BookingService';
+import { canTransition, setOrderStatus } from '../services/orderStatus';
 
 const OrderDetailScreen = () => {
   const navigation = useNavigation();
@@ -25,6 +26,7 @@ const OrderDetailScreen = () => {
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState<'accept' | 'cancel' | null>(null);
 
   useEffect(() => {
     fetchBookingDetails();
@@ -33,43 +35,18 @@ const OrderDetailScreen = () => {
   const fetchBookingDetails = async () => {
     try {
       setLoading(true);
-      // Using dummy data for now
-      setTimeout(() => {
-        setBooking({
-          isAutoRejected: false,
-          _id: bookingId || "6871c690e7fd8a5bc9a49389",
-          listingId: {
-            _id: "6871c639e7fd8a5bc9a49384",
-            title: "John Deere Tractor with Plough",
-            price: 1500,
-            unitOfMeasure: "per_day"
-          },
-          seekerId: {
-            _id: "6871c683e7fd8a5bc9a49387",
-            name: "Rajesh Kumar",
-            phone: "+91 98765 43210",
-            email: "rajesh.kumar@example.com"
-          },
-          providerId: "687145eb6d913a8f9c3c6d4e",
-          status: "pending",
-          createdAt: "2025-01-18T14:30:00.000Z",
-          expiresAt: "2025-01-22T12:00:00.000Z",
-          totalAmount: 3000,
-          coordinates: [78.1134, 18.0534],
-          updatedAt: "2025-01-18T14:30:00.000Z",
-          __v: 0,
-          quantity: 2,
-          serviceDate: "2025-01-20T09:00:00.000Z",
-          notes: "Need for 2 hectares of land preparation. Please bring all necessary attachments."
-        });
-        setLoading(false);
-      }, 500);
+      const data = await BookingService.getBookingById(bookingId);
+      try {
+        const pretty = JSON.stringify(data, null, 2);
+        console.log('[OrderDetailScreen] Loaded order detail for', bookingId, ':\n', pretty);
+      } catch {}
+      setBooking(data);
     } catch (error) {
       console.error('Error loading booking details:', error);
       Alert.alert('Error', 'Failed to load booking details.');
       navigation.goBack();
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -153,14 +130,21 @@ const OrderDetailScreen = () => {
           text: 'Accept',
           onPress: async () => {
             try {
-              // For now, just update the local state
-              if (booking) {
-                setBooking({ ...booking, status: 'accepted' });
+              if (!booking) return;
+              setIsProcessing('accept');
+              if (!canTransition(booking.status as any, 'accepted')) {
+                Alert.alert('Not allowed', 'This booking cannot be accepted.');
+                return;
               }
+              const updated: any = await setOrderStatus({ orderId: booking._id, status: 'accepted' });
+              setBooking(prev => ({ ...(prev as any), ...(updated || {}), status: (updated?.status || 'accepted') as any }));
               Alert.alert('Success', 'Booking accepted successfully');
             } catch (error) {
               console.error('Error accepting booking:', error);
-              Alert.alert('Error', 'Failed to accept booking. Please try again.');
+              const message = (error as any)?.message || 'Failed to accept booking. Please try again.';
+              Alert.alert('Error', message);
+            } finally {
+              setIsProcessing(null);
             }
           },
         },
@@ -179,15 +163,22 @@ const OrderDetailScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // For now, just update the local state
-              if (booking) {
-                setBooking({ ...booking, status: 'rejected' });
+              if (!booking) return;
+              setIsProcessing('cancel');
+              if (!canTransition(booking.status as any, 'canceled')) {
+                Alert.alert('Not allowed', 'This booking cannot be rejected.');
+                return;
               }
+              const updated: any = await setOrderStatus({ orderId: booking._id, status: 'canceled' });
+              setBooking(prev => ({ ...(prev as any), ...(updated || {}), status: 'canceled' as any }));
               Alert.alert('Success', 'Booking rejected');
               setTimeout(() => navigation.goBack(), 1000);
             } catch (error) {
               console.error('Error rejecting booking:', error);
-              Alert.alert('Error', 'Failed to reject booking. Please try again.');
+              const message = (error as any)?.message || 'Failed to reject booking. Please try again.';
+              Alert.alert('Error', message);
+            } finally {
+              setIsProcessing(null);
             }
           },
         },
@@ -404,7 +395,7 @@ const OrderDetailScreen = () => {
         {booking.status === 'pending' && (
           <View style={styles.actionSection}>
             <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={styles.rejectButton} onPress={handleRejectBooking}>
+              <TouchableOpacity style={styles.rejectButton} onPress={handleRejectBooking} disabled={isProcessing === 'cancel'}>
                 <View style={styles.rejectIconWrapper}>
                   <Ionicons name="close" size={24} color="#EF4444" />
                 </View>
@@ -418,7 +409,7 @@ const OrderDetailScreen = () => {
                 </View>
               </TouchableOpacity>
               
-              <TouchableOpacity style={styles.acceptButton} onPress={handleAcceptBooking}>
+              <TouchableOpacity style={styles.acceptButton} onPress={handleAcceptBooking} disabled={isProcessing === 'accept'}>
                 <View style={styles.acceptIconWrapper}>
                   <Ionicons name="checkmark" size={24} color="#fff" />
                 </View>

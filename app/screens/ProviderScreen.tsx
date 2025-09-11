@@ -20,6 +20,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ProviderService, { ProviderDashboardResponse } from '../services/ProviderService';
 import BookingService from '../services/BookingService';
+import { canTransition, setOrderStatus } from '../services/orderStatus';
 import PendingRequestCard from '../components/PendingRequestCard';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -120,7 +121,9 @@ const ProviderScreen = () => {
 
   const handleAcceptBooking = async (bookingId: string) => {
     try {
-      await BookingService.acceptBooking(bookingId);
+      const current = dashboard?.pendingBookings?.find(b => b._id === bookingId)?.status || 'pending';
+      if (!canTransition(current as any, 'accepted')) return;
+      await setOrderStatus({ orderId: bookingId, status: 'accepted' });
       fetchDashboard();
     } catch (error) {
       console.error('Error accepting booking:', error);
@@ -129,7 +132,9 @@ const ProviderScreen = () => {
 
   const handleRejectBooking = async (bookingId: string) => {
     try {
-      await BookingService.rejectBooking(bookingId);
+      const current = dashboard?.pendingBookings?.find(b => b._id === bookingId)?.status || 'pending';
+      if (!canTransition(current as any, 'canceled')) return;
+      await setOrderStatus({ orderId: bookingId, status: 'canceled' });
       fetchDashboard();
     } catch (error) {
       console.error('Error rejecting booking:', error);
