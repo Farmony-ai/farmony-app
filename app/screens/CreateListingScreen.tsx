@@ -194,9 +194,8 @@ const CreateListingScreen = () => {
     { value: 'per_hour', label: 'Per Hour' },
     { value: 'per_day', label: 'Per Day' },
     { value: 'per_hectare', label: 'Per Hectare' },
-    { value: 'per_kg', label: 'Per Kg' },
+
     { value: 'per_unit', label: 'Per Unit' },
-    { value: 'per_piece', label: 'Per Piece' },
   ];
 
   const handleInputChange = (field: keyof ListingFormData, value: any) => {

@@ -263,7 +263,7 @@ const ProviderScreen = () => {
 
             <View style={styles.stackedCardsContainer}>{renderCards()}</View>
 
-            {/* ADDED swipe hint back below the card stack */}
+            {/* Swipe hint with better spacing */}
             {pendingBookings.length > 1 && (
               <View style={styles.swipeHintContainer}>
                 <Text style={styles.swipeHint}>
@@ -272,6 +272,21 @@ const ProviderScreen = () => {
                 </Text>
               </View>
             )}
+          </View>
+        )}
+
+        {/* Empty state for no pending requests */}
+        {pendingBookings.length === 0 && (
+          <View style={styles.emptyRequestsContainer}>
+            <View style={styles.emptyRequestsCard}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="time-outline" size={32} color="#9CA3AF" />
+              </View>
+              <Text style={styles.emptyTitle}>No pending requests</Text>
+              <Text style={styles.emptySubtitle}>
+                You're all caught up! New requests will appear here
+              </Text>
+            </View>
           </View>
         )}
 
@@ -347,7 +362,7 @@ const styles = StyleSheet.create({
   },
   stackedCardsSection: {
     paddingHorizontal: 20,
-    marginBottom: 10,
+    marginBottom: 24, // INCREASED from 10 to 24
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -356,13 +371,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    // UPDATED: Made title more prominent
     fontSize: 18,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
   },
   cardCounterContainer: {
-    backgroundColor: '#EBF4FF', // Lighter blue
+    backgroundColor: '#EBF4FF',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -370,28 +384,77 @@ const styles = StyleSheet.create({
   cardCounter: {
     fontSize: 11,
     fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#3B82F6', // Blue
+    color: '#3B82F6',
   },
   stackedCardsContainer: {
-    height: 340,
+    height: 300, // REDUCED from 340 to 300
     alignItems: 'center',
     justifyContent: 'flex-start',
+    marginBottom: 8, // REDUCED from 10 to 8
   },
   stackedCard: {
     position: 'absolute',
     width: '100%',
     ...SHADOWS.MD,
   },
-  // ADDED swipe hint styles back
-  swipeHintContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 50 },
-  swipeHint: { fontSize: 11, color: '#9CA3AF', textAlign: 'center' },
+  swipeHintContainer: { 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginTop: 20, // REDUCED from 50 to 20
+    marginBottom: 10, // ADDED bottom margin
+  },
+  swipeHint: { 
+    fontSize: 11, 
+    color: '#9CA3AF', 
+    textAlign: 'center' 
+  },
+  // Empty state styles
+  emptyRequestsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 32, // INCREASED from 20 to 32
+  },
+  emptyRequestsCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  emptyIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
   sectionDivider: {
     height: 1,
     backgroundColor: '#E5E7EB',
     marginHorizontal: 20,
-    marginVertical: 5,
+    marginVertical: 20, // INCREASED from 15 to 20
   },
-  summarySection: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 12 },
+  summarySection: { 
+    paddingHorizontal: 20, 
+    paddingTop: 8, // INCREASED from 4 to 8
+    paddingBottom: 16, // INCREASED from 12 to 16
+    marginTop: 45
+  },
   summaryRow: { flexDirection: 'row', gap: 10 },
   summaryCard: {
     flex: 1,
@@ -406,7 +469,7 @@ const styles = StyleSheet.create({
     height: 64,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom:2,
+    marginBottom: 2,
   },
   summaryIcon: {
     width: 54,
