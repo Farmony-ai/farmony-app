@@ -8,6 +8,13 @@ export interface Booking {
     title: string;
     price: number;
     unitOfMeasure: string;
+    description?: string;
+    subCategory?: string;
+    categoryId?: {
+      _id: string;
+      name: string;
+    };
+    photoUrls?: string[];
   };
   seekerId: string | {
     _id: string;
@@ -26,6 +33,12 @@ export interface Booking {
   quantity?: number;
   serviceDate?: string;
   notes?: string;
+  // Additional properties from API response
+  requestExpiresAt?: string;
+  serviceStartDate?: string;
+  serviceEndDate?: string;
+  unitOfMeasure?: string;
+  orderType?: string;
 }
 
 export interface BookingsResponse {
