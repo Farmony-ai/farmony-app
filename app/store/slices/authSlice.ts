@@ -70,6 +70,10 @@ interface User {
   role: 'individual' | 'SHG' | 'FPO' | 'admin';
   isVerified: boolean;
   kycStatus: 'pending' | 'approved' | 'rejected' | 'none';
+  // Optional profile fields exposed by backend
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  // ISO string or date-only string (YYYY-MM-DD)
+  dateOfBirth?: string;
 }
 
 interface AuthState {

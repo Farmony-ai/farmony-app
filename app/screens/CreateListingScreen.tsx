@@ -119,23 +119,28 @@ const CreateListingScreen = () => {
 
         if (isEditMode && token) {
           const listingData = await ListingService.getListingById(listingId, token);
+          const resolvedProviderId = (listingData as any)?.providerId?._id ?? (listingData as any)?.providerId ?? '';
+          const resolvedCategoryId = (listingData as any)?.categoryId?._id ?? (listingData as any)?.categoryId ?? '';
+          const resolvedSubCategoryId = (listingData as any)?.subCategoryId?._id ?? (listingData as any)?.subCategoryId ?? '';
+
           setFormData({
             ...formData,
-            providerId: typeof listingData.providerId === 'object' 
-              ? listingData.providerId._id 
-              : listingData.providerId,
-            title: listingData.title,
-            description: listingData.description,
-            categoryId: listingData.categoryId._id,
-            subCategoryId: listingData.subCategoryId._id,
-            photos: listingData.photos,
-            price: listingData.price.toString(),
-            unitOfMeasure: listingData.unitOfMeasure,
-            minimumOrder: listingData.minimumOrder.toString(),
+            providerId: resolvedProviderId,
+            title: (listingData as any)?.title ?? '',
+            description: (listingData as any)?.description ?? '',
+            categoryId: resolvedCategoryId,
+            subCategoryId: resolvedSubCategoryId,
+            photos: (listingData as any)?.photos ?? [],
+            price: String((listingData as any)?.price ?? ''),
+            unitOfMeasure: (listingData as any)?.unitOfMeasure ?? 'per_hour',
+            minimumOrder: String((listingData as any)?.minimumOrder ?? '1'),
             subCategorySelected: true,
           });
-          if (listingData.categoryId) {
-            fetchSubCategories(listingData.categoryId._id);
+          if ((listingData as any)?.categoryId) {
+            const catIdForSubs = (listingData as any)?.categoryId?._id ?? (listingData as any)?.categoryId;
+            if (catIdForSubs) {
+              fetchSubCategories(catIdForSubs);
+            }
           }
         } else if (user?.id) {
           setFormData(prev => ({ ...prev, providerId: user.id }));
@@ -247,12 +252,20 @@ const CreateListingScreen = () => {
 
     try {
       setLoading(true);
+
+      // Map selected IDs to their human-readable names right before building payload
+      const selectedCategoryName = availableCategories.find(c => c._id === formData.categoryId)?.name;
+      const selectedSubCategoryName = availableSubCategories.find(s => s._id === formData.subCategoryId)?.name;
+
       const payload: CreateListingPayload = {
         providerId: formData.providerId,
-        title: formData.title || `${formData.subCategoryId} Service`,
+        title: formData.title || `${selectedSubCategoryName || formData.subCategoryId} Service`,
         description: formData.description,
         categoryId: formData.categoryId,
         subCategoryId: formData.subCategoryId,
+        // Pass mapped names if found; these are optional in the payload
+        ...(selectedCategoryName ? { category: selectedCategoryName } : {}),
+        ...(selectedSubCategoryName ? { subcategory: selectedSubCategoryName } : {}),
         photos: formData.photos,
         coordinates: formData.coordinates,
         price: parseFloat(formData.price),

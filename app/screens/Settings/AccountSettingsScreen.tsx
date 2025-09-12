@@ -9,6 +9,7 @@ import { setUser } from '../../store/slices/authSlice';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import DatePicker from 'react-native-date-picker';
+import { usersAPI } from '../../services/api';
 
 // Ultra-minimal color scheme
 const COLORS_MINIMAL = {
