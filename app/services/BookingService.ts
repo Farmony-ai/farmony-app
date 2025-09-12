@@ -63,7 +63,9 @@ class BookingService {
   // Accept booking
   async acceptBooking(bookingId: string): Promise<Booking> {
     try {
-      const response = await axios.patch(`${BASE_URL}/bookings/${bookingId}/accept`);
+      const response = await axios.patch(`${BASE_URL}/orders/${bookingId}/status`,{
+          status: "accepted"
+      });
       return response.data;
     } catch (error) {
       console.error('Error accepting booking:', error);
