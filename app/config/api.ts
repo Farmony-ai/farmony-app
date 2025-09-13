@@ -32,7 +32,7 @@ export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyA_d
 const getBaseURL = () => {
   // For now, we'll use Android emulator settings
   // You can make this more dynamic based on Platform.OS or __DEV__
-  return API_CONFIG.development.android;
+  return API_CONFIG.development.ios;
 };
 
 // 📡 Export the current base URL

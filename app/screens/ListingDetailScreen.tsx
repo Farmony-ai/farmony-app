@@ -27,7 +27,7 @@ const { width: screenWidth } = Dimensions.get('window');
 const ListingDetailScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { listingId, fromSearch } = route.params; // Added fromSearch param
+  const { listingId, fromSearch } = route.params;
   const { token, user } = useSelector((state: RootState) => state.auth);
 
   const [listing, setListing] = useState<PopulatedListing | null>(null);
@@ -46,7 +46,6 @@ const ListingDetailScreen = () => {
       const response = await ListingService.getListingById(listingId, token || undefined);
       setListing(response);
       
-      // Check if current user is the owner
       if (user && response.providerId) {
         const providerId = typeof response.providerId === 'object' 
           ? response.providerId._id 
@@ -54,7 +53,6 @@ const ListingDetailScreen = () => {
         setIsOwner(user.id === providerId);
       }
       
-      // Fade in animation
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
@@ -75,7 +73,6 @@ const ListingDetailScreen = () => {
     }, [fetchListingDetail])
   );
 
-  // Auto-scroll images
   useEffect(() => {
     if (listing?.photoUrls && listing.photoUrls.length > 1) {
       autoScrollTimer.current = setInterval(() => {
@@ -188,7 +185,7 @@ const ListingDetailScreen = () => {
 
   if (loading) {
     return (
-      <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+      <SafeAreaWrapper backgroundColor="#FAFAFA">
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
           <Text style={styles.loadingText}>Loading details...</Text>
@@ -200,18 +197,18 @@ const ListingDetailScreen = () => {
   if (!listing) return null;
 
   return (
-    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+    <SafeAreaWrapper backgroundColor="#FAFAFA">
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
         {/* Clean Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
           </TouchableOpacity>
           
           {isOwner && (
             <>
-              <TouchableOpacity style={styles.menuButton} onPress={() => setShowMenu(!showMenu)}>
-                <Ionicons name="ellipsis-vertical" size={20} color={COLORS.TEXT.PRIMARY} />
+              <TouchableOpacity style={styles.headerButton} onPress={() => setShowMenu(!showMenu)}>
+                <Ionicons name="ellipsis-vertical" size={24} color={COLORS.TEXT.PRIMARY} />
               </TouchableOpacity>
               {showMenu && (
                 <View style={styles.menuDropdown}>
@@ -246,166 +243,188 @@ const ListingDetailScreen = () => {
         </View>
 
         <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
-            !isOwner && { paddingBottom: 100 } // Extra padding for bottom button
+            !isOwner && { paddingBottom: 100 }
           ]}
-          showsVerticalScrollIndicator={false}
         >
-          {/* Image Carousel */}
-          {listing.photoUrls && listing.photoUrls.length > 0 ? (
-            <View style={styles.imageContainer}>
-              <ScrollView
-                ref={scrollViewRef}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onScroll={handleScroll}
-                scrollEventThrottle={16}
-                onTouchStart={() => {
-                  if (autoScrollTimer.current) {
-                    clearInterval(autoScrollTimer.current);
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (listing.photoUrls && listing.photoUrls.length > 1) {
-                    autoScrollTimer.current = setInterval(() => {
-                      setCurrentImageIndex((prevIndex) => {
-                        const nextIndex = (prevIndex + 1) % listing.photoUrls.length;
-                        scrollViewRef.current?.scrollTo({
-                          x: screenWidth * nextIndex,
-                          animated: true,
+          {/* Main Card Container */}
+          <View style={styles.mainCard}>
+            {/* Image Carousel */}
+            {listing.photoUrls && listing.photoUrls.length > 0 ? (
+              <View style={styles.imageContainer}>
+                <ScrollView
+                  ref={scrollViewRef}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={handleScroll}
+                  scrollEventThrottle={16}
+                  onTouchStart={() => {
+                    if (autoScrollTimer.current) {
+                      clearInterval(autoScrollTimer.current);
+                    }
+                  }}
+                  onTouchEnd={() => {
+                    if (listing.photoUrls && listing.photoUrls.length > 1) {
+                      autoScrollTimer.current = setInterval(() => {
+                        setCurrentImageIndex((prevIndex) => {
+                          const nextIndex = (prevIndex + 1) % listing.photoUrls.length;
+                          scrollViewRef.current?.scrollTo({
+                            x: screenWidth * nextIndex,
+                            animated: true,
+                          });
+                          return nextIndex;
                         });
-                        return nextIndex;
-                      });
-                    }, 3000);
-                  }
-                }}
-              >
-                {listing.photoUrls.map((photo, index) => (
-                  <Image 
-                    key={index} 
-                    source={{ uri: typeof photo === 'string' ? photo : photo.uri }} 
-                    style={styles.listingImage} 
-                  />
-                ))}
-              </ScrollView>
-              {listing.photoUrls.length > 1 && (
-                <View style={styles.dotsContainer}>
-                  {listing.photoUrls.map((_, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        styles.dot,
-                        index === currentImageIndex && styles.activeDot
-                      ]}
+                      }, 3000);
+                    }
+                  }}
+                >
+                  {listing.photoUrls.map((photo, index) => (
+                    <Image 
+                      key={index} 
+                      source={{ uri: typeof photo === 'string' ? photo : photo.uri }} 
+                      style={styles.listingImage} 
                     />
                   ))}
-                </View>
-              )}
-            </View>
-          ) : (
-            <View style={styles.noImageContainer}>
-              <Ionicons name="image-outline" size={48} color={COLORS.TEXT.SECONDARY} />
-              <Text style={styles.noImageText}>No images available</Text>
-            </View>
-          )}
+                </ScrollView>
+                
+                {/* Image Dots */}
+                {listing.photoUrls.length > 1 && (
+                  <View style={styles.dotsContainer}>
+                    {listing.photoUrls.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.dot,
+                          index === currentImageIndex && styles.activeDot
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View style={styles.noImageContainer}>
+                <Ionicons name="image-outline" size={40} color={COLORS.TEXT.SECONDARY} />
+                <Text style={styles.noImageText}>No images available</Text>
+              </View>
+            )}
 
-          {/* Main Info Card */}
-          <View style={styles.mainCard}>
-            {/* Title Section */}
-            <View style={styles.titleSection}>
-              <View style={styles.titleRow}>
+            {/* Content Section */}
+            <View style={styles.contentSection}>
+              {/* Title and Price Row */}
+              <View style={styles.titlePriceRow}>
                 <View style={styles.titleContainer}>
                   <Text style={styles.title}>{listing.subCategoryId.name}</Text>
                   <Text style={styles.category}>{listing.categoryId.name}</Text>
                 </View>
-                <View style={[styles.statusBadge, !listing.isActive && styles.inactiveBadge]}>
-                  <Text style={[styles.statusText, !listing.isActive && styles.inactiveText]}>
-                    {listing.isActive ? 'Available' : 'Unavailable'}
+                <View style={styles.priceContainer}>
+                  <Text style={styles.priceLabel}>Service price</Text>
+                  <Text style={styles.price}>
+                    ₹{listing.price.toLocaleString()}
+                    <Text style={styles.priceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
                   </Text>
                 </View>
               </View>
-              
-              {/* Description */}
-              <Text style={styles.description}>{listing.description}</Text>
-            </View>
 
-            {/* Price Section */}
-            <View style={styles.priceSection}>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Price</Text>
-                <View style={styles.minOrderContainer}>
-                  <Text style={styles.minOrderLabel}>Min. Order</Text>
-                  <Text style={styles.minOrderValue}>
-                    {listing.minimumOrder} {listing.unitOfMeasure.replace('per_', '')}
-                  </Text>
+              {/* Info Grid */}
+              <View style={styles.infoGrid}>
+                <View style={styles.infoItem}>
+                  <Ionicons name="cube-outline" size={20} color="#666" />
+                  <Text style={styles.infoValue}>{listing.minimumOrder}</Text>
+                  <Text style={styles.infoLabel}>Min Order</Text>
                 </View>
-              </View>
-              <Text style={styles.price}>
-                ₹{listing.price}
-                <Text style={styles.priceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
-              </Text>
-            </View>
-
-            {/* Stats Cards - Only for Owners */}
-            {isOwner && (
-              <View style={styles.statsContainer}>
-                <View style={styles.statCard}>
-                  <View style={styles.statIconContainer}>
-                    <Ionicons name="eye-outline" size={20} color={COLORS.PRIMARY.MAIN} />
-                  </View>
-                  <Text style={styles.statValue}>{listing.viewCount}</Text>
-                  <Text style={styles.statLabel}>Views</Text>
-                </View>
-                <View style={styles.statCard}>
-                  <View style={styles.statIconContainer}>
-                    <MaterialIcons name="event-available" size={20} color={COLORS.SUCCESS.MAIN} />
-                  </View>
-                  <Text style={styles.statValue}>{listing.bookingCount}</Text>
-                  <Text style={styles.statLabel}>Bookings</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Provider Info for Non-Owners */}
-            {!isOwner && (
-              <View style={styles.providerSection}>
-                <View style={styles.providerHeader}>
-                  <View style={styles.providerAvatar}>
-                    <Ionicons name="person" size={24} color={COLORS.PRIMARY.MAIN} />
-                  </View>
-                  <View style={styles.providerInfo}>
-                    <Text style={styles.providerName}>
-                      {typeof listing.providerId === 'object' ? listing.providerId.name : 'Service Provider'}
-                    </Text>
-                    {typeof listing.providerId === 'object' && listing.providerId.isVerified && (
-                      <View style={styles.verifiedBadge}>
-                        <MaterialIcons name="verified" size={14} color={COLORS.SUCCESS.MAIN} />
-                        <Text style={styles.verifiedText}>Verified Provider</Text>
+                
+                {isOwner ? (
+                  <>
+                    <View style={styles.infoItem}>
+                      <Ionicons name="eye-outline" size={20} color="#666" />
+                      <Text style={styles.infoValue}>{listing.viewCount}</Text>
+                      <Text style={styles.infoLabel}>Views</Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <MaterialIcons name="event-available" size={20} color="#666" />
+                      <Text style={styles.infoValue}>{listing.bookingCount}</Text>
+                      <Text style={styles.infoLabel}>Bookings</Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.infoItem}>
+                      <View style={styles.statusIndicator}>
+                        <View style={[styles.statusDot, !listing.isActive && styles.inactiveDot]} />
                       </View>
-                    )}
+                      <Text style={styles.infoValue}>
+                        {listing.isActive ? 'Available' : 'Inactive'}
+                      </Text>
+                      <Text style={styles.infoLabel}>Status</Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {/* Description */}
+               {listing.description && (
+              <View style={styles.descriptionSection}>
+                <Text style={styles.sectionTitle}>About this service</Text>
+                <Text style={styles.description}>{listing.description}</Text>
+              </View>
+               )}
+              {/* Provider Info for Non-Owners */}
+              {!isOwner && typeof listing.providerId === 'object' && (
+                <View style={styles.providerSection}>
+                  <View style={styles.providerInfo}>
+                    <View style={styles.providerAvatar}>
+                      <Ionicons name="person" size={20} color={COLORS.PRIMARY.MAIN} />
+                    </View>
+                    <View style={styles.providerDetails}>
+                      <Text style={styles.providerLabel}>Service Provider</Text>
+                      <Text style={styles.providerName}>{listing.providerId.name}</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            )}
+              )}
+
+              {/* Owner Metrics */}
+              {isOwner && (
+                <View style={styles.metricsRow}>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>Conversion</Text>
+                    <Text style={styles.metricValue}>
+                      {listing.bookingCount && listing.viewCount 
+                        ? `${((listing.bookingCount / listing.viewCount) * 100).toFixed(1)}%`
+                        : '0%'}
+                    </Text>
+                  </View>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>Avg Response</Text>
+                    <Text style={styles.metricValue}>2 hrs</Text>
+                  </View>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>Rating</Text>
+                    <Text style={styles.metricValue}>4.8</Text>
+                  </View>
+                </View>
+              )}
+            </View>
           </View>
         </ScrollView>
 
-        {/* Bottom Button for Non-Owners - Simplified */}
+        {/* Bottom CTA for Non-Owners */}
         {!isOwner && listing.isActive && (
-          <View style={styles.bottomButtonContainer}>
-            <View style={styles.bottomButtonContent}>
-              <View style={styles.bottomPriceInfo}>
-                <Text style={styles.bottomPriceLabel}>Starting from</Text>
-                <Text style={styles.bottomPriceValue}>
-                  ₹{listing.price}
-                  <Text style={styles.bottomPriceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
+          <View style={styles.bottomCTA}>
+            <View style={styles.ctaContent}>
+              <View>
+                <Text style={styles.ctaPriceLabel}>Starting from</Text>
+                <Text style={styles.ctaPrice}>
+                  ₹{listing.price.toLocaleString()}
+                  <Text style={styles.ctaPriceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
                 </Text>
               </View>
               <TouchableOpacity style={styles.proceedButton} onPress={handleProceedToCheckout}>
-                <Text style={styles.proceedButtonText}>Proceed</Text>
-                <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
+                <Text style={styles.proceedButtonText}>Book Now</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -423,7 +442,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: SPACING.MD,
-    fontSize: FONT_SIZES.BASE,
+    fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
@@ -433,25 +452,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.MD,
     paddingVertical: SPACING.MD,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    backgroundColor: 'transparent',
     position: 'relative',
   },
-  backButton: {
-    padding: SPACING.XS,
-  },
-  menuButton: {
-    padding: SPACING.XS,
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.SM,
   },
   menuDropdown: {
     position: 'absolute',
-    top: 50,
+    top: 60,
     right: SPACING.MD,
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: BORDER_RADIUS.MD,
     padding: SPACING.XS,
     ...SHADOWS.LG,
     zIndex: 1000,
-    minWidth: 140,
+    minWidth: 150,
   },
   menuItem: {
     flexDirection: 'row',
@@ -467,16 +489,24 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   scrollContent: {
-    paddingBottom: SPACING['4XL'],
+    paddingBottom: SPACING.XL,
+  },
+  mainCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginHorizontal: SPACING.MD,
+
+    borderRadius: BORDER_RADIUS.LG,
+    overflow: 'hidden',
+    ...SHADOWS.MD,
   },
   imageContainer: {
-    width: screenWidth,
-    height: 280,
+    width: screenWidth - (SPACING.MD * 2),
+    height: 240,
     position: 'relative',
   },
   listingImage: {
-    width: screenWidth,
-    height: 280,
+    width: screenWidth - (SPACING.MD * 2),
+    height: 240,
     resizeMode: 'cover',
   },
   dotsContainer: {
@@ -484,12 +514,8 @@ const styles = StyleSheet.create({
     bottom: SPACING.MD,
     alignSelf: 'center',
     flexDirection: 'row',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: SPACING.XS,
-    borderRadius: BORDER_RADIUS.LG,
     left: '50%',
-    transform: [{ translateX: -40 }],
+    transform: [{ translateX: -30 }],
   },
   dot: {
     width: 6,
@@ -500,45 +526,38 @@ const styles = StyleSheet.create({
   },
   activeDot: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 16,
   },
   noImageContainer: {
-    height: 280,
+    height: 240,
     backgroundColor: COLORS.BACKGROUND.CARD,
     justifyContent: 'center',
     alignItems: 'center',
   },
   noImageText: {
     marginTop: SPACING.SM,
-    fontSize: FONT_SIZES.BASE,
+    fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
-  mainCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    marginTop: -SPACING.LG,
-    marginHorizontal: SPACING.MD,
-    borderRadius: BORDER_RADIUS.XL,
-    padding: SPACING.LG,
-    ...SHADOWS.LG,
+  contentSection: {
+    padding: SPACING.MD,
   },
-  titleSection: {
-    marginBottom: SPACING.LG,
-  },
-  titleRow: {
+  titlePriceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: SPACING.SM,
+    marginBottom: SPACING.MD,
+    paddingBottom: SPACING.MD,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
   },
   titleContainer: {
     flex: 1,
-    marginRight: SPACING.SM,
+    marginRight: SPACING.MD,
   },
   title: {
-    fontSize: 20,
+    fontSize: FONT_SIZES.LG,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
     marginBottom: 4,
@@ -548,22 +567,69 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
-  statusBadge: {
-    backgroundColor: COLORS.SUCCESS.LIGHT,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.XS,
-    borderRadius: BORDER_RADIUS.LG,
+  priceContainer: {
+    alignItems: 'flex-end',
   },
-  inactiveBadge: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
+  priceLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginBottom: 4,
   },
-  statusText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+  price: {
+    fontSize: FONT_SIZES['XL'],
+    fontFamily: FONTS.POPPINS.BOLD,
     color: COLORS.SUCCESS.MAIN,
   },
-  inactiveText: {
+  priceUnit: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  infoGrid: {
+    flexDirection: 'row',
+    paddingVertical: SPACING.MD,
+    gap: SPACING.SM,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
+  infoItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statusIndicator: {
+    marginBottom: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.SUCCESS.MAIN,
+  },
+  inactiveDot: {
+    backgroundColor: COLORS.TEXT.SECONDARY,
+  },
+  infoValue: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginTop: 4,
+  },
+  infoLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
+    marginTop: 2,
+  },
+  descriptionSection: {
+    paddingVertical: SPACING.MD,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
+  sectionTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.SM,
   },
   description: {
     fontSize: FONT_SIZES.SM,
@@ -571,117 +637,58 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT.SECONDARY,
     lineHeight: 20,
   },
-  priceSection: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.BORDER.PRIMARY,
-    paddingTop: SPACING.MD,
-    marginBottom: SPACING.LG,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.SM,
-  },
-  priceLabel: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-  },
-  minOrderContainer: {
-    alignItems: 'flex-end',
-  },
-  minOrderLabel: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-  },
-  minOrderValue: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  price: {
-    fontSize: 24,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  priceUnit: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: SPACING.MD,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    padding: SPACING.MD,
-    alignItems: 'center',
-  },
-  statIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.SM,
-  },
-  statValue: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-  },
   providerSection: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.BORDER.PRIMARY,
     paddingTop: SPACING.MD,
   },
-  providerHeader: {
+  providerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   providerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: COLORS.BACKGROUND.CARD,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.MD,
   },
-  providerInfo: {
+  providerDetails: {
     flex: 1,
   },
+  providerLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
   providerName: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    paddingTop: SPACING.MD,
+    gap: SPACING.MD,
+  },
+  metricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  metricLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginBottom: 4,
+  },
+  metricValue: {
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    marginBottom: 4,
   },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  verifiedText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.SUCCESS.MAIN,
-  },
-  bottomButtonContainer: {
+  bottomCTA: {
     position: 'absolute',
-    bottom: -28,
+    bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: COLORS.NEUTRAL.WHITE,
@@ -689,50 +696,34 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.BORDER.PRIMARY,
     paddingVertical: SPACING.MD,
     paddingHorizontal: SPACING.MD,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 5,
-      },
-      android: {
-        elevation: 10,
-      },
-    }),
+    ...SHADOWS.MD,
   },
-  bottomButtonContent: {
+  ctaContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  bottomPriceInfo: {
-    flex: 1,
-  },
-  bottomPriceLabel: {
+  ctaPriceLabel: {
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
-  bottomPriceValue: {
-    fontSize: FONT_SIZES.XL,
+  ctaPrice: {
+    fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.BOLD,
     color: COLORS.TEXT.PRIMARY,
   },
-  bottomPriceUnit: {
-    fontSize: FONT_SIZES.BASE,
+  ctaPriceUnit: {
+    fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
   proceedButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: COLORS.PRIMARY.MAIN,
     paddingHorizontal: SPACING.XL,
     paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.LG,
-    gap: SPACING.SM,
-    ...SHADOWS.MD,
+    borderRadius: BORDER_RADIUS.MD,
+    ...SHADOWS.SM,
   },
   proceedButtonText: {
     fontSize: FONT_SIZES.BASE,
