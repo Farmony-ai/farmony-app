@@ -12,7 +12,28 @@
           "package_name": "com.ruralshareapp1"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "383808719248-maos90gp07iin36l38445sd0qslhcm68.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ruralshareapp1",
+            "certificate_hash": "96214c6c74b02b1dbdeb5a1caa61888d45030636"
+          }
+        },
+        {
+          "client_id": "383808719248-uqs4kt4odc60k0r8cju6d19nv0jkaqac.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ruralshareapp1",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "383808719248-m1uclpi311ggqcjrq09di9laj0knaj1l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBzbutPA8jB8Fcb-rl_5GCpGZ_faL6Zdas"
@@ -20,7 +41,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "383808719248-m1uclpi311ggqcjrq09di9laj0knaj1l.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "383808719248-pbjq3smi9k2gtb8qer8rdua48v4g08as.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "org.reactjs.native.example.RuralShareApp"
+              }
+            }
+          ]
         }
       }
     }

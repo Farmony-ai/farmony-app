@@ -7,19 +7,19 @@ export const API_CONFIG = {
   development: {
     // For Android Emulator (most common)
     // android: 'http://localhost:3000',
-    android: 'http://10.0.2.2:3000',
+    android: 'http://192.168.30.125:3000',
     // android: 'http:// 192.168.1.101:3000', 
     
     // For iOS Simulator (replace with your actual IP)F
     ios: 'http://192.168.1.59:3000',
     
     // For Physical Device (replace with your actual IP)
-    device: 'http://192.168.1.101:3000', // Replace with your computer's IP
+    device: 'http://192.168.30.125:3000', // Replace with your computer's IP
   },
   
   // 🚀 Production Settings
   production: {
-    api: 'https://your-production-api.com',
+    api: 'http://192.168.30.125:3000',
   },
 };
 
