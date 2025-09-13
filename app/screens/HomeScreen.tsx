@@ -15,9 +15,10 @@ import {
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } from '../utils';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS } from '../utils';
+// Import the new responsive font utilities
+import { FONTS, typography, spacing } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import LocationService from '../services/locationService';
 import CatalogueService, { Category } from '../services/CatalogueService';
@@ -473,8 +474,8 @@ export default function HomeScreen() {
             </View>
             <DateRangeCalendar
               onConfirm={handleDateRangeConfirm}
-              initialStartDate={startDate}
-              initialEndDate={endDate}
+              initialStartDate={startDate ?? undefined}
+              initialEndDate={endDate ?? undefined}
             />
           </View>
         </View>
@@ -490,8 +491,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: Platform.OS === 'ios' ? 10 : 20,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
   },
   headerContent: {
     flexDirection: 'row',
@@ -502,8 +503,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   locationSubtext: {
-    fontSize: 11,
-    fontFamily: FONTS.POPPINS.REGULAR,
+    ...typography.locationSubtext,
     color: COLORS_MINIMAL.text.muted,
     marginBottom: 2,
   },
@@ -513,8 +513,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   locationText: {
-    fontSize: 18,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    ...typography.locationText,
     color: COLORS_MINIMAL.text.primary,
     maxWidth: 250,
   },
@@ -523,13 +522,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderRadius: 20,
     gap: 6,
   },
   weatherTemp: {
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    ...typography.weatherTemp,
     color: COLORS_MINIMAL.text.primary,
   },
   menuButton: {
@@ -540,18 +538,17 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   dateLabel: {
-    fontSize: 12,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    ...typography.dateLabel,
     color: COLORS_MINIMAL.text.secondary,
     marginBottom: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
   },
   dateScrollContent: {
-    paddingHorizontal: 16,
-    gap: 8,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
   },
   dateButton: {
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     paddingHorizontal: 14,
     borderRadius: 18,
     backgroundColor: COLORS_MINIMAL.surface,
@@ -562,24 +559,22 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_MINIMAL.text.primary,
   },
   dayText: {
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    ...typography.dayText,
     color: COLORS_MINIMAL.text.secondary,
-    fontSize: 11,
   },
   selectedDayText: {
     color: COLORS_MINIMAL.background,
   },
   dateText: {
-    fontFamily: FONTS.POPPINS.REGULAR,
+    ...typography.dateText,
     color: COLORS_MINIMAL.text.muted,
-    fontSize: 10,
     marginTop: 1,
   },
   selectedDateText: {
     color: COLORS_MINIMAL.background,
   },
   moreDatesButton: {
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     paddingHorizontal: 14,
     borderRadius: 18,
     backgroundColor: COLORS_MINIMAL.surface,
@@ -590,46 +585,42 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   moreDatesText: {
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    ...typography.moreDatesText,
     color: COLORS_MINIMAL.text.secondary,
-    fontSize: 11,
   },
   selectedFullDate: {
-    fontSize: 10,
-    fontFamily: FONTS.POPPINS.REGULAR,
+    ...typography.selectedFullDate,
     color: COLORS_MINIMAL.text.muted,
     marginTop: 6,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
     borderRadius: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingVertical: 14,
-    marginHorizontal: 16,
-    marginBottom: 24,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.lg,
   },
   searchPlaceholder: {
+    ...typography.searchPlaceholder,
     flex: 1,
     marginLeft: 10,
-    fontSize: 15,
-    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
   },
   servicesSection: {
 
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    ...typography.sectionTitle,
     color: COLORS_MINIMAL.text.primary,
     marginBottom: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
   },
   servicesScroll: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     gap: 12,
   },
   serviceItem: {
@@ -643,7 +634,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   serviceIcon: {
     width: 72,
@@ -651,20 +642,18 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   serviceName: {
-    fontSize: 12,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    ...typography.serviceName,
     color: COLORS_MINIMAL.text.primary,
     marginBottom: 2,
     textAlign: 'center',
   },
   serviceDesc: {
-    fontSize: 11,
-    fontFamily: FONTS.POPPINS.REGULAR,
+    ...typography.serviceDesc,
     color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
   },
   ctaContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingVertical: 20,
   },
   ctaCard: {
@@ -672,21 +661,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
     borderRadius: 16,
-    padding: 16,
+    padding: spacing.md,
   },
   ctaContent: {
     flex: 1,
     marginRight: 12,
   },
   ctaTitle: {
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    ...typography.ctaTitle,
     color: COLORS_MINIMAL.text.primary,
     marginBottom: 4,
   },
   ctaSubtext: {
-    fontSize: 13,
-    fontFamily: FONTS.POPPINS.REGULAR,
+    ...typography.ctaSubtext,
     color: COLORS_MINIMAL.text.secondary,
     lineHeight: 18,
   },
@@ -697,40 +684,37 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   ctaButtonText: {
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    ...typography.ctaButtonText,
     color: 'white',
   },
   categoriesSection: {
-    paddingLeft: 16,
+    paddingLeft: spacing.md,
     paddingBottom: 20,
   },
   categoriesHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingRight: 16,
+    paddingRight: spacing.md,
     marginBottom: 12,
   },
   viewAllText: {
-    fontSize: 13,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    ...typography.viewAllText,
     color: COLORS_MINIMAL.text.muted,
   },
   categoriesScroll: {
-    paddingRight: 16,
-    gap: 8,
+    paddingRight: spacing.md,
+    gap: spacing.sm,
   },
   categoryPill: {
     backgroundColor: COLORS_MINIMAL.surface,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     borderRadius: 20,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   categoryPillText: {
-    fontSize: 13,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    ...typography.categoryPillText,
     color: COLORS_MINIMAL.text.secondary,
   },
   modalOverlay: {
@@ -753,8 +737,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS_MINIMAL.border,
   },
   modalTitle: {
-    fontSize: 18,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    ...typography.modalTitle,
     color: COLORS_MINIMAL.text.primary,
   },
 });
