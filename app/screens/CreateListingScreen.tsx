@@ -68,7 +68,7 @@ const CreateListingScreen = () => {
     subCategoryId: '',
     subCategorySelected: false,
     photos: [],
-    coordinates: [78.1134, 18.0534],
+    coordinates: [] as unknown as [number, number],
     price: '',
     unitOfMeasure: 'per_hour',
     minimumOrder: '1',

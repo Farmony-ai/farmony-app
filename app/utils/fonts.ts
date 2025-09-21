@@ -151,7 +151,7 @@ export const typography = {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.XL,
+    fontSize: FONT_SIZES.LG,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
   },
   modalTitle: {

@@ -131,30 +131,31 @@ const CheckoutScreen = () => {
 
     // Navigate to payment screen with user's verified phone
     navigation.navigate('PaymentSelection', {
-      listing,
-      quantity,
-      address: selectedAddress,
-      serviceDate: selectedDate,
-      serviceTime: selectedTime,
-      phone: user?.phone || '', // Use verified phone from user state
-      notes,
+    listing,
+    quantity,
+    address: selectedAddress,
+    serviceDate: selectedDate,
+    serviceTime: selectedTime, // This is already being passed
+    phone: user?.phone || '',
+    notes,
+    totalAmount,
+    orderDetails: {
+      listingId: listing._id,
+      seekerId: user?.id,
+      providerId: providerId,
+      orderType: getOrderType(),
       totalAmount,
-      orderDetails: {
-        listingId: listing._id,
-        seekerId: user?.id,
-        providerId: providerId, // Use extracted providerId
-        orderType: getOrderType(), // Use mapped orderType
-        totalAmount,
-        serviceStartDate: selectedDate,
-        serviceEndDate: selectedDate, // You can calculate end date based on duration if needed
-        quantity,
-        unitOfMeasure: listing.unitOfMeasure,
-        coordinates: selectedAddress?.coordinates,
-        addressId: selectedAddress?._id,
-        specialInstructions: notes,
-      }
-    });
-  };
+      serviceStartDate: selectedDate,
+      serviceEndDate: selectedDate,
+      serviceTime: selectedTime, // ADD THIS
+      quantity,
+      unitOfMeasure: listing.unitOfMeasure,
+      coordinates: selectedAddress?.coordinates || [], // Make sure this is an array
+      addressId: selectedAddress?._id, // ADD THIS
+      specialInstructions: notes,
+    }
+  });
+};
 
   const timeSlots = [
     '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',

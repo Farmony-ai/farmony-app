@@ -103,17 +103,18 @@ const PaymentSelectionScreen = () => {
         listingId: params.orderDetails.listingId,
         seekerId: params.orderDetails.seekerId,
         providerId: params.orderDetails.providerId,
-        orderType: params.orderDetails.orderType || 'hiring', // Default to hiring if not set
+        orderType: params.orderDetails.orderType || 'hiring',
         totalAmount: params.totalAmount,
         serviceStartDate: params.serviceDate,
         serviceEndDate: params.orderDetails.serviceEndDate || params.serviceDate,
+        serviceTime: params.serviceTime, // Time slot from params
         quantity: params.quantity,
         unitOfMeasure: params.orderDetails.unitOfMeasure,
-        coordinates: params.orderDetails.coordinates,
+        coordinates: params.orderDetails.coordinates || params.address?.coordinates || [], // Fallback to address coordinates
+        addressId: params.orderDetails.addressId || params.address?._id, // Address reference
         paymentMethod: selectedPayment,
         paymentDetails: selectedPayment === 'upi' ? { upiId } : {},
         specialInstructions: params.notes || params.orderDetails.specialInstructions,
-        addressId: params.orderDetails.addressId,
       };
 
       console.log('Creating order with data:', orderData); // Debug log

@@ -4,20 +4,64 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Text from './Text';
 import { COLORS, FONTS } from '../utils';
 
+interface BookingData {
+  _id: string;
+  status: string;
+  orderType: string;
+  createdAt: string;
+  requestExpiresAt: string;
+  serviceStartDate?: string;
+  serviceEndDate?: string;
+  serviceTime?: string;
+  quantity?: number;
+  unitOfMeasure?: string;
+  totalAmount: number;
+  distance?: number | null;
+  serviceLocation?: {
+    coordinates?: number[];
+    address?: string;
+    city?: string;
+    fullAddress?: any;
+  };
+  seeker?: {
+    _id: string;
+    name: string;
+    phone: string;
+    email?: string;
+    location?: string;
+    city?: string;
+    coordinates?: number[] | null;
+    fullAddress?: any;
+  };
+  listing?: {
+    _id: string;
+    title: string;
+    description?: string;
+    price: number;
+    unitOfMeasure?: string;
+    category?: string;
+    subCategory?: string;
+    images?: string[];
+    thumbnailUrl?: string;
+    coordinates?: number[];
+    location?: string | null;
+  };
+}
+
 interface PendingRequestCardProps {
-  booking: any;
+  booking: BookingData;
   onAccept: (id: string) => void;
   onDecline: (id: string) => void;
 }
 
 const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAccept, onDecline }) => {
-  const serviceDate = new Date(booking.serviceStartDate).toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const serviceDate = booking.serviceStartDate
+    ? new Date(booking.serviceStartDate).toLocaleDateString('en-IN', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      })
+    : 'Date TBD';
 
   // Helper: time since request created
   const getTimeSince = (createdAt: string) => {
@@ -34,6 +78,13 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
     if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
     if (minutes > 0) return `${minutes} min ago`;
     return 'Just now';
+  };
+
+  // Helper: format distance
+  const formatDistance = (distance?: number | null) => {
+    if (!distance) return '';
+    if (distance < 1) return `${Math.round(distance * 1000)}m away`;
+    return `${distance.toFixed(1)} km away`;
   };
 
   // Convert backend unit format to clean display
@@ -72,12 +123,12 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
         <View style={styles.timeOverlay}>
           <Text style={styles.timeOverlayText}>{getTimeSince(booking.createdAt)}</Text>
         </View>
-        
+
         {/* Expiry Badge - Right */}
         <View style={styles.expiryOverlay}>
           <Ionicons name="timer-outline" size={12} color="#FFFFFF" />
           <Text style={styles.expiryOverlayText}>
-            {new Date(booking.requestExpiresAt).toLocaleTimeString('en-IN', {
+            Expires {new Date(booking.requestExpiresAt).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
             })}
@@ -102,19 +153,31 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
           </View>
         </View>
 
-        {/* Location */}
+        {/* Service Location */}
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={14} color="#666666" />
           <Text style={styles.infoText} numberOfLines={1}>
-            {booking.seeker?.location || 'Location not available'}
-            {booking.distance && ` • ${booking.distance.toFixed(1)} km`}
+            {booking.serviceLocation?.city || booking.serviceLocation?.address || booking.seeker?.city || 'Service Location'}
+            {booking.distance ? ` • ${formatDistance(booking.distance)}` : ''}
           </Text>
         </View>
 
-        {/* Service Date */}
+        {/* Customer Info */}
+        <View style={styles.infoRow}>
+          <Ionicons name="person-outline" size={14} color="#666666" />
+          <Text style={styles.infoText} numberOfLines={1}>
+            {booking.seeker?.name || 'Customer'}
+            {booking.seeker?.phone ? ` • ${booking.seeker.phone}` : ''}
+          </Text>
+        </View>
+
+        {/* Service Date & Time */}
         <View style={styles.infoRow}>
           <Ionicons name="calendar-outline" size={14} color="#666666" />
-          <Text style={styles.infoText}>{serviceDate}</Text>
+          <Text style={styles.infoText}>
+            {serviceDate}
+            {booking.serviceTime ? ` at ${booking.serviceTime}` : ''}
+          </Text>
         </View>
 
         {/* Action Buttons */}

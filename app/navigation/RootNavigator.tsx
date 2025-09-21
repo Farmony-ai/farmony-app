@@ -7,18 +7,16 @@ import { checkAuth } from '../store/slices/authSlice';
 
 // Screens
 import SplashScreen from '../screens/SplashScreen';
+import InfoScreen from '../screens/InfoScreen';
 import AuthScreen from '../screens/AuthScreen';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import OTPVerificationScreen from '../screens/OTPVerificationScreen';
-import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import BottomTabNavigator from './BottomTabNavigator';
 
 import CategoryBrowserScreen from '../screens/CategoryBrowserScreen';
 import ListingDetailScreen from '../screens/ListingDetailScreen';
-import ListingsScreen from '../screens/ListingsScreen';
 import SearchResultsScreen from '../screens/SearchResultsScreen';
-
 import OrderDetailScreen from '../screens/OrderDetailScreen';
 import ChatScreen from '../screens/ChatScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
@@ -35,7 +33,7 @@ import PersonalizationScreen from '../screens/Settings/PersonalizationScreen';
 import PaymentSettingsScreen from '../screens/Settings/PaymentSettingsScreen';
 import HelpScreen from '../screens/Settings/HelpScreen';
 import LegalScreen from '../screens/Settings/LegalScreen';
-import AdvancedSettingsScreen from '../screens/Settings/AdvancedSettingsScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Stack = createStackNavigator();
 
@@ -43,15 +41,29 @@ const RootNavigator = () => {
   const { isAuthenticated, isLoading } = useSelector((state: RootState) => state.auth);
   const dispatch: AppDispatch = useDispatch();
   const [showSplash, setShowSplash] = useState(true);
+  const [hasSeenInfo, setHasSeenInfo] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Check auth while splash is showing
-    dispatch(checkAuth());
+    // Check auth and info screen status while splash is showing
+    const initialize = async () => {
+      dispatch(checkAuth());
+      
+      // Check if user has seen info screen before
+      try {
+        const seenInfo = await AsyncStorage.getItem('hasSeenInfoScreen');
+        setHasSeenInfo(seenInfo === 'true');
+      } catch (error) {
+        console.log('Error checking info screen status:', error);
+        setHasSeenInfo(false);
+      }
+    };
+
+    initialize();
     
     // Hide splash after minimum display time
     const timer = setTimeout(() => {
       setShowSplash(false);
-    }, 3000);
+    }, 2500);
     
     return () => clearTimeout(timer);
   }, [dispatch]);
@@ -61,8 +73,8 @@ const RootNavigator = () => {
     return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
-  // Show loading after splash if still checking auth
-  if (isLoading) {
+  // Show loading after splash if still checking auth or info status
+  if (isLoading || hasSeenInfo === null) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
@@ -76,13 +88,9 @@ const RootNavigator = () => {
         {isAuthenticated ? (
           <>
             <Stack.Screen name="Main" component={BottomTabNavigator} />
-            {/* Add other main app screens here if they are not part of the tab navigator */}
-            
             <Stack.Screen name="CategoryBrowser" component={CategoryBrowserScreen} />
             <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
-            {/* <Stack.Screen name="Listings" component={ListingsScreen} /> */}
             <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
-            
             <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="CreateListing" component={CreateListingScreen} />
@@ -100,11 +108,14 @@ const RootNavigator = () => {
           </>
         ) : (
           <>
-            <Stack.Screen name="Auth" component={AuthScreen} />
+            {/* Show InfoScreen first if user hasn't seen it */}
+            
+              <Stack.Screen name="Info" component={InfoScreen} />
+           
             <Stack.Screen name="SignIn" component={SignInScreen} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            {/* Removed ForgotPassword as per requirements */}
           </>
         )}
       </Stack.Navigator>
