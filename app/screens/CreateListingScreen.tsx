@@ -28,6 +28,7 @@ import MultiImagePicker from '../components/MultiImagePicker';
 import { ImagePickerResult } from '../services/ImagePickerService';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 90 : 75; // keep in sync with BottomTabNavigator
 
 interface ListingFormData {
   providerId: string;
@@ -67,7 +68,7 @@ const CreateListingScreen = () => {
     subCategoryId: '',
     subCategorySelected: false,
     photos: [],
-    coordinates: [78.1134, 18.0534],
+    coordinates: [] as unknown as [number, number],
     price: '',
     unitOfMeasure: 'per_hour',
     minimumOrder: '1',
@@ -118,23 +119,28 @@ const CreateListingScreen = () => {
 
         if (isEditMode && token) {
           const listingData = await ListingService.getListingById(listingId, token);
+          const resolvedProviderId = (listingData as any)?.providerId?._id ?? (listingData as any)?.providerId ?? '';
+          const resolvedCategoryId = (listingData as any)?.categoryId?._id ?? (listingData as any)?.categoryId ?? '';
+          const resolvedSubCategoryId = (listingData as any)?.subCategoryId?._id ?? (listingData as any)?.subCategoryId ?? '';
+
           setFormData({
             ...formData,
-            providerId: typeof listingData.providerId === 'object' 
-              ? listingData.providerId._id 
-              : listingData.providerId,
-            title: listingData.title,
-            description: listingData.description,
-            categoryId: listingData.categoryId._id,
-            subCategoryId: listingData.subCategoryId._id,
-            photos: listingData.photos,
-            price: listingData.price.toString(),
-            unitOfMeasure: listingData.unitOfMeasure,
-            minimumOrder: listingData.minimumOrder.toString(),
+            providerId: resolvedProviderId,
+            title: (listingData as any)?.title ?? '',
+            description: (listingData as any)?.description ?? '',
+            categoryId: resolvedCategoryId,
+            subCategoryId: resolvedSubCategoryId,
+            photos: (listingData as any)?.photos ?? [],
+            price: String((listingData as any)?.price ?? ''),
+            unitOfMeasure: (listingData as any)?.unitOfMeasure ?? 'per_hour',
+            minimumOrder: String((listingData as any)?.minimumOrder ?? '1'),
             subCategorySelected: true,
           });
-          if (listingData.categoryId) {
-            fetchSubCategories(listingData.categoryId._id);
+          if ((listingData as any)?.categoryId) {
+            const catIdForSubs = (listingData as any)?.categoryId?._id ?? (listingData as any)?.categoryId;
+            if (catIdForSubs) {
+              fetchSubCategories(catIdForSubs);
+            }
           }
         } else if (user?.id) {
           setFormData(prev => ({ ...prev, providerId: user.id }));
@@ -188,9 +194,8 @@ const CreateListingScreen = () => {
     { value: 'per_hour', label: 'Per Hour' },
     { value: 'per_day', label: 'Per Day' },
     { value: 'per_hectare', label: 'Per Hectare' },
-    { value: 'per_kg', label: 'Per Kg' },
+
     { value: 'per_unit', label: 'Per Unit' },
-    { value: 'per_piece', label: 'Per Piece' },
   ];
 
   const handleInputChange = (field: keyof ListingFormData, value: any) => {
@@ -247,12 +252,20 @@ const CreateListingScreen = () => {
 
     try {
       setLoading(true);
+
+      // Map selected IDs to their human-readable names right before building payload
+      const selectedCategoryName = availableCategories.find(c => c._id === formData.categoryId)?.name;
+      const selectedSubCategoryName = availableSubCategories.find(s => s._id === formData.subCategoryId)?.name;
+
       const payload: CreateListingPayload = {
         providerId: formData.providerId,
-        title: formData.title || `${formData.subCategoryId} Service`,
+        title: formData.title || `${selectedSubCategoryName || formData.subCategoryId} Service`,
         description: formData.description,
         categoryId: formData.categoryId,
         subCategoryId: formData.subCategoryId,
+        // Pass mapped names if found; these are optional in the payload
+        ...(selectedCategoryName ? { category: selectedCategoryName } : {}),
+        ...(selectedSubCategoryName ? { subcategory: selectedSubCategoryName } : {}),
         photos: formData.photos,
         coordinates: formData.coordinates,
         price: parseFloat(formData.price),
@@ -301,7 +314,7 @@ const CreateListingScreen = () => {
       <ScrollView 
         style={styles.formSection} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
         <View style={styles.categoryGrid}>
           {availableCategories.map((category) => (
@@ -362,7 +375,7 @@ const CreateListingScreen = () => {
       <ScrollView 
         style={styles.formSection} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -443,7 +456,7 @@ const CreateListingScreen = () => {
       <ScrollView 
         style={styles.formSection} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Service Price</Text>
@@ -551,7 +564,7 @@ const CreateListingScreen = () => {
       <ScrollView 
         style={styles.formSection} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Service Photos</Text>
@@ -682,12 +695,15 @@ const CreateListingScreen = () => {
           </Animated.View>
         </View>
 
-        {/* Bottom Actions */}
+        {/* The bottom action button is now consistently rendered across all steps */}
         <View style={styles.bottomActions}>
           <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.primaryButtonLoading]}
+            style={[
+              styles.primaryButton,
+              (!validateStep(currentStep) || loading) && styles.primaryButtonDisabled
+            ]}
             onPress={handleNext}
-            disabled={loading}
+            disabled={!validateStep(currentStep) || loading}
             activeOpacity={0.8}
           >
             {loading ? (
@@ -695,7 +711,7 @@ const CreateListingScreen = () => {
             ) : (
               <>
                 <Text style={styles.primaryButtonText}>
-                  {currentStep === 4 ? (isEditMode ? 'Update' : 'Create') : 'Continue'}
+                  {currentStep === 4 ? (isEditMode ? 'Update Listing' : 'Create Listing') : 'Continue'}
                 </Text>
                 {currentStep < 4 && (
                   <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
@@ -703,15 +719,6 @@ const CreateListingScreen = () => {
               </>
             )}
           </TouchableOpacity>
-
-          {currentStep === 1 && (
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
     </SafeAreaWrapper>
@@ -922,8 +929,8 @@ const styles = StyleSheet.create({
     padding: SPACING.MD,
   },
   subCategoryIconContainer: {
-    width: 44,
-    height: 44,
+    width: 56,
+    height: 56,
     borderRadius: 22,
     backgroundColor: COLORS.NEUTRAL.WHITE,
     justifyContent: 'center',
@@ -936,10 +943,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.PRIMARY.MAIN,
   },
   subCategoryIcon: {
-    width: 22,
-    height: 22,
+    width: 46,
+    height: 46,
     resizeMode: 'contain',
-    tintColor: COLORS.TEXT.SECONDARY,
+
   },
   subCategoryTextContainer: {
     flex: 1,
@@ -1131,6 +1138,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderTopWidth: 1,
     borderTopColor: COLORS.BORDER.PRIMARY,
+    paddingBottom: SPACING.MD + 12,
+    marginBottom: 60, // ensure we sit above the tab bar
   },
   primaryButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
@@ -1140,6 +1149,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.SM,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    opacity: 0.5,
   },
   primaryButtonLoading: {
     opacity: 0.8,

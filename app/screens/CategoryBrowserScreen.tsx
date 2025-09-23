@@ -12,85 +12,49 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
-  Vibration,
   Platform,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS, FONT_SIZES } from '../utils';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
 import CatalogueService from '../services/CatalogueService';
-import { setCategory, setSubCategory } from '../store/slices/listingSlice';
+import categoryIcons from '../utils/icons';
+
+const { width: screenWidth } = Dimensions.get('window');
+
+// Minimal color palette
+const COLORS_MINIMAL = {
+  background: '#FFFFFF',
+  surface: '#F8F9FA',
+  text: {
+    primary: '#000000',
+    secondary: '#4A5568',
+    muted: '#A0AEC0',
+  },
+  accent: '#10B981',
+  border: '#E2E8F0',
+  divider: '#F1F5F9',
+};
 
 interface Category {
   _id: string;
   name: string;
   description: string;
-  category: string;
-  transactionType: string;
-  parentId: string | null;
   icon: string;
-  isActive: boolean;
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-  __v: number;
+  // ... other fields
 }
 
 interface SubCategory {
   _id: string;
   categoryId: string;
   name: string;
-  slug: string;
-  description?: string;
   icon?: string;
+  // ... other fields
 }
-
-import categoryIcons from '../utils/icons';
-
-const { width: screenWidth } = Dimensions.get('window');
-
-// Shimmer loading component
-const ShimmerPlaceholder: React.FC<{ style?: any }> = ({ style }) => {
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmerAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shimmerAnim, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [shimmerAnim]);
-
-  const opacity = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 0.7],
-  });
-
-  return (
-    <Animated.View
-      style={[
-        {
-          backgroundColor: COLORS.NEUTRAL.GRAY[300],
-          opacity,
-        },
-        style,
-      ]}
-    />
-  );
-};
 
 const CategoryBrowserScreen = ({ route }: { route: any }) => {
   const navigation = useNavigation<any>();
@@ -111,18 +75,16 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
   const { startDate, endDate } = useSelector((state: RootState) => state.date);
 
   // Animation values
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const searchBarAnim = useRef(new Animated.Value(0)).current;
-  const categoryScaleAnims = useRef<{ [key: string]: Animated.Value }>({}).current;
-  const subCategoryAnims = useRef<Animated.Value[]>([]).current;
 
-  // Get or create animation value for category
-  const getCategoryScaleAnim = (categoryId: string) => {
-    if (!categoryScaleAnims[categoryId]) {
-      categoryScaleAnims[categoryId] = new Animated.Value(1);
-    }
-    return categoryScaleAnims[categoryId];
-  };
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   useEffect(() => {
     fetchAndSetCategories();
@@ -150,10 +112,9 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
     const newValue = !showSearch;
     setShowSearch(newValue);
     
-    Animated.spring(searchBarAnim, {
+    Animated.timing(searchBarAnim, {
       toValue: newValue ? 1 : 0,
-      tension: 20,
-      friction: 7,
+      duration: 200,
       useNativeDriver: true,
     }).start();
     
@@ -188,29 +149,8 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
   const fetchSubCategories = async (categoryId: string) => {
     try {
       setSubCategoriesLoading(true);
-      // Reset animations
-      subCategoryAnims.forEach(anim => anim.setValue(0));
-      
       const fetchedSubCategories = await CatalogueService.getSubCategories(categoryId);
       setSubCategories(fetchedSubCategories);
-      
-      // Initialize animations
-      while (subCategoryAnims.length < fetchedSubCategories.length) {
-        subCategoryAnims.push(new Animated.Value(0));
-      }
-      
-      // Staggered animation
-      const animations = fetchedSubCategories.map((_, index) => {
-        return Animated.spring(subCategoryAnims[index], {
-          toValue: 1,
-          tension: 20,
-          friction: 7,
-          delay: index * 50,
-          useNativeDriver: true,
-        });
-      });
-      
-      Animated.parallel(animations).start();
     } catch (error) {
       console.error('Error fetching subcategories:', error);
       Alert.alert('Error', 'Failed to load subcategories. Please try again.');
@@ -226,181 +166,104 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
   }, []);
 
   const handleCategoryPress = (category: Category) => {
-    // Haptic feedback
-    if (Platform.OS === 'ios') {
-      Vibration.vibrate(10);
-    }
-    
-    const scaleAnim = getCategoryScaleAnim(category._id);
-    
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    
     setSelectedCategory(category);
   };
 
-  const handleSubCategoryPress = (subCategory: SubCategory, index: number) => {
-    if (selectedCategory) {
-      // Haptic feedback
-      if (Platform.OS === 'ios') {
-        Vibration.vibrate(10);
-      }
-      
-      Animated.sequence([
-        Animated.timing(subCategoryAnims[index], {
-          toValue: 0.9,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(subCategoryAnims[index], {
-          toValue: 1,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        dispatch(setCategory(selectedCategory._id));
-        dispatch(setSubCategory(subCategory._id));
-        navigation.navigate('SearchResults', {
-          categoryId: selectedCategory._id,
-          subCategoryId: subCategory._id,
-          searchQuery: searchQuery, // Pass existing search query if any
-          dateRange: { startDate, endDate }, // Pass existing date range if any
-          latitude: latitude, // Pass latitude from Redux
-          longitude: longitude, // Pass longitude from Redux
-          radius: radius, // Pass radius from Redux
-        });
-      });
-    }
+  const handleSubCategoryPress = (subCategory: SubCategory) => {
+    // Navigate to search results with subcategory name as search query
+    navigation.navigate('SearchResults', {
+      searchQuery: subCategory.name.toLowerCase(),
+      categoryId: selectedCategory?._id,
+      dateRange: { startDate, endDate },
+      latitude: latitude,
+      longitude: longitude,
+      radius: radius,
+    });
   };
 
   const renderCategoryItem = ({ item }: { item: Category }) => {
-    const scaleAnim = getCategoryScaleAnim(item._id);
     const isSelected = selectedCategory?._id === item._id;
     
     return (
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <TouchableOpacity
-          style={[
-            styles.categoryItem,
-            isSelected && styles.categoryItemActive,
-          ]}
-          onPress={() => handleCategoryPress(item)}
-          activeOpacity={0.7}
-        >
-          <View style={[
-            styles.categoryIconWrapper,
-            isSelected && styles.categoryIconWrapperActive
-          ]}>
-            <Image
-              source={categoryIcons[item.icon] || categoryIcons['tools']}
-              style={styles.categoryIcon}
-            />
-          </View>
-          <Text
-            style={[
-              styles.categoryText,
-              isSelected && styles.categoryTextActive,
-            ]}
-            numberOfLines={2}
-          >
-            {item.name}
-          </Text>
-          {isSelected && (
-            <View style={styles.selectedIndicator} />
-          )}
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  };
-
-  const renderSubCategoryItem = ({ item, index }: { item: SubCategory; index: number }) => {
-    const animValue = subCategoryAnims[index] || new Animated.Value(1);
-    
-    return (
-      <Animated.View
+      <TouchableOpacity
         style={[
-          styles.subCategoryTileWrapper,
-          {
-            opacity: animValue,
-            transform: [
-              {
-                translateY: animValue.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [30, 0],
-                }),
-              },
-              { scale: animValue },
-            ],
-          },
+          styles.categoryItem,
+          isSelected && styles.categoryItemActive,
         ]}
+        onPress={() => handleCategoryPress(item)}
+        activeOpacity={0.7}
       >
-        <TouchableOpacity
-          style={styles.subCategoryTile}
-          onPress={() => handleSubCategoryPress(item, index)}
-          activeOpacity={0.7}
+        <View style={[
+          styles.categoryIconWrapper,
+          isSelected && styles.categoryIconWrapperActive
+        ]}>
+          <Image
+            source={categoryIcons[item.icon] || categoryIcons['tools']}
+            style={styles.categoryIcon}
+          />
+        </View>
+        <Text
+          style={[
+            styles.categoryText,
+            isSelected && styles.categoryTextActive,
+          ]}
+          numberOfLines={2}
         >
-          <View style={styles.subCategoryContent}>
-            <View style={styles.subCategoryIconContainer}>
-              <Image
-                source={categoryIcons[item.icon] || categoryIcons['tools']}
-                style={styles.subCategoryIcon}
-              />
-            </View>
-            <Text style={styles.subCategoryText} numberOfLines={2}>
-              {item.name}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
+          {item.name}
+        </Text>
+        {isSelected && (
+          <View style={styles.selectedIndicator} />
+        )}
+      </TouchableOpacity>
     );
   };
 
-  const renderShimmerLoading = () => (
-    <View style={styles.shimmerContainer}>
-      {[1, 2, 3, 4, 5].map((num) => (
-        <View key={num} style={styles.shimmerItem}>
-          <ShimmerPlaceholder style={styles.shimmerIcon} />
-          <ShimmerPlaceholder style={styles.shimmerText} />
+  const renderSubCategoryItem = ({ item }: { item: SubCategory }) => {
+    return (
+      <TouchableOpacity
+        style={styles.subCategoryTile}
+        onPress={() => handleSubCategoryPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.subCategoryIconContainer}>
+          <Image
+            source={categoryIcons[item.icon] || categoryIcons['tools']}
+            style={styles.subCategoryIcon}
+          />
         </View>
-      ))}
-    </View>
-  );
+        <Text style={styles.subCategoryText} numberOfLines={2}>
+          {item.name}
+        </Text>
+        <Text style={styles.subCategorySubtext}>
+          Tap to search
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="folder-open-outline" size={64} color={COLORS.TEXT.SECONDARY} />
-      <Text style={styles.emptyTitle}>No subcategories yet</Text>
-      <Text style={styles.emptyText}>Check back later for more options</Text>
+      <Ionicons name="cube-outline" size={48} color={COLORS_MINIMAL.text.muted} />
+      <Text style={styles.emptyTitle}>No items found</Text>
+      <Text style={styles.emptyText}>Select a category to see options</Text>
     </View>
   );
 
   return (
-    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      <View style={styles.container}>
+    <SafeAreaWrapper backgroundColor={COLORS_MINIMAL.background}>
+      <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <View style={styles.backButtonCircle}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
-            </View>
+            <Ionicons name="arrow-back" size={24} color={COLORS_MINIMAL.text.primary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Browse Categories</Text>
+          <Text style={styles.headerTitle}>Categories</Text>
           <TouchableOpacity onPress={toggleSearch} style={styles.searchButton}>
-            <Ionicons name="search" size={24} color={COLORS.TEXT.PRIMARY} />
+            <Ionicons name="search-outline" size={24} color={COLORS_MINIMAL.text.primary} />
           </TouchableOpacity>
         </View>
 
-        {/* Animated Search Bar */}
+        {/* Search Bar */}
         {showSearch && (
           <Animated.View
             style={[
@@ -410,25 +273,25 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
                 transform: [{
                   translateY: searchBarAnim.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [-20, 0],
+                    outputRange: [-10, 0],
                   }),
                 }],
               },
             ]}
           >
             <View style={styles.searchBar}>
-              <Ionicons name="search" size={20} color={COLORS.TEXT.SECONDARY} />
+              <Ionicons name="search" size={20} color={COLORS_MINIMAL.text.muted} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search categories..."
-                placeholderTextColor={COLORS.TEXT.SECONDARY}
+                placeholderTextColor={COLORS_MINIMAL.text.muted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={20} color={COLORS.TEXT.SECONDARY} />
+                  <Ionicons name="close-circle" size={20} color={COLORS_MINIMAL.text.muted} />
                 </TouchableOpacity>
               )}
             </View>
@@ -439,7 +302,7 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
           {/* Left Pane: Categories */}
           <View style={styles.leftPane}>
             {loading ? (
-              renderShimmerLoading()
+              <ActivityIndicator size="small" color={COLORS_MINIMAL.accent} style={styles.loader} />
             ) : (
               <FlatList
                 data={filteredCategories}
@@ -451,7 +314,7 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
                   <RefreshControl
                     refreshing={refreshing}
                     onRefresh={onRefresh}
-                    tintColor={COLORS.PRIMARY.MAIN}
+                    tintColor={COLORS_MINIMAL.accent}
                   />
                 }
               />
@@ -462,7 +325,7 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
           <View style={styles.rightPane}>
             {subCategoriesLoading ? (
               <View style={styles.subCategoryLoadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+                <ActivityIndicator size="large" color={COLORS_MINIMAL.accent} />
               </View>
             ) : subCategories.length > 0 ? (
               <FlatList
@@ -472,13 +335,14 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
                 numColumns={2}
                 contentContainerStyle={styles.subCategoryGrid}
                 showsVerticalScrollIndicator={false}
+                columnWrapperStyle={styles.columnWrapper}
               />
             ) : (
               renderEmptyState()
             )}
           </View>
         </View>
-      </View>
+      </Animated.View>
     </SafeAreaWrapper>
   );
 };
@@ -486,188 +350,162 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    backgroundColor: COLORS_MINIMAL.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS_MINIMAL.background,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
-    ...SHADOWS.SM,
+    borderBottomColor: COLORS_MINIMAL.divider,
   },
   backButton: {
-    padding: SPACING.XS,
-  },
-  backButtonCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    fontSize: FONT_SIZES.LG,
+    fontSize: 18,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
+    color: COLORS_MINIMAL.text.primary,
   },
   searchButton: {
-    padding: SPACING.SM,
+    padding: 8,
   },
   searchContainer: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingHorizontal: SPACING.MD,
-    paddingTop: SPACING.XS,
-    paddingBottom: SPACING.SM,
+    backgroundColor: COLORS_MINIMAL.background,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
+    borderBottomColor: COLORS_MINIMAL.divider,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
+    backgroundColor: COLORS_MINIMAL.surface,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   searchInput: {
     flex: 1,
-    marginLeft: SPACING.SM,
-    fontSize: FONT_SIZES.BASE,
+    marginLeft: 8,
+    fontSize: 15,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
+    color: COLORS_MINIMAL.text.primary,
   },
   content: {
     flex: 1,
     flexDirection: 'row',
   },
   leftPane: {
-    width: screenWidth * 0.3,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    width: screenWidth * 0.28,
+    backgroundColor: COLORS_MINIMAL.surface,
     borderRightWidth: 1,
-    borderRightColor: COLORS.BORDER.PRIMARY,
+    borderRightColor: COLORS_MINIMAL.divider,
+  },
+  loader: {
+    marginTop: 20,
   },
   categoryList: {
-    paddingVertical: SPACING.XS,
+    paddingVertical: 8,
   },
   categoryItem: {
     alignItems: 'center',
-    paddingVertical: SPACING.SM,
-    marginHorizontal: SPACING.XS,
-    marginVertical: 2,
-    borderRadius: BORDER_RADIUS.MD,
+    paddingVertical: 12,
+    marginHorizontal: 8,
+    marginVertical: 4,
+    borderRadius: 8,
     position: 'relative',
   },
   categoryItemActive: {
-    backgroundColor: COLORS.PRIMARY.LIGHT,
+    backgroundColor: COLORS_MINIMAL.background,
   },
   categoryIconWrapper: {
-    width: 42,
-    height: 42,
-    borderRadius: BORDER_RADIUS.MD,
-    backgroundColor: COLORS.BACKGROUND.CARD,
+    width: 68,
+    height: 68,
+    borderRadius: 12,
+    backgroundColor: COLORS_MINIMAL.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.XS,
+    marginBottom: 6,
   },
   categoryIconWrapperActive: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    ...SHADOWS.SM,
+    backgroundColor: COLORS_MINIMAL.surface,
   },
   categoryIcon: {
-    width: 26,
-    height: 26,
+    width: 58,
+    height: 58,
     resizeMode: 'contain',
   },
   categoryText: {
     fontSize: 11,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.SECONDARY,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS_MINIMAL.text.secondary,
     textAlign: 'center',
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
   },
   categoryTextActive: {
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.PRIMARY.DARK,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS_MINIMAL.text.primary,
   },
   selectedIndicator: {
     position: 'absolute',
     left: 0,
-    top: '25%',
-    bottom: '25%',
+    top: '30%',
+    bottom: '30%',
     width: 3,
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
+    backgroundColor: COLORS_MINIMAL.accent,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
   },
   rightPane: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    backgroundColor: COLORS_MINIMAL.background,
   },
   subCategoryGrid: {
-    padding: SPACING.SM,
-    paddingTop: SPACING.MD,
+    padding: 12,
   },
-  subCategoryTileWrapper: {
-    flex: 1,
-    margin: SPACING.XS,
+  columnWrapper: {
+    justifyContent: 'space-between',
   },
   subCategoryTile: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: BORDER_RADIUS.LG,
-    overflow: 'hidden',
-    ...SHADOWS.SM,
-    elevation: 2,
-  },
-  subCategoryContent: {
+    backgroundColor: COLORS_MINIMAL.surface,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    padding: SPACING.MD,
+    marginBottom: 12,
+    width: (screenWidth - (screenWidth * 0.28) - 36) / 2,
   },
   subCategoryIconContainer: {
-    width: 75,
-    height: 75,
+    width: 56,
+    height: 56,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.SECONDARY.LIGHT,
-    borderRadius: BORDER_RADIUS.FULL,
-    marginBottom: SPACING.SM,
+    backgroundColor: COLORS_MINIMAL.background,
+    borderRadius: 12,
+    marginBottom: 10,
   },
   subCategoryIcon: {
-    width: 36,
-    height: 36,
+    width: 72,
+    height: 72,
     resizeMode: 'contain',
   },
   subCategoryText: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: 13,
     fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
+    color: COLORS_MINIMAL.text.primary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  subCategorySubtext: {
+    fontSize: 10,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
   },
-  // Shimmer loading styles
-  shimmerContainer: {
-    padding: SPACING.SM,
-  },
-  shimmerItem: {
-    alignItems: 'center',
-    marginVertical: SPACING.SM,
-  },
-  shimmerIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: BORDER_RADIUS.MD,
-    marginBottom: SPACING.XS,
-  },
-  shimmerText: {
-    width: 55,
-    height: 11,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  // Loading and empty states
   subCategoryLoadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -677,19 +515,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SPACING.XL,
+    paddingHorizontal: 32,
   },
   emptyTitle: {
-    fontSize: FONT_SIZES.LG,
+    fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
-    marginTop: SPACING.MD,
-    marginBottom: SPACING.SM,
+    color: COLORS_MINIMAL.text.primary,
+    marginTop: 12,
+    marginBottom: 6,
   },
   emptyText: {
-    fontSize: FONT_SIZES.SM,
+    fontSize: 13,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
+    color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
   },
 });

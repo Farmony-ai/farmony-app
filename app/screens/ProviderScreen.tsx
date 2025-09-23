@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,19 +7,35 @@ import {
   Platform,
   Image,
   RefreshControl,
+  Animated,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SHADOWS, FONTS, FONT_SIZES } from '../utils';
+import { COLORS, SHADOWS, FONTS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ProviderService, { ProviderDashboardResponse } from '../services/ProviderService';
-import Button from '../components/Button';
 import BookingService from '../services/BookingService';
+import { canTransition, setOrderStatus } from '../services/orderStatus';
+import PendingRequestCard from '../components/PendingRequestCard';
 
+const { width: screenWidth } = Dimensions.get('window');
 const backgroundImg = require('../assets/provider-bg.png');
+
+// Import custom icons
+const bookingsIcon = require('../assets/bookings.png');
+const listingsIcon = require('../assets/listings.png');
+const ratingsIcon = require('../assets/ratings.png');
+
+// Animation constants
+const HORIZONTAL_SWIPE_THRESHOLD = 80;
+const SWIPE_OUT_DURATION = 300;
+const SWIPE_VELOCITY_THRESHOLD = 0.3;
+const MAX_VISIBLE_CARDS = 3;
 
 const ProviderScreen = () => {
   const navigation = useNavigation<any>();
@@ -27,7 +43,9 @@ const ProviderScreen = () => {
   const [dashboard, setDashboard] = useState<ProviderDashboardResponse | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // Get greeting based on time
+  const [activeIndex, setActiveIndex] = useState(0);
+  const translateX = useRef(new Animated.Value(0)).current;
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -41,60 +59,87 @@ const ProviderScreen = () => {
       {
         label: 'Bookings',
         value: String(summary?.totalBookings ?? 0),
-        icon: 'calendar',
-        bgColor: '#fff3e0',
-        iconColor: '#f57c00',
+        icon: bookingsIcon,
         onPress: () => navigation.navigate('ProviderBookings'),
       },
       {
         label: 'Listings',
         value: String(summary?.activeListings ?? 0),
-        icon: 'list',
-        bgColor: '#fff3e0',
-        iconColor: '#f57c00',
+        icon: listingsIcon,
         onPress: () => navigation.navigate('MyListings'),
       },
-      
       {
         label: 'Rating',
         value: String(summary?.averageRating ?? 0),
-        icon: 'star',
-        bgColor: '#fff3e0',
-        iconColor: '#f57c00',
-        onPress: () => {}, // No action for rating
+        icon: ratingsIcon,
+        onPress: () => {},
       },
-      {
-        label: 'Listing',
-        value: 'Add',
-        icon: 'add-circle',
-        bgColor: '#fff3e0',
-        iconColor: '#f57c00',
-        onPress: () => navigation.navigate('CreateListing'),
-      },
-      
     ];
   }, [dashboard, navigation]);
 
-  // quickActions placeholder removed (inline JSX is used)
+  // PanResponder for swiping
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 5,
+      onPanResponderMove: (_, g) => {
+        translateX.setValue(g.dx);
+      },
+      onPanResponderRelease: (_, g) => {
+        const { dx, vx } = g;
+        const shouldSwipe =
+          Math.abs(dx) > HORIZONTAL_SWIPE_THRESHOLD ||
+          Math.abs(vx) > SWIPE_VELOCITY_THRESHOLD;
+
+        if (shouldSwipe) {
+          const direction = dx > 0 ? 1 : -1;
+
+          Animated.timing(translateX, {
+            toValue: direction * screenWidth,
+            duration: SWIPE_OUT_DURATION,
+            useNativeDriver: true,
+          }).start(() => {
+            setActiveIndex((prev) => {
+              let next = prev + (direction === 1 ? -1 : 1);
+              if (next < 0) next = (dashboard?.pendingBookings?.length || 1) - 1;
+              if (next >= (dashboard?.pendingBookings?.length || 1)) next = 0;
+              return next;
+            });
+            translateX.setValue(0);
+          });
+        } else {
+          Animated.spring(translateX, {
+            toValue: 0,
+            friction: 5,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   const handleAcceptBooking = async (bookingId: string) => {
-  try {
-    await BookingService.acceptBooking(bookingId);
-    fetchDashboard(); // Refresh the dashboard
-  } catch (error) {
-    console.error('Error accepting booking:', error);
-  }
-};
+    try {
+      const current = dashboard?.pendingBookings?.find(b => b._id === bookingId)?.status || 'pending';
+      if (!canTransition(current as any, 'accepted')) return;
+      await setOrderStatus({ orderId: bookingId, status: 'accepted' });
+      fetchDashboard();
+    } catch (error) {
+      console.error('Error accepting booking:', error);
+    }
+  };
 
-const handleRejectBooking = async (bookingId: string) => {
-  try {
-    await BookingService.rejectBooking(bookingId);
-    fetchDashboard(); // Refresh the dashboard
-  } catch (error) {
-    console.error('Error rejecting booking:', error);
-  }
-};
-
+  const handleRejectBooking = async (bookingId: string) => {
+    try {
+      const current = dashboard?.pendingBookings?.find(b => b._id === bookingId)?.status || 'pending';
+      if (!canTransition(current as any, 'canceled')) return;
+      await setOrderStatus({ orderId: bookingId, status: 'canceled' });
+      fetchDashboard();
+    } catch (error) {
+      console.error('Error rejecting booking:', error);
+    }
+  };
 
   const fetchDashboard = async (isRefresh = false) => {
     if (!user?.id) {
@@ -113,565 +158,335 @@ const handleRejectBooking = async (bookingId: string) => {
 
   useEffect(() => {
     fetchDashboard();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, token]);
 
   const onRefresh = () => fetchDashboard(true);
 
-  // Refresh when returning from Create Listing or any navigation back
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => fetchDashboard());
     return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation, user?.id, token]);
 
+  const pendingBookings = dashboard?.pendingBookings || [];
+
+  // Render stacked cards
+  const renderCards = () => {
+    if (pendingBookings.length === 0) return null;
+
+    const cards = [];
+    for (let i = 0; i < Math.min(MAX_VISIBLE_CARDS, pendingBookings.length); i++) {
+      const cardIndex = (activeIndex + i) % pendingBookings.length;
+      const booking = pendingBookings[cardIndex];
+      const isTop = i === 0;
+
+      const cardStyle = isTop
+        ? {
+            transform: [
+              { translateX },
+              {
+                rotate: translateX.interpolate({
+                  inputRange: [-screenWidth / 2, 0, screenWidth / 2],
+                  outputRange: ['-15deg', '0deg', '15deg'],
+                  extrapolate: 'clamp',
+                }),
+              },
+            ],
+            opacity: translateX.interpolate({
+              inputRange: [-screenWidth / 2, 0, screenWidth / 2],
+              outputRange: [0.7, 1, 0.7],
+              extrapolate: 'clamp',
+            }),
+          }
+        : {
+            transform: [{ scale: 1 - i * 0.05 }],
+            top: i * 10,
+            opacity: 1 - i * 0.1,
+          };
+
+      cards.push(
+        <Animated.View
+          key={`${booking._id}-${cardIndex}`}
+          style={[styles.stackedCard, cardStyle]}
+          {...(isTop ? panResponder.panHandlers : {})}
+        >
+          <PendingRequestCard
+            booking={booking}
+            onAccept={handleAcceptBooking}
+            onDecline={handleRejectBooking}
+          />
+        </Animated.View>
+      );
+    }
+
+    return cards.reverse();
+  };
+
   return (
-    <SafeAreaWrapper backgroundColor="#f5f5f5" style={styles.flex}>
-      {/* Background Image */}
-      <Image 
-        source={backgroundImg} 
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      />
-      
-      <ScrollView 
-        contentContainerStyle={styles.container} 
+    <SafeAreaWrapper backgroundColor="#FAFAFA" style={styles.flex}>
+      <Image source={backgroundImg} style={styles.backgroundImage} resizeMode="cover" />
+      <ScrollView
+        contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
-        bounces={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[COLORS.PRIMARY.MAIN]}
+            tintColor={COLORS.PRIMARY.MAIN}
           />
         }
       >
-        {/* Header with Gradient Background */}
-        <View style={styles.headerContainer}>
-          <View style={styles.headerContent}>
-            <View style={styles.headerTop}>
-              <View>
-                <View style={styles.greetingContainer}>
-                  <Text style={styles.greetingText}>
-                    {getGreeting()}
-                  </Text>
-                  <Text style={styles.waveEmoji}> 👋</Text>
-                </View>
-                <Text style={styles.providerName}>
-                  Service Provider
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.userName}>Service Provider</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => navigation.navigate('CreateListing')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add" size={20} color={COLORS.TEXT.PRIMARY} />
+          </TouchableOpacity>
+        </View>
+
+        {pendingBookings.length > 0 && (
+          <View style={styles.stackedCardsSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Pending Requests</Text>
+              <View style={styles.cardCounterContainer}>
+                <Text style={styles.cardCounter}>
+                  {pendingBookings.length} {pendingBookings.length === 1 ? 'Request' : 'Requests'}
                 </Text>
               </View>
-              <TouchableOpacity style={styles.notificationButton}>
-                <Ionicons name="notifications-outline" size={18} color={COLORS.NEUTRAL.WHITE} />
-                <View style={styles.notificationDot} />
-              </TouchableOpacity>
             </View>
-          </View>
-          <View style={styles.headerCircle} />
-        </View>
 
-        {/* Stats Cards - Horizontal ScrollView */}
-        <View style={styles.statsContainer}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.statsScrollContent}
-          >
-            {stats.map((stat, index) => (
-              <TouchableOpacity 
-                key={index} 
-                style={styles.statCard}
-                onPress={stat.onPress}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.statIconContainer, { backgroundColor: stat.bgColor }]}>
-                  <Ionicons name={stat.icon as any} size={18} color={stat.iconColor} />
-                </View>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+            <View style={styles.stackedCardsContainer}>{renderCards()}</View>
 
-        {/* Create First Listing Card - Shows when user has 0 listings */}
-        {(dashboard?.summary?.activeListings || 0) === 0 && (
-          <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.createListingCard}
-              onPress={() => navigation.navigate('CreateListing')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.createListingContent}>
-                <View style={styles.createListingIconBadge}>
-                  <Ionicons name="add-circle-outline" size={28} color={COLORS.PRIMARY.MAIN} />
-                </View>
-                <View style={styles.createListingText}>
-                  <Text style={styles.createListingTitle}>Create Your First Listing</Text>
-                  <Text style={styles.createListingSubtitle}>Start earning by offering your services to customers</Text>
-                </View>
+            {/* Swipe hint with better spacing */}
+            {pendingBookings.length > 1 && (
+              <View style={styles.swipeHintContainer}>
+                <Text style={styles.swipeHint}>
+                  <Ionicons name="arrow-back" size={12} color="#9CA3AF" /> Swipe to browse{' '}
+                  <Ionicons name="arrow-forward" size={12} color="#9CA3AF" />
+                </Text>
               </View>
-            </TouchableOpacity>
+            )}
           </View>
         )}
 
-        {/* Pending Bookings - To Be Reviewed */}
-        {(dashboard?.pendingBookings || []).map((booking, index) => (
-          <View key={index} style={styles.bookingCard}>
-            {/* Listing Image */}
-            {booking.listing?.thumbnailUrl && (
-              <Image 
-                source={{ uri: booking.listing.thumbnailUrl }}
-                style={styles.bookingImage}
-              />
-            )}
-            
-            <View style={styles.bookingContent}>
-              <View style={styles.bookingHeader}>
-                <View style={styles.bookingInfo}>
-                  <Text style={styles.bookingTitle}>
-                    {booking.listing?.title || 'Service'}
-                  </Text>
-                  <Text style={styles.customerName}>
-                    {booking.seeker?.name || 'Customer'}
-                  </Text>
-                  <View style={styles.bookingMeta}>
-                    <Ionicons name="location-outline" size={12} color="#6B7280" />
-                    <Text style={styles.metaText}>
-                      {booking.seeker?.location || 'Location'}
-                      {booking.distance && ` • ${booking.distance} km`}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.priceContainer}>
-                  <Text style={styles.priceAmount}>₹{booking.totalAmount}</Text>
-                  <Text style={styles.priceUnit}>
-                    {booking.quantity && `${booking.quantity} ${booking.unitOfMeasure}`}
-                  </Text>
-                </View>
+        {/* Empty state for no pending requests */}
+        {pendingBookings.length === 0 && (
+          <View style={styles.emptyRequestsContainer}>
+            <View style={styles.emptyRequestsCard}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="time-outline" size={32} color="#9CA3AF" />
               </View>
-              
-              <View style={styles.bookingTime}>
-                <Ionicons name="calendar-outline" size={12} color="#6B7280" />
-                <Text style={styles.timeText}>
-                  Service: {new Date(booking.serviceStartDate).toLocaleDateString()}
-                </Text>
-              </View>
-              
-              <View style={styles.actionButtons}>
-                <TouchableOpacity 
-                  style={styles.acceptButton}
-                  onPress={() => handleAcceptBooking(booking._id)}
-                >
-                  <Text style={styles.acceptButtonText}>Accept</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.rejectButton}
-                  onPress={() => handleRejectBooking(booking._id)}
-                >
-                  <Text style={styles.rejectButtonText}>Decline</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.emptyTitle}>No pending requests</Text>
+              <Text style={styles.emptySubtitle}>
+                You're all caught up! New requests will appear here
+              </Text>
             </View>
           </View>
-        ))}
+        )}
 
-        {/* Upcoming Bookings - Accepted Requests */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Upcoming Bookings</Text>
-            {(dashboard?.upcomingBookings?.length || 0) > 0 && (
-              <TouchableOpacity onPress={() => navigation.navigate('ProviderBookings', { tab: 'upcoming' })}>
-                <Text style={styles.viewAllText}>View All</Text>
+        {(pendingBookings.length > 0 || (dashboard?.summary?.activeListings || 0) > 0) && (
+          <View style={styles.sectionDivider} />
+        )}
+
+        <View style={styles.summarySection}>
+          <View style={styles.summaryRow}>
+            {stats.map((stat, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.summaryCard}
+                onPress={stat.onPress}
+                activeOpacity={0.7}
+              >
+                <View style={styles.summaryIconBox}>
+                  <Image source={stat.icon} style={styles.summaryIcon} resizeMode="contain" />
+                </View>
+                <Text style={styles.summaryValue}>{stat.value}</Text>
+                <Text style={styles.summaryLabel}>{stat.label}</Text>
               </TouchableOpacity>
-            )}
+            ))}
           </View>
-          
-          {(dashboard?.upcomingBookings || []).length === 0 ? (
-            <View style={styles.emptyBookingsCard}>
-              <View style={styles.emptyIconBadge}>
-                <Ionicons name="calendar-clear-outline" size={24} color={COLORS.PRIMARY.MAIN} />
-              </View>
-              <Text style={styles.emptyTitle}>No upcoming bookings</Text>
-              <Text style={styles.emptySubtitle}>Accepted bookings will appear here.</Text>
-              <Button
-                title="Go to Bookings"
-                variant="outline"
-                size="small"
-                onPress={() => navigation.navigate('ProviderBookings')}
-                style={styles.emptyCta}
-              />
-            </View>
-          ) : (
-            dashboard?.upcomingBookings.map((booking, index) => (
-              <View key={index} style={styles.bookingCard}>
-                <View style={styles.bookingHeader}>
-                  <View style={styles.bookingInfo}>
-                    <Text style={styles.bookingTitle}>
-                      {booking.service || booking.listingTitle || 'Service'}
-                    </Text>
-                    <Text style={styles.customerName}>
-                      {booking.customer || booking.customerName || ''}
-                    </Text>
-                  </View>
-                  <View style={[styles.statusBadge, styles.acceptedBadge]}>
-                    <Text style={[styles.statusText, styles.acceptedText]}>
-                      {booking.status === 'paid' ? 'Paid' : 'Accepted'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.bookingTime}>
-                  <Ionicons name="calendar-outline" size={12} color="#6B7280" />
-                  <Text style={styles.timeText}>
-                    {booking.scheduledAt || booking.serviceDate || 
-                    `Scheduled: ${new Date(booking.createdAt).toLocaleDateString()}`}
-                  </Text>
-                </View>
-              </View>
-            ))
-          )}
         </View>
-        {/* Bottom Padding */}
-        <View style={styles.bottomPad} />
+
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </SafeAreaWrapper>
   );
 };
 
+// Styles
 const styles = StyleSheet.create({
-    bookingImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  bookingContent: {
-    flex: 1,
-  },
-  bookingMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  metaText: {
-    fontSize: FONT_SIZES.XS,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  priceContainer: {
-    alignItems: 'flex-end',
-  },
-  priceAmount: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.PRIMARY.MAIN,
-  },
-  priceUnit: {
-    fontSize: FONT_SIZES.XS,
-    color: '#6B7280',
-  },
-  pendingBadge: {
-    backgroundColor: '#fef3c7',
-  },
-  pendingText: {
-    color: '#92400e',
-  },
-  acceptedBadge: {
-    backgroundColor: '#d4edda',
-  },
-  acceptedText: {
-    color: '#155724',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    marginTop: 12,
-    gap: 10,
-  },
-  acceptButton: {
-    flex: 1,
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  acceptButtonText: {
-    color: COLORS.NEUTRAL.WHITE,
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-  },
-  rejectButton: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  rejectButtonText: {
-    color: '#6B7280',
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-  },
   flex: { flex: 1 },
-  container: {
-    flexGrow: 1,
-    backgroundColor: 'transparent', // Changed to transparent
-  },
+  container: { flexGrow: 1, backgroundColor: 'transparent' },
   backgroundImage: {
     position: 'absolute',
     bottom: 75,
     left: 0,
     right: 0,
     width: '100%',
-    height: 400, // Increased height
-    opacity: 0.5, // Reduced opacity for subtlety
+    height: 400,
+    opacity: 0.5,
   },
-  headerContainer: {
-    height: 190,
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    position: 'relative',
-    overflow: 'hidden',
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
-  },
-  headerContent: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 20 : 40,
-  },
-  headerTop: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  greetingContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
-  },
-  greetingText: {
-    fontSize: FONT_SIZES.SM,
-    color: 'rgba(255,255,255,0.9)',
-    fontFamily: FONTS.POPPINS.REGULAR,
-  },
-  waveEmoji: {
-    fontSize: FONT_SIZES.SM,
-  },
-  providerName: {
-    fontSize: FONT_SIZES.LG,
-    color: COLORS.NEUTRAL.WHITE,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-  },
-  notificationButton: {
-    width: 36,
-    height: 36,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  notificationDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 6,
-    height: 6,
-    backgroundColor: '#ff4757',
-    borderRadius: 3,
-    borderWidth: 1.5,
-    borderColor: COLORS.NEUTRAL.WHITE,
-  },
-  headerCircle: {
-    position: 'absolute',
-    right: -80,
-    top: -20,
-    width: 250,
-    height: 250,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 125,
-  },
-  statsContainer: {
-    marginTop: -90,
-    zIndex: 10,
-  },
-  statsScrollContent: {
     paddingHorizontal: 20,
-    gap: 12,
+    paddingTop: Platform.OS === 'ios' ? 10 : 25,
+    paddingBottom: 16,
+    backgroundColor: '#FAFAFA',
   },
-  statCard: {
-    width: 100,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 15,
-    paddingVertical: 17,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    ...SHADOWS.MD,
-    elevation: 5,
-  },
-  statIconContainer: {
-    width: 40,
-    height: 38,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-    lineHeight: 24,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: FONT_SIZES.SM,
+  greeting: {
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 16,
+    marginBottom: 1,
   },
-  section: {
+  userName: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stackedCardsSection: {
     paddingHorizontal: 20,
-    marginTop: 15,
+    marginBottom: 24, // INCREASED from 10 to 24
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+    fontSize: 18,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
   },
-  viewAllText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.PRIMARY.MAIN,
-  },
-  bookingCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 16,
-    padding: 15,
-    marginBottom: 12,
-    ...SHADOWS.SM,
-  },
-  emptyBookingsCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 16,
-    paddingVertical: 22,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.SM,
-  },
-  emptyIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  emptyTitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  emptyCta: {
+  cardCounterContainer: {
+    backgroundColor: '#EBF4FF',
     paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  createListingCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 15,
+  cardCounter: {
+    fontSize: 11,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: '#3B82F6',
+  },
+  stackedCardsContainer: {
+    height: 300, // REDUCED from 340 to 300
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginBottom: 8, // REDUCED from 10 to 8
+  },
+  stackedCard: {
+    position: 'absolute',
+    width: '100%',
     ...SHADOWS.MD,
   },
-  createListingContent: {
-    flexDirection: 'row',
+  swipeHintContainer: { 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginTop: 20, // REDUCED from 50 to 20
+    marginBottom: 10, // ADDED bottom margin
+  },
+  swipeHint: { 
+    fontSize: 11, 
+    color: '#9CA3AF', 
+    textAlign: 'center' 
+  },
+  // Empty state styles
+  emptyRequestsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 32, // INCREASED from 20 to 32
+  },
+  emptyRequestsCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  emptyIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
-  createListingIconBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  createListingText: {
-    flex: 1,
-  },
-  createListingTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.MEDIUM,
+  emptyTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  createListingSubtitle: {
-    fontSize: FONT_SIZES.SM,
+  emptySubtitle: {
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
-    lineHeight: 18,
+    textAlign: 'center',
   },
-  bookingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 20,
+    marginVertical: 20, // INCREASED from 15 to 20
   },
-  bookingInfo: {
+  summarySection: { 
+    paddingHorizontal: 20, 
+    paddingTop: 8, // INCREASED from 4 to 8
+    paddingBottom: 16, // INCREASED from 12 to 16
+    marginTop: 45
+  },
+  summaryRow: { flexDirection: 'row', gap: 10 },
+  summaryCard: {
     flex: 1,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+    ...SHADOWS.SM,
   },
-  bookingTitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
+  summaryIconBox: {
+    width: 64,
+    height: 64,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 2,
   },
-  customerName: {
-    fontSize: FONT_SIZES.XS,
+  summaryIcon: {
+    width: 54,
+    height: 54,
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 1,
+  },
+  summaryLabel: {
+    fontSize: 10,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
+    color: '#9CA3AF',
   },
-  statusBadge: {
-    backgroundColor: '#d4edda',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  statusText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#155724',
-  },
-  bookingTime: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  timeText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
-    marginLeft: 6,
-  },
-  bottomPad: {
-    height: 100,
-  },
+  bottomPadding: { height: 80 },
 });
 
 export default ProviderScreen;

@@ -6,3 +6,4 @@ module.exports = {
   assets: ['./ios/RuralShareApp/Fonts/'],
 };
 
+

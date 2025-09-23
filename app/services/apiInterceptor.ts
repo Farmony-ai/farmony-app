@@ -148,6 +148,16 @@ class ApiInterceptor {
         headers.Authorization = `Bearer ${accessToken}`;
       }
 
+      // 🧾 DEBUG: If this is an orders POST, log the outgoing body as text
+      if (endpoint === '/orders' && (options.method || 'GET').toUpperCase() === 'POST') {
+        try {
+          const bodyPreview = typeof options.body === 'string' ? options.body : '[non-string body]';
+          console.log('[ApiInterceptor] ➜ POST', endpoint, 'body:', bodyPreview);
+        } catch (e) {
+          console.log('[ApiInterceptor] ➜ POST', endpoint, 'body: [unavailable]', e);
+        }
+      }
+
       const response = await fetch(url, { ...options, headers });
 
       // REMOVED HEADER CHECK LOGIC - This part is no longer needed.

@@ -16,8 +16,8 @@ import Text from '../components/Text';
 import Button from '../components/Button';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+// import MaterialIcons from 'react-native-vector-icons/MaterialIcons';  // Not needed for now
+// import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';    // Not needed for now
 import { ordersAPI } from '../services/api';
 
 interface RouteParams {
@@ -50,50 +50,17 @@ const PaymentSelectionScreen = () => {
   const params = route.params as RouteParams;
   const { user } = useSelector((state: RootState) => state.auth);
 
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('cod');
-  const [upiId, setUpiId] = useState('');
+  const [selectedPayment] = useState<PaymentMethod>('cod'); // Fixed to COD for now
   const [processingPayment, setProcessingPayment] = useState(false);
-  const [expandedSection, setExpandedSection] = useState<string | null>('cod');
 
-  const paymentOptions: PaymentOption[] = [
-    {
-      id: 'cod',
-      name: 'Cash on Delivery',
-      description: 'Pay when service is completed',
-      icon: 'cash-outline',
-      iconType: 'ionicon',
-      available: true,
-      recommended: true,
-    },
-    {
-      id: 'upi',
-      name: 'UPI',
-      description: 'Pay using Google Pay, PhonePe, PayTM',
-      icon: 'qr-code-scanner',
-      iconType: 'material',
-      available: true,
-    },
-    {
-      id: 'card',
-      name: 'Credit/Debit Card',
-      description: 'Visa, Mastercard, Rupay',
-      icon: 'credit-card',
-      iconType: 'fontawesome5',
-      available: true,
-    },
-  ];
-
-  const validateUPI = (id: string): boolean => {
-    const upiRegex = /^[\w.-]+@[\w.-]+$/;
-    return upiRegex.test(id);
-  };
+  // Validation functions for future payment methods
+  // const validateUPI = (id: string): boolean => {
+  //   const upiRegex = /^[\w.-]+@[\w.-]+$/;
+  //   return upiRegex.test(id);
+  // };
 
   const handlePlaceOrder = async () => {
-    // Validate payment method specific requirements
-    if (selectedPayment === 'upi' && !validateUPI(upiId)) {
-      Alert.alert('Invalid UPI ID', 'Please enter a valid UPI ID');
-      return;
-    }
+    // For now, only COD is supported, no validation needed
 
     setProcessingPayment(true);
 
@@ -103,17 +70,18 @@ const PaymentSelectionScreen = () => {
         listingId: params.orderDetails.listingId,
         seekerId: params.orderDetails.seekerId,
         providerId: params.orderDetails.providerId,
-        orderType: params.orderDetails.orderType || 'hiring', // Default to hiring if not set
+        orderType: params.orderDetails.orderType || 'hiring',
         totalAmount: params.totalAmount,
         serviceStartDate: params.serviceDate,
         serviceEndDate: params.orderDetails.serviceEndDate || params.serviceDate,
+        serviceTime: params.serviceTime, // Time slot from params
         quantity: params.quantity,
         unitOfMeasure: params.orderDetails.unitOfMeasure,
-        coordinates: params.orderDetails.coordinates,
+        coordinates: params.orderDetails.coordinates || params.address?.coordinates || [], // Fallback to address coordinates
+        addressId: params.orderDetails.addressId || params.address?._id, // Address reference
         paymentMethod: selectedPayment,
-        paymentDetails: selectedPayment === 'upi' ? { upiId } : {},
+        paymentDetails: {}, // No additional details needed for COD
         specialInstructions: params.notes || params.orderDetails.specialInstructions,
-        addressId: params.orderDetails.addressId,
       };
 
       console.log('Creating order with data:', orderData); // Debug log
@@ -129,23 +97,22 @@ const PaymentSelectionScreen = () => {
             {
               text: 'View Order',
               onPress: () => {
-                navigation.reset({
-                  index: 1,
-                  routes: [
-                    { name: 'Home' },
-                    { name: 'Orders' } // Navigate to Orders screen to see the new order
-                  ],
+                // Navigate to the SeekerOrderDetailScreen with the order ID
+                navigation.replace('SeekerOrderDetail', {
+                  orderId: response.data._id
                 });
               }
             },
             {
               text: 'Go Home',
               onPress: () => {
+                // Navigate back to the main navigator and home screen
                 navigation.reset({
                   index: 0,
-                  routes: [{ name: 'Home' }],
+                  routes: [{ name: 'Main' }],
                 });
-              }
+              },
+              style: 'cancel'
             }
           ]
         );
@@ -164,64 +131,17 @@ const PaymentSelectionScreen = () => {
     }
   };
 
-  const renderPaymentIcon = (option: PaymentOption) => {
-    const iconProps = {
-      size: 24,
-      color: selectedPayment === option.id ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY,
-    };
-
-    switch (option.iconType) {
-      case 'ionicon':
-        return <Ionicons name={option.icon as any} {...iconProps} />;
-      case 'material':
-        return <MaterialIcons name={option.icon as any} {...iconProps} />;
-      case 'fontawesome5':
-        return <FontAwesome5 name={option.icon as any} {...iconProps} />;
-      default:
-        return null;
-    }
-  };
+  // Icon renderer for future payment methods
+  // const renderPaymentIcon = (option: PaymentOption) => {
+  //   const iconProps = {
+  //     size: 24,
+  //     color: selectedPayment === option.id ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY,
+  //   };
+  //   // Implementation for different icon types
+  // };
 
   const renderPaymentDetails = (method: PaymentMethod) => {
     switch (method) {
-      case 'upi':
-        return (
-          <View style={styles.paymentDetails}>
-            <Text style={styles.inputLabel}>Enter UPI ID</Text>
-            <TextInput
-              style={styles.upiInput}
-              placeholder="yourname@upi"
-              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-              value={upiId}
-              onChangeText={setUpiId}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <View style={styles.upiProviders}>
-              <Text style={styles.providersLabel}>Popular UPI Apps:</Text>
-              <View style={styles.providersList}>
-                {['GPay', 'PhonePe', 'PayTM', 'BHIM'].map((provider) => (
-                  <TouchableOpacity key={provider} style={styles.providerChip}>
-                    <Text style={styles.providerName}>{provider}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
-        );
-      case 'card':
-        return (
-          <View style={styles.paymentDetails}>
-            <TouchableOpacity style={styles.addCardButton}>
-              <Ionicons name="add-circle-outline" size={20} color={COLORS.PRIMARY.MAIN} />
-              <Text style={styles.addCardText}>Add New Card</Text>
-            </TouchableOpacity>
-            <Text style={styles.secureText}>
-              <Ionicons name="lock-closed" size={12} color={COLORS.SUCCESS} />
-              {' '}Your card details are secure and encrypted
-            </Text>
-          </View>
-        );
       case 'cod':
         return (
           <View style={styles.paymentDetails}>
@@ -233,6 +153,9 @@ const PaymentSelectionScreen = () => {
             </View>
           </View>
         );
+      // Future payment methods - currently not implemented
+      case 'upi':
+      case 'card':
       default:
         return null;
     }
@@ -294,60 +217,41 @@ const PaymentSelectionScreen = () => {
 
           {/* Payment Methods */}
           <View style={styles.paymentSection}>
-            <Text style={styles.sectionTitle}>Select Payment Method</Text>
-            
-            {paymentOptions.map((option) => (
-              <View key={option.id} style={styles.paymentOptionContainer}>
-                <TouchableOpacity
-                  style={[
-                    styles.paymentOption,
-                    selectedPayment === option.id && styles.selectedPaymentOption,
-                    !option.available && styles.disabledOption,
-                  ]}
-                  onPress={() => {
-                    if (option.available) {
-                      setSelectedPayment(option.id);
-                      setExpandedSection(option.id);
-                    }
-                  }}
-                  disabled={!option.available}
-                >
-                  <View style={styles.paymentOptionLeft}>
-                    {renderPaymentIcon(option)}
-                    <View style={styles.paymentInfo}>
-                      <View style={styles.paymentNameRow}>
-                        <Text style={[
-                          styles.paymentName,
-                          selectedPayment === option.id && styles.selectedPaymentName
-                        ]}>
-                          {option.name}
-                        </Text>
-                        {option.recommended && (
-                          <View style={styles.recommendedBadge}>
-                            <Text style={styles.recommendedText}>RECOMMENDED</Text>
-                          </View>
-                        )}
+            <Text style={styles.sectionTitle}>Payment Method</Text>
+
+            {/* Cash on Delivery - Always selected for now */}
+            <View style={styles.paymentOptionContainer}>
+              <View style={[styles.paymentOption, styles.selectedPaymentOption]}>
+                <View style={styles.paymentOptionLeft}>
+                  <Ionicons name="cash-outline" size={24} color={COLORS.PRIMARY.MAIN} />
+                  <View style={styles.paymentInfo}>
+                    <View style={styles.paymentNameRow}>
+                      <Text style={[styles.paymentName, styles.selectedPaymentName]}>
+                        Cash on Delivery
+                      </Text>
+                      <View style={styles.recommendedBadge}>
+                        <Text style={styles.recommendedText}>RECOMMENDED</Text>
                       </View>
-                      <Text style={styles.paymentDescription}>{option.description}</Text>
                     </View>
+                    <Text style={styles.paymentDescription}>Pay when service is completed</Text>
                   </View>
-                  <View style={[
-                    styles.radioButton,
-                    selectedPayment === option.id && styles.radioButtonSelected
-                  ]}>
-                    {selectedPayment === option.id && (
-                      <View style={styles.radioButtonInner} />
-                    )}
-                  </View>
-                </TouchableOpacity>
-                
-                {selectedPayment === option.id && expandedSection === option.id && (
-                  <View style={styles.expandedContent}>
-                    {renderPaymentDetails(option.id)}
-                  </View>
-                )}
+                </View>
+                <View style={[styles.radioButton, styles.radioButtonSelected]}>
+                  <View style={styles.radioButtonInner} />
+                </View>
               </View>
-            ))}
+
+              <View style={styles.expandedContent}>
+                {renderPaymentDetails('cod')}
+              </View>
+            </View>
+
+            {/* Coming Soon Notice for other payment methods */}
+            <View style={styles.comingSoonContainer}>
+              <Text style={styles.comingSoonText}>
+                More payment options coming soon!
+              </Text>
+            </View>
           </View>
         </ScrollView>
 
@@ -766,6 +670,16 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.SUCCESS,
     marginLeft: SPACING.XS,
+  },
+  comingSoonContainer: {
+    padding: SPACING.MD,
+    alignItems: 'center',
+  },
+  comingSoonText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    fontStyle: 'italic',
   },
 });
 

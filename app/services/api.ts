@@ -27,6 +27,10 @@ interface User {
   role: 'individual' | 'SHG' | 'FPO' | 'admin';
   isVerified: boolean;
   kycStatus: 'pending' | 'approved' | 'rejected' | 'none';
+  // Newly supported optional fields from backend
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  // ISO string (e.g., "1995-09-22T00:00:00.000Z") or date-only string ("YYYY-MM-DD")
+  dateOfBirth?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -36,6 +40,10 @@ interface UserUpdateRequest {
   phone?: string;
   isVerified?: boolean;
   kycStatus?: 'pending' | 'approved' | 'rejected';
+  // Allow minimal partial updates for profile fields per backend docs
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  // Send as YYYY-MM-DD per backend examples
+  dateOfBirth?: string;
 }
 
 // 📧 Helper functions for easier usage
@@ -128,7 +136,7 @@ export const authAPI = {
 export const usersAPI = {
   // Get user profile
   getProfile: (userId: string) => apiInterceptor.getProfile(userId),
-  
+
   // Update user
   updateUser: async (userId: string, updates: UserUpdateRequest) => {
     return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}`, {
@@ -136,21 +144,37 @@ export const usersAPI = {
       body: JSON.stringify(updates),
     });
   },
-  
+
   // Verify user
   verifyUser: async (userId: string) => {
     return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/verify`, {
       method: 'PATCH',
     });
   },
-  
+
   // Unverify user
   unverifyUser: async (userId: string) => {
     return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/unverify`, {
       method: 'PATCH',
     });
   },
-  
+
+  // Upload profile picture
+  uploadProfilePicture: async (userId: string, formData: FormData) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/profile-picture`, {
+      method: 'POST',
+      body: formData,
+      // Don't set Content-Type header - FormData sets it automatically with boundary
+    });
+  },
+
+  // Delete profile picture
+  deleteProfilePicture: async (userId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/profile-picture`, {
+      method: 'DELETE',
+    });
+  },
+
   // Check if phone exists
   checkPhone: async (phone: string) => {
     const url = `${API_BASE_URL}/users/check-phone/${phone}`;
@@ -283,6 +307,13 @@ export const listingsAPI = {
 export const ordersAPI = {
   // Create order
   create: async (data: any) => {
+    // 🧾 DEBUG: Log the payload at the API layer as well
+    try {
+      const pretty = JSON.stringify(data, null, 2);
+      console.log('[ordersAPI.create] ➜ POST /orders with body:\n', pretty);
+    } catch (e) {
+      console.log('[ordersAPI.create] ➜ POST /orders with body (raw object):', data);
+    }
     return apiInterceptor.makeAuthenticatedRequest('/orders', {
       method: 'POST',
       body: JSON.stringify(data),

@@ -8,9 +8,10 @@ import ProviderNavigator from './ProviderNavigator';
 import Text from '../components/Text';
 import { COLORS, FONTS } from '../utils';
 
-import ProfileScreen from '../screens/ProfileScreen';
+// import ProfileScreen from '../screens/ProfileScreen';
 import BookingsScreen from '../screens/BookingsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import SettingsScreen from '../screens/Settings/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -96,9 +97,9 @@ export default function BottomTabNavigator() {
       />
       <Tab.Screen 
         name="Profile" 
-        component={ProfileScreen} 
+        component={SettingsScreen} 
         options={{ 
-          tabBarIcon: ({ focused }) => renderIcon('person', 'Profile', focused) 
+          tabBarIcon: ({ focused }) => renderIcon('person', 'Settings', focused) 
         }} 
       />
     </Tab.Navigator>
