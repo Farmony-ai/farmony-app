@@ -136,7 +136,7 @@ export const authAPI = {
 export const usersAPI = {
   // Get user profile
   getProfile: (userId: string) => apiInterceptor.getProfile(userId),
-  
+
   // Update user
   updateUser: async (userId: string, updates: UserUpdateRequest) => {
     return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}`, {
@@ -144,21 +144,37 @@ export const usersAPI = {
       body: JSON.stringify(updates),
     });
   },
-  
+
   // Verify user
   verifyUser: async (userId: string) => {
     return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/verify`, {
       method: 'PATCH',
     });
   },
-  
+
   // Unverify user
   unverifyUser: async (userId: string) => {
     return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/unverify`, {
       method: 'PATCH',
     });
   },
-  
+
+  // Upload profile picture
+  uploadProfilePicture: async (userId: string, formData: FormData) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/profile-picture`, {
+      method: 'POST',
+      body: formData,
+      // Don't set Content-Type header - FormData sets it automatically with boundary
+    });
+  },
+
+  // Delete profile picture
+  deleteProfilePicture: async (userId: string) => {
+    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/profile-picture`, {
+      method: 'DELETE',
+    });
+  },
+
   // Check if phone exists
   checkPhone: async (phone: string) => {
     const url = `${API_BASE_URL}/users/check-phone/${phone}`;

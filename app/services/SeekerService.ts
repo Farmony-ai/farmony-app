@@ -1,12 +1,24 @@
 
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
+import { Category, SubCategory } from './CatalogueService';
 
 const BASE_URL = API_BASE_URL;
 
+// Interface for populated listing structure
+export interface PopulatedListingInBooking {
+  _id: string;
+  title: string;
+  categoryId: Category;
+  subCategoryId: SubCategory;
+  category?: string;
+  subcategory?: string;
+  [key: string]: any;
+}
+
 export interface SeekerBooking {
   _id: string;
-  listingId: string;
+  listingId: string | PopulatedListingInBooking;
   listingTitle?: string;
   providerId: string;
   providerName?: string;

@@ -15,7 +15,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import SeekerService, { SeekerBooking } from '../services/SeekerService';
+import SeekerService, { SeekerBooking, PopulatedListingInBooking } from '../services/SeekerService';
 
 // Ultra-minimal color scheme
 const COLORS_MINIMAL = {
@@ -127,28 +127,78 @@ const BookingsScreen = () => {
     });
   };
 
+  // Helper function to get display title and subtitle from booking
+  const getBookingDisplayInfo = (booking: SeekerBooking) => {
+    let title = '';
+    let subtitle = '';
+
+    // Check if listingId is populated with listing data
+    if (typeof booking.listingId === 'object' && booking.listingId !== null) {
+      const populatedListing = booking.listingId as PopulatedListingInBooking;
+
+      // Priority for title: subcategory name > listing title > serviceType > orderType
+      if (populatedListing.subCategoryId?.name) {
+        title = populatedListing.subCategoryId.name;
+      } else if (populatedListing.subcategory) {
+        title = populatedListing.subcategory;
+      } else if (populatedListing.title) {
+        title = populatedListing.title;
+      } else if (booking.serviceType) {
+        title = booking.serviceType;
+      } else if (booking.orderType) {
+        title = booking.orderType;
+      } else {
+        title = 'Service Booking';
+      }
+
+      // Subtitle: category name (if available)
+      if (populatedListing.categoryId?.name) {
+        subtitle = populatedListing.categoryId.name;
+      } else if (populatedListing.category) {
+        subtitle = populatedListing.category;
+      } else if (booking.category) {
+        subtitle = booking.category;
+      }
+    } else {
+      // Fallback for non-populated data
+      if (booking.listingTitle) {
+        title = booking.listingTitle;
+      } else if (booking.serviceType) {
+        title = booking.serviceType;
+      } else if (booking.orderType) {
+        title = booking.orderType;
+      } else {
+        title = 'Service Booking';
+      }
+
+      if (booking.category) {
+        subtitle = booking.category;
+      }
+    }
+
+    return { title, subtitle };
+  };
+
   // Filter bookings based on active tab - FIXED to handle 'canceled' status
   const filteredBookings = bookings.filter(booking => {
     const bookingDate = new Date(booking.serviceStartDate || booking.scheduledDate || booking.createdAt);
     const now = new Date();
-    
+
     // Normalize status to handle both 'canceled' and 'cancelled'
-    const normalizedStatus = booking.status === 'canceled' ? 'cancelled' : booking.status;
-    
+    const normalizedStatus = (booking.status as any) === 'canceled' ? 'cancelled' : booking.status;
+
     if (activeTab === 'upcoming') {
       // Show only pending or accepted bookings with future dates
       // Explicitly exclude cancelled bookings from upcoming
-      return (normalizedStatus === 'pending' || normalizedStatus === 'accepted') && 
-             normalizedStatus !== 'cancelled' && 
-             normalizedStatus !== 'rejected' &&
+      return (normalizedStatus === 'pending' || normalizedStatus === 'accepted') &&
              bookingDate >= now;
     } else {
       // Past tab shows:
       // 1. All completed bookings
       // 2. All cancelled/rejected bookings (regardless of date)
       // 3. Any booking with a past date
-      return normalizedStatus === 'completed' || 
-             normalizedStatus === 'cancelled' || 
+      return normalizedStatus === 'completed' ||
+             normalizedStatus === 'cancelled' ||
              normalizedStatus === 'rejected' ||
              bookingDate < now;
     }
@@ -158,25 +208,33 @@ const BookingsScreen = () => {
     // Map API fields to expected fields
     const bookingDate = booking.scheduledDate || booking.serviceStartDate || booking.createdAt;
     const bookingCost = booking.totalCost ?? booking.totalAmount ?? 0;
-    const displayStatus = booking.status === 'canceled' ? 'cancelled' : booking.status;
-    
+    const displayStatus = (booking.status as any) === 'canceled' ? 'cancelled' : booking.status;
+    const { title, subtitle } = getBookingDisplayInfo(booking);
+
     return (
       <TouchableOpacity
         key={booking._id}
         style={styles.bookingCard}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate('BookingDetails', { bookingId: booking._id })}
+        onPress={() => navigation.navigate('SeekerOrderDetail', { orderId: booking._id })}
       >
         <View style={styles.bookingHeader}>
           <View style={styles.bookingTitleRow}>
-            <Text style={styles.bookingTitle}>
-              {booking.listingTitle || booking.serviceType || booking.orderType || 'Service Booking'}
-            </Text>
+            <View style={styles.titleContainer}>
+              <Text style={styles.bookingTitle}>
+                {title}
+              </Text>
+              {subtitle && (
+                <Text style={styles.bookingSubtitle}>
+                  {subtitle}
+                </Text>
+              )}
+            </View>
             <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(booking.status)}15` }]}>
-              <Ionicons 
-                name={getStatusIcon(booking.status)} 
-                size={12} 
-                color={getStatusColor(booking.status)} 
+              <Ionicons
+                name={getStatusIcon(booking.status)}
+                size={12}
+                color={getStatusColor(booking.status)}
               />
               <Text style={[styles.statusText, { color: getStatusColor(booking.status) }]}>
                 {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
@@ -394,12 +452,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+  titleContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
   bookingTitle: {
     fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
-    flex: 1,
-    marginRight: 12,
+  },
+  bookingSubtitle: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS_MINIMAL.text.secondary,
+    marginTop: 2,
   },
   statusBadge: {
     flexDirection: 'row',

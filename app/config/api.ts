@@ -11,7 +11,7 @@ export const API_CONFIG = {
     // android: 'http:// 192.168.1.101:3000', 
     
     // For iOS Simulator (replace with your actual IP)F
-    ios: 'http://192.168.1.59:3000',
+    ios: 'http://192.168.1.81:3000',
     
     // For Physical Device (replace with your actual IP)
     device: 'http://192.168.1.101:3000', // Replace with your computer's IP

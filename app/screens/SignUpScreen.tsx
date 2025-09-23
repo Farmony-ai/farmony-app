@@ -32,6 +32,8 @@ import { checkPhoneExists } from '../services/api';
 import firebaseSMSService from '../services/firebaseSMS';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
+import ProfilePictureService from '../services/ProfilePictureService';
+import ImagePickerService, { ImagePickerResult } from '../services/ImagePickerService';
 
 const SignUpScreen = () => {
   const navigation = useNavigation();
@@ -59,7 +61,9 @@ const SignUpScreen = () => {
   
   // Profile picture state
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [profileImageData, setProfileImageData] = useState<ImagePickerResult | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -258,24 +262,55 @@ const SignUpScreen = () => {
   };
 
   const handleSelectImage = () => {
-    const options = {
-      mediaType: 'photo' as const,
-      includeBase64: false,
-      maxHeight: 800,
-      maxWidth: 800,
-      quality: 0.8 as const,
-    };
+    ImagePickerService.showImagePickerOptions(
+      () => handleCameraPress(),
+      () => handleGalleryPress(),
+      () => console.log('Image picker cancelled')
+    );
+  };
 
-    launchImageLibrary(options, (response) => {
-      if (response.assets && response.assets[0]) {
-        setProfileImage(response.assets[0].uri || null);
+  const handleCameraPress = () => {
+    ImagePickerService.openCamera(
+      (result: ImagePickerResult) => {
+        const validation = ProfilePictureService.validateImage(result);
+        if (!validation.isValid) {
+          Alert.alert('Invalid Image', validation.error);
+          return;
+        }
+        setProfileImage(result.uri);
+        setProfileImageData(result);
+      },
+      (error) => {
+        if (error.errorCode !== 'USER_CANCELLED') {
+          Alert.alert('Camera Error', error.errorMessage);
+        }
       }
-    });
+    );
+  };
+
+  const handleGalleryPress = () => {
+    ImagePickerService.openGallery(
+      (result: ImagePickerResult) => {
+        const validation = ProfilePictureService.validateImage(result);
+        if (!validation.isValid) {
+          Alert.alert('Invalid Image', validation.error);
+          return;
+        }
+        setProfileImage(result.uri);
+        setProfileImageData(result);
+      },
+      (error) => {
+        if (error.errorCode !== 'USER_CANCELLED') {
+          Alert.alert('Gallery Error', error.errorMessage);
+        }
+      }
+    );
   };
 
   const handleCompleteSignup = async () => {
     setUploadingImage(true);
-    
+    setUploadProgress(0);
+
     try {
       // Register user with all collected data
       const userData = {
@@ -285,15 +320,48 @@ const SignUpScreen = () => {
         role: 'individual' as const,
         isVerified: true, // Already verified OTP
         referralCode: referralCode || undefined,
-        // profileImage will be uploaded separately if selected
       };
-      
+
       const result = await dispatch(registerUser(userData));
-      
+
       if (registerUser.fulfilled.match(result)) {
-        // If profile image was selected, upload it here
-        // TODO: Implement profile image upload API
-        
+        const user = result.payload.user;
+
+        // If profile image was selected, upload it
+        if (profileImageData && user?.id) {
+          try {
+            console.log('[SignUpScreen] Uploading profile picture for user:', user.id);
+
+            const uploadResult = await ProfilePictureService.uploadProfilePicture(
+              user.id,
+              profileImageData,
+              (progress) => {
+                setUploadProgress(progress.percentage);
+              }
+            );
+
+            if (uploadResult.success) {
+              console.log('[SignUpScreen] ✅ Profile picture uploaded successfully');
+              // Could update user state with new profile picture URL here if needed
+            } else {
+              console.error('[SignUpScreen] ❌ Profile picture upload failed:', uploadResult.error);
+              // Don't block registration for profile picture upload failure
+              Alert.alert(
+                'Upload Warning',
+                'Registration successful, but profile picture upload failed. You can update it later in settings.',
+                [{ text: 'OK' }]
+              );
+            }
+          } catch (uploadError) {
+            console.error('[SignUpScreen] Profile picture upload error:', uploadError);
+            Alert.alert(
+              'Upload Warning',
+              'Registration successful, but profile picture upload failed. You can update it later in settings.',
+              [{ text: 'OK' }]
+            );
+          }
+        }
+
         // Navigate to home
         navigation.reset({
           index: 0,
@@ -303,9 +371,11 @@ const SignUpScreen = () => {
         Alert.alert('Registration Failed', 'Please try again');
       }
     } catch (error) {
+      console.error('[SignUpScreen] Registration error:', error);
       Alert.alert('Error', 'Failed to complete registration');
     } finally {
       setUploadingImage(false);
+      setUploadProgress(0);
     }
   };
 
@@ -512,10 +582,11 @@ const SignUpScreen = () => {
         <Text style={styles.subtitle}>This will help others recognize you</Text>
         
         <View style={styles.profileImageSection}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.imagePickerContainer}
             onPress={handleSelectImage}
             activeOpacity={0.8}
+            disabled={uploadingImage}
           >
             {profileImage ? (
               <Image source={{ uri: profileImage }} style={styles.profileImage} />
@@ -524,9 +595,17 @@ const SignUpScreen = () => {
                 <Ionicons name="person-outline" size={scaleSize(60)} color="#999999" />
               </View>
             )}
-            <View style={styles.addImageButton}>
-              <Ionicons name="add" size={scaleSize(20)} color="#FFFFFF" />
-            </View>
+            {!uploadingImage && (
+              <View style={styles.addImageButton}>
+                <Ionicons name="add" size={scaleSize(20)} color="#FFFFFF" />
+              </View>
+            )}
+            {uploadingImage && uploadProgress > 0 && (
+              <View style={styles.uploadProgressContainer}>
+                <View style={[styles.uploadProgressBar, { width: `${uploadProgress}%` }]} />
+                <Text style={styles.uploadProgressText}>{uploadProgress}%</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -779,6 +858,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  uploadProgressContainer: {
+    position: 'absolute',
+    bottom: scaleSize(8),
+    left: scaleSize(8),
+    right: scaleSize(8),
+    height: scaleSize(24),
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: scaleSize(12),
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  uploadProgressBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderRadius: scaleSize(12),
+  },
+  uploadProgressText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: getFontFamily('MEDIUM'),
+    color: '#FFFFFF',
+    textAlign: 'center',
+    zIndex: 1,
   },
   skipButton: {
     alignSelf: 'center',

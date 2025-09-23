@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Image, StatusBar, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Image, StatusBar, Platform, Alert, ActivityIndicator } from 'react-native';
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import Text from '../../components/Text';
 import { SPACING, FONTS, FONT_SIZES } from '../../utils';
@@ -10,6 +10,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import DatePicker from 'react-native-date-picker';
 import { usersAPI } from '../../services/api';
+import ProfilePictureService from '../../services/ProfilePictureService';
+import ImagePickerService, { ImagePickerResult } from '../../services/ImagePickerService';
 
 // Ultra-minimal color scheme
 const COLORS_MINIMAL = {
@@ -89,8 +91,133 @@ const AccountSettingsScreen = () => {
   const [gender, setGender] = useState('');
   const [occupation, setOccupation] = useState('');
   const [bio, setBio] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('https://i.pravatar.cc/150?u=a042581f4e29026704d');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+  const [uploadingProfilePicture, setUploadingProfilePicture] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  // Load user profile data including profile picture
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (user?.id) {
+        try {
+          setIsLoadingProfile(true);
+          const result = await usersAPI.getProfile(user.id);
+
+          if (result.success && result.data) {
+            const profileData = result.data;
+
+            // Update avatar URL if available
+            if (profileData.profilePictureUrl) {
+              setAvatarUrl(profileData.profilePictureUrl);
+            }
+
+            // Set other profile fields if available
+            if (profileData.gender) {
+              setGender(profileData.gender.charAt(0).toUpperCase() + profileData.gender.slice(1));
+            }
+            if (profileData.dateOfBirth) {
+              try {
+                setDob(new Date(profileData.dateOfBirth));
+              } catch (dateError) {
+                console.warn('Invalid date format:', profileData.dateOfBirth);
+              }
+            }
+            // Add more fields as they become available in the backend
+          }
+        } catch (error) {
+          console.error('Failed to load user profile:', error);
+        } finally {
+          setIsLoadingProfile(false);
+        }
+      } else {
+        setIsLoadingProfile(false);
+      }
+    };
+
+    loadUserProfile();
+  }, [user?.id]);
+
+  const handleCameraButtonPress = () => {
+    ImagePickerService.showImagePickerOptions(
+      () => handleCameraPress(),
+      () => handleGalleryPress(),
+      () => console.log('Image picker cancelled')
+    );
+  };
+
+  const handleCameraPress = () => {
+    ImagePickerService.openCamera(
+      (result: ImagePickerResult) => {
+        uploadProfilePicture(result);
+      },
+      (error) => {
+        if (error.errorCode !== 'USER_CANCELLED') {
+          Alert.alert('Camera Error', error.errorMessage);
+        }
+      }
+    );
+  };
+
+  const handleGalleryPress = () => {
+    ImagePickerService.openGallery(
+      (result: ImagePickerResult) => {
+        uploadProfilePicture(result);
+      },
+      (error) => {
+        if (error.errorCode !== 'USER_CANCELLED') {
+          Alert.alert('Gallery Error', error.errorMessage);
+        }
+      }
+    );
+  };
+
+  const uploadProfilePicture = async (imageResult: ImagePickerResult) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'User ID not found');
+      return;
+    }
+
+    // Validate image
+    const validation = ProfilePictureService.validateImage(imageResult);
+    if (!validation.isValid) {
+      Alert.alert('Invalid Image', validation.error);
+      return;
+    }
+
+    setUploadingProfilePicture(true);
+    setUploadProgress(0);
+
+    try {
+      const result = await ProfilePictureService.uploadProfilePicture(
+        user.id,
+        imageResult,
+        (progress) => {
+          setUploadProgress(progress.percentage);
+        }
+      );
+
+      if (result.success && result.data) {
+        setAvatarUrl(result.data.profilePictureUrl);
+        Alert.alert('Success', 'Profile picture updated successfully');
+
+        // Update user state with new profile picture URL
+        dispatch(setUser({
+          ...user,
+          profilePictureUrl: result.data.profilePictureUrl,
+        }));
+      } else {
+        Alert.alert('Upload Failed', result.error || 'Failed to upload profile picture');
+      }
+    } catch (error) {
+      console.error('Profile picture upload error:', error);
+      Alert.alert('Upload Error', 'An unexpected error occurred');
+    } finally {
+      setUploadingProfilePicture(false);
+      setUploadProgress(0);
+    }
+  };
 
   const handleSaveChanges = () => {
     console.log('Profile changes saved (simulated).');
@@ -126,12 +253,41 @@ const AccountSettingsScreen = () => {
       >
         <View style={styles.avatarSection}>
           <View style={styles.avatarContainer}>
-            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            <TouchableOpacity style={styles.cameraButton} activeOpacity={0.8}>
+            {isLoadingProfile ? (
+              <View style={[styles.avatar, styles.avatarLoading]}>
+                <ActivityIndicator size="large" color={COLORS_MINIMAL.accent} />
+              </View>
+            ) : (
+              <>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                    <Ionicons name="person-outline" size={40} color={COLORS_MINIMAL.text.muted} />
+                  </View>
+                )}
+              </>
+            )}
+
+            {uploadingProfilePicture && (
+              <View style={styles.uploadOverlay}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.uploadProgressText}>{uploadProgress}%</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.cameraButton}
+              activeOpacity={0.8}
+              onPress={handleCameraButtonPress}
+              disabled={uploadingProfilePicture || isLoadingProfile}
+            >
               <Ionicons name="camera" size={18} color={COLORS_MINIMAL.background} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.changePhotoText}>Change Photo</Text>
+          <Text style={styles.changePhotoText}>
+            {uploadingProfilePicture ? 'Uploading...' : 'Change Photo'}
+          </Text>
         </View>
 
         <View style={styles.formSection}>
@@ -265,6 +421,32 @@ const styles = StyleSheet.create({
     height: 96,
     borderRadius: 48,
     backgroundColor: COLORS_MINIMAL.surface,
+  },
+  avatarLoading: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS_MINIMAL.surface,
+  },
+  uploadOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadProgressText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: '#FFFFFF',
+    marginTop: 4,
   },
   cameraButton: {
     position: 'absolute',

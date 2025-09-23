@@ -18,6 +18,7 @@ import CategoryBrowserScreen from '../screens/CategoryBrowserScreen';
 import ListingDetailScreen from '../screens/ListingDetailScreen';
 import SearchResultsScreen from '../screens/SearchResultsScreen';
 import OrderDetailScreen from '../screens/OrderDetailScreen';
+import SeekerOrderDetailScreen from '../screens/SeekerOrderDetailScreen';
 import ChatScreen from '../screens/ChatScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { COLORS } from '../utils';
@@ -92,6 +93,7 @@ const RootNavigator = () => {
             <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
             <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
             <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
+            <Stack.Screen name="SeekerOrderDetail" component={SeekerOrderDetailScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="CreateListing" component={CreateListingScreen} />
             <Stack.Screen name="MyListings" component={MyListingsScreen} />

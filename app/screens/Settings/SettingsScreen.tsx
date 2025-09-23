@@ -63,7 +63,12 @@ const SettingsScreen = () => {
     try {
       const response = await usersAPI.getProfile(user.id);
       if (response.success && response.data) {
-        dispatch(setUser(response.data));
+        // Ensure profilePictureUrl is included in the user state
+        dispatch(setUser({
+          ...response.data,
+          id: response.data.id || user.id,
+          profilePictureUrl: response.data.profilePictureUrl || null,
+        }));
       }
     } catch (error) {
       console.error('Failed to fetch user profile:', error);
@@ -90,17 +95,23 @@ const SettingsScreen = () => {
     name: user?.name ?? 'Guest User',
     phone: user?.phone ?? 'No phone number',
     email: user?.email ?? 'No email',
-    avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
+    avatarUrl: user?.profilePictureUrl || null,
     isVerified: user?.isVerified ?? false,
   };
 
   const renderHeader = () => (
-    <TouchableOpacity 
-      style={styles.headerContainer} 
+    <TouchableOpacity
+      style={styles.headerContainer}
       onPress={() => navigation.navigate('AccountSettings')}
       activeOpacity={0.7}
     >
-      <Image source={{ uri: currentUser.avatarUrl }} style={styles.avatar} />
+      {currentUser.avatarUrl ? (
+        <Image source={{ uri: currentUser.avatarUrl }} style={styles.avatar} />
+      ) : (
+        <View style={[styles.avatar, styles.avatarPlaceholder]}>
+          <Ionicons name="person-outline" size={28} color={COLORS_MINIMAL.text.muted} />
+        </View>
+      )}
       <View style={styles.headerTextContainer}>
         <View style={styles.nameRow}>
           <Text style={styles.headerName}>{currentUser.name}</Text>
@@ -225,6 +236,11 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: COLORS_MINIMAL.border,
+  },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS_MINIMAL.surface,
   },
   headerTextContainer: {
     flex: 1,
