@@ -13,7 +13,6 @@ import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { SPACING, FONTS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
@@ -52,17 +51,30 @@ const AddressSelectionScreen = () => {
   );
 
   const fetchAddresses = async () => {
-    if (!user) return;
-    
+    if (!user?.id) {
+      setAddresses([]);
+      setSelectedAddressId(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const userAddresses = await AddressService.getUserAddresses(user?.id);
+      const userAddresses = await AddressService.getUserAddresses(user.id);
       setAddresses(userAddresses);
       
       // Set the default address as selected
       const defaultAddress = userAddresses.find(addr => addr.isDefault);
       if (defaultAddress) {
         setSelectedAddressId(defaultAddress._id);
+        
+        if (Array.isArray(defaultAddress.coordinates) && defaultAddress.coordinates.length === 2) {
+          dispatch(setLocation({
+            latitude: defaultAddress.coordinates[1],
+            longitude: defaultAddress.coordinates[0],
+            city: defaultAddress.district || defaultAddress.state,
+          }));
+        }
       }
     } catch (error) {
       console.error('Error fetching addresses:', error);
@@ -81,11 +93,13 @@ const AddressSelectionScreen = () => {
     setSelectedAddressId(address._id);
     
     // Update Redux store with selected address coordinates
-    dispatch(setLocation({
-      latitude: address.coordinates[1],
-      longitude: address.coordinates[0],
-      city: address.district || address.state,
-    }));
+    if (Array.isArray(address.coordinates) && address.coordinates.length === 2) {
+      dispatch(setLocation({
+        latitude: address.coordinates[1],
+        longitude: address.coordinates[0],
+        city: address.district || address.state,
+      }));
+    }
 
     // Set as default if not already
     if (!address.isDefault) {
@@ -129,8 +143,9 @@ const AddressSelectionScreen = () => {
     );
   };
 
-  const getTagIcon = (tag: string) => {
-    switch (tag) {
+  const getTagIcon = (tag?: string) => {
+    const normalizedTag = tag?.toLowerCase();
+    switch (normalizedTag) {
       case 'home':
         return 'home-outline';
       case 'work':
@@ -140,6 +155,14 @@ const AddressSelectionScreen = () => {
       default:
         return 'location-outline';
     }
+  };
+
+  const getTagLabel = (tag?: string) => {
+    if (!tag || !tag.trim()) {
+      return 'Other';
+    }
+    const normalized = tag.trim();
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
   };
 
   const getDistanceText = (coords: [number, number]) => {
@@ -225,7 +248,7 @@ const AddressSelectionScreen = () => {
                         <View style={styles.addressDetails}>
                           <View style={styles.addressHeaderRow}>
                             <Text style={styles.addressTag}>
-                              {address.tag.charAt(0).toUpperCase() + address.tag.slice(1)}
+                              {getTagLabel(address.tag)}
                             </Text>
                             {selectedAddressId === address._id && (
                               <View style={styles.selectedBadge}>

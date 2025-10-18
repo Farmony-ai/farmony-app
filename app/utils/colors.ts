@@ -1,6 +1,6 @@
 export const COLORS = {
   PRIMARY: {
-    MAIN: '#1A7F5A', // Main green
+    MAIN: '#3C8629', // Main green
     LIGHT: '#D6F5E6', // Card background green
     DARK: '#145C41',
     CONTRAST: '#FFFFFF',

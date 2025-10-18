@@ -19,12 +19,61 @@ import Text from '../components/Text';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../store';
-import CatalogueService from '../services/CatalogueService';
+import CatalogueService, { Category, SubCategory } from '../services/CatalogueService';
 import categoryIcons from '../utils/icons';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+const normalizeText = (value: string) =>
+  value?.toLowerCase().replace(/[^a-z0-9]/g, '') ?? '';
+
+const buildVariants = (value: string) => {
+  const base = normalizeText(value);
+  if (!base) {
+    return [];
+  }
+  const variants = new Set<string>([base]);
+  if (base.endsWith('s')) {
+    variants.add(base.slice(0, -1));
+  }
+  variants.add(base.replace(/s$/g, ''));
+  return Array.from(variants).filter(Boolean);
+};
+
+const subsequenceMatch = (needle: string, haystack: string) => {
+  let idx = 0;
+  for (let i = 0; i < haystack.length && idx < needle.length; i += 1) {
+    if (haystack[i] === needle[idx]) {
+      idx += 1;
+    }
+  }
+  return idx === needle.length;
+};
+
+const fuzzyMatch = (query: string, candidate: string) => {
+  const queryVariants = buildVariants(query);
+  const candidateVariants = buildVariants(candidate);
+
+  if (!queryVariants.length) {
+    return true;
+  }
+
+  for (const q of queryVariants) {
+    for (const c of candidateVariants) {
+      if (!q || !c) {
+        continue;
+      }
+      if (c.includes(q) || q.includes(c)) {
+        return true;
+      }
+      if (subsequenceMatch(q, c)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
 
 // Minimal color palette
 const COLORS_MINIMAL = {
@@ -40,43 +89,51 @@ const COLORS_MINIMAL = {
   divider: '#F1F5F9',
 };
 
-interface Category {
-  _id: string;
-  name: string;
-  description: string;
-  icon: string;
-  // ... other fields
-}
-
-interface SubCategory {
-  _id: string;
-  categoryId: string;
-  name: string;
-  icon?: string;
-  // ... other fields
+interface CategoryHierarchy {
+  category: Category;
+  subCategories: SubCategory[];
 }
 
 const CategoryBrowserScreen = ({ route }: { route: any }) => {
   const navigation = useNavigation<any>();
-  const dispatch = useDispatch();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  const [filteredSubCategories, setFilteredSubCategories] = useState<SubCategory[]>([]);
+  const [selectedSubCategory, setSelectedSubCategory] = useState<SubCategory | null>(null);
   const [subCategoriesLoading, setSubCategoriesLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
-  const { selectedCategoryId } = route.params || {};
+  const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy[]>([]);
+
+  const {
+    selectedCategoryId,
+    initialSearchQuery: initialSearchParam,
+    selectedDate: selectedDateFromHome,
+    prefetchedCategories,
+    prefetchedHierarchy,
+    initialSubCategoryId,
+    preselectCategoryName,
+  } = route.params || {};
+
+  const initialSearchValue =
+    typeof initialSearchParam === 'string' ? initialSearchParam.trim() : '';
+
+  const [searchQuery, setSearchQuery] = useState(initialSearchValue);
+  const [showSearch, setShowSearch] = useState(Boolean(initialSearchValue));
+
+  const hasPrefetchedCategories =
+    Array.isArray(prefetchedCategories) && prefetchedCategories.length > 0;
+  const hasPrefetchedHierarchy =
+    Array.isArray(prefetchedHierarchy) && prefetchedHierarchy.length > 0;
 
   // Get location and date range from Redux
-  const { latitude, longitude, radius } = useSelector((state: RootState) => state.location);
-  const { startDate, endDate } = useSelector((state: RootState) => state.date);
-
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const searchBarAnim = useRef(new Animated.Value(0)).current;
+  const [initialCategoryResolved, setInitialCategoryResolved] = useState(false);
+  const [initialSubCategoryResolved, setInitialSubCategoryResolved] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -87,26 +144,148 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
   }, []);
 
   useEffect(() => {
-    fetchAndSetCategories();
-  }, [selectedCategoryId]);
+    if (hasPrefetchedCategories) {
+      setCategories(prefetchedCategories);
+      setFilteredCategories(prefetchedCategories);
+      setInitialCategoryResolved(false);
+      setInitialSubCategoryResolved(false);
+      setSelectedSubCategory(null);
+    }
+  }, [hasPrefetchedCategories, prefetchedCategories]);
+
+  useEffect(() => {
+    if (hasPrefetchedHierarchy) {
+      setCategoryHierarchy(prefetchedHierarchy);
+    }
+  }, [hasPrefetchedHierarchy, prefetchedHierarchy]);
+
+  useEffect(() => {
+    if (!hasPrefetchedCategories) {
+      fetchAndSetCategories();
+    }
+  }, [hasPrefetchedCategories]);
+
+  useEffect(() => {
+    setInitialCategoryResolved(false);
+    setInitialSubCategoryResolved(false);
+  }, [selectedCategoryId, initialSearchValue]);
 
   useEffect(() => {
     if (selectedCategory) {
-      fetchSubCategories(selectedCategory._id);
+      loadSubCategories(selectedCategory._id);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, categoryHierarchy]);
 
   useEffect(() => {
-    // Filter categories based on search
     if (searchQuery) {
-      const filtered = categories.filter(cat => 
-        cat.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const filtered = categories.filter(cat => {
+        const nameMatches = fuzzyMatch(searchQuery, cat.name);
+        const hierarchyEntry = categoryHierarchy.find(entry => entry.category._id === cat._id);
+        const subMatches = hierarchyEntry?.subCategories?.some(sub =>
+          fuzzyMatch(searchQuery, sub?.name || '')
+        ) ?? false;
+        return nameMatches || subMatches;
+      });
       setFilteredCategories(filtered);
+      if (filtered.length > 0) {
+        const isCurrentSelectedValid = filtered.some(cat => cat._id === selectedCategory?._id);
+        if (!isCurrentSelectedValid) {
+          setSelectedSubCategory(null);
+          setInitialSubCategoryResolved(false);
+          setSelectedCategory(filtered[0]);
+        }
+      }
     } else {
       setFilteredCategories(categories);
     }
-  }, [searchQuery, categories]);
+  }, [searchQuery, categories, categoryHierarchy, selectedCategory]);
+
+  useEffect(() => {
+    if (initialCategoryResolved) {
+      return;
+    }
+    if (!categories.length) {
+      return;
+    }
+
+    let initialCategory: Category | null = null;
+
+    if (selectedCategoryId) {
+      initialCategory = categories.find(cat => cat._id === selectedCategoryId) || null;
+    }
+
+    if (!initialCategory && (initialSearchValue || preselectCategoryName)) {
+      const searchFallback = initialSearchValue || preselectCategoryName;
+      const hierarchyMatch = categoryHierarchy.find(entry => {
+        const categoryName = entry?.category?.name || '';
+        if (fuzzyMatch(searchFallback, categoryName)) {
+          return true;
+        }
+        if (Array.isArray(entry?.subCategories)) {
+          return entry.subCategories.some(sub => fuzzyMatch(searchFallback, sub?.name || ''));
+        }
+        return false;
+      });
+
+      if (hierarchyMatch) {
+        const matchedCategoryId = hierarchyMatch?.category?._id;
+        initialCategory =
+          categories.find(cat => cat._id === matchedCategoryId) ||
+          hierarchyMatch?.category ||
+          null;
+      }
+    }
+
+    if (!initialCategory) {
+      initialCategory = categories[0];
+    }
+
+    if (initialCategory) {
+      if (!selectedCategory || selectedCategory._id !== initialCategory._id) {
+        setSelectedSubCategory(null);
+        setInitialSubCategoryResolved(false);
+        setSelectedCategory(initialCategory);
+      }
+      setInitialCategoryResolved(true);
+    }
+  }, [
+    categories,
+    categoryHierarchy,
+    selectedCategoryId,
+    initialSearchValue,
+    initialCategoryResolved,
+    selectedCategory,
+    preselectCategoryName,
+  ]);
+
+  useEffect(() => {
+    if (searchQuery) {
+      setFilteredSubCategories(
+        subCategories.filter(sub => fuzzyMatch(searchQuery, sub?.name || ''))
+      );
+    } else {
+      setFilteredSubCategories(subCategories);
+    }
+  }, [searchQuery, subCategories]);
+
+  useEffect(() => {
+    if (initialSubCategoryResolved) {
+      return;
+    }
+    if (!initialSubCategoryId) {
+      setInitialSubCategoryResolved(true);
+      return;
+    }
+    if (!subCategories.length) {
+      return;
+    }
+
+    const matchedSub = subCategories.find(sub => sub._id === initialSubCategoryId);
+    if (matchedSub) {
+      setSelectedSubCategory(matchedSub);
+    }
+    setInitialSubCategoryResolved(true);
+  }, [initialSubCategoryId, subCategories, initialSubCategoryResolved]);
 
   const toggleSearch = () => {
     const newValue = !showSearch;
@@ -127,16 +306,24 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
     try {
       setLoading(true);
       const fetchedCategories = await CatalogueService.getCategories();
-      setCategories(fetchedCategories);
-      setFilteredCategories(fetchedCategories);
 
-      if (fetchedCategories.length > 0) {
-        if (selectedCategoryId) {
-          const categoryToSelect = fetchedCategories.find(cat => cat._id === selectedCategoryId);
-          setSelectedCategory(categoryToSelect || fetchedCategories[0]);
-        } else {
-          setSelectedCategory(fetchedCategories[0]);
-        }
+      let fetchedHierarchy: CategoryHierarchy[] = [];
+      try {
+        fetchedHierarchy = await CatalogueService.getCategoryHierarchy();
+      } catch (hierarchyError) {
+        console.warn('Failed to fetch category hierarchy, proceeding with categories only.', hierarchyError);
+      }
+
+      setCategories(fetchedCategories);
+      setCategoryHierarchy(fetchedHierarchy);
+      setFilteredCategories(fetchedCategories);
+      setInitialCategoryResolved(false);
+      setInitialSubCategoryResolved(false);
+
+      if (fetchedCategories.length === 0) {
+        setSelectedCategory(null);
+        setSubCategories([]);
+        setFilteredSubCategories([]);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -146,7 +333,16 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
     }
   };
 
-  const fetchSubCategories = async (categoryId: string) => {
+  const loadSubCategories = async (categoryId: string) => {
+    const hierarchyEntry = categoryHierarchy.find(
+      entry => entry?.category?._id === categoryId
+    );
+
+    if (hierarchyEntry && Array.isArray(hierarchyEntry.subCategories)) {
+      setSubCategories(hierarchyEntry.subCategories);
+      return;
+    }
+
     try {
       setSubCategoriesLoading(true);
       const fetchedSubCategories = await CatalogueService.getSubCategories(categoryId);
@@ -167,17 +363,20 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
 
   const handleCategoryPress = (category: Category) => {
     setSelectedCategory(category);
+    setSelectedSubCategory(null);
+    setInitialSubCategoryResolved(false);
   };
 
   const handleSubCategoryPress = (subCategory: SubCategory) => {
-    // Navigate to search results with subcategory name as search query
-    navigation.navigate('SearchResults', {
-      searchQuery: subCategory.name.toLowerCase(),
-      categoryId: selectedCategory?._id,
-      dateRange: { startDate, endDate },
-      latitude: latitude,
-      longitude: longitude,
-      radius: radius,
+    setSelectedSubCategory(subCategory);
+    navigation.navigate('CreateServiceRequest', {
+      preselectedCategoryId: selectedCategory?._id,
+      preselectedCategoryName: selectedCategory?.name,
+      preselectedSubCategoryId: subCategory._id,
+      preselectedSubCategoryName: subCategory.name,
+      requestDate: selectedDateFromHome || null,
+      prefetchedCategories: categories,
+      prefetchedHierarchy: categoryHierarchy,
     });
   };
 
@@ -219,9 +418,14 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
   };
 
   const renderSubCategoryItem = ({ item }: { item: SubCategory }) => {
+    const isSelected = selectedSubCategory?._id === item._id;
+
     return (
       <TouchableOpacity
-        style={styles.subCategoryTile}
+        style={[
+          styles.subCategoryTile,
+          isSelected && styles.subCategoryTileActive,
+        ]}
         onPress={() => handleSubCategoryPress(item)}
         activeOpacity={0.7}
       >
@@ -231,11 +435,22 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
             style={styles.subCategoryIcon}
           />
         </View>
-        <Text style={styles.subCategoryText} numberOfLines={2}>
+        <Text
+          style={[
+            styles.subCategoryText,
+            isSelected && styles.subCategoryTextActive,
+          ]}
+          numberOfLines={2}
+        >
           {item.name}
         </Text>
-        <Text style={styles.subCategorySubtext}>
-          Tap to search
+        <Text
+          style={[
+            styles.subCategorySubtext,
+            isSelected && styles.subCategorySubtextActive,
+          ]}
+        >
+          Tap to continue
         </Text>
       </TouchableOpacity>
     );
@@ -244,8 +459,12 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="cube-outline" size={48} color={COLORS_MINIMAL.text.muted} />
-      <Text style={styles.emptyTitle}>No items found</Text>
-      <Text style={styles.emptyText}>Select a category to see options</Text>
+      <Text style={styles.emptyTitle}>
+        {searchQuery ? 'No matches found' : 'No items found'}
+      </Text>
+      <Text style={styles.emptyText}>
+        {searchQuery ? 'Try a different category keyword' : 'Select a category to see options'}
+      </Text>
     </View>
   );
 
@@ -327,9 +546,9 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
               <View style={styles.subCategoryLoadingContainer}>
                 <ActivityIndicator size="large" color={COLORS_MINIMAL.accent} />
               </View>
-            ) : subCategories.length > 0 ? (
+            ) : filteredSubCategories.length > 0 ? (
               <FlatList
-                data={subCategories}
+                data={filteredSubCategories}
                 renderItem={renderSubCategoryItem}
                 keyExtractor={(item) => item._id}
                 numColumns={2}
@@ -479,6 +698,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     width: (screenWidth - (screenWidth * 0.28) - 36) / 2,
   },
+  subCategoryTileActive: {
+    borderWidth: 1,
+    borderColor: COLORS_MINIMAL.accent,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+  },
   subCategoryIconContainer: {
     width: 56,
     height: 56,
@@ -500,11 +724,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 4,
   },
+  subCategoryTextActive: {
+    color: COLORS_MINIMAL.accent,
+  },
   subCategorySubtext: {
     fontSize: 10,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
+  },
+  subCategorySubtextActive: {
+    color: COLORS_MINIMAL.accent,
   },
   subCategoryLoadingContainer: {
     flex: 1,

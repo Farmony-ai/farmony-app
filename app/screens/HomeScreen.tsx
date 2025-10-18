@@ -21,7 +21,7 @@ import { FONTS, typography, spacing, scaleFontSize, scaleSize } from '../utils/f
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import LocationService from '../services/locationService';
-import CatalogueService, { Category } from '../services/CatalogueService';
+import CatalogueService, { Category, SubCategory } from '../services/CatalogueService';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { setLocation } from '../store/slices/locationSlice';
@@ -29,7 +29,6 @@ import { setDateRange } from '../store/slices/dateRangeSlice';
 import AddressService, { Address } from '../services/AddressService';
 import DateRangeCalendar from '../components/DateRangeCalendar';
 import ClimateService, { WeatherData } from '../services/ClimateService';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -58,10 +57,17 @@ const sprayerIcon = require('../assets/Icons/Categories/sprayer.png');
 const pumpIcon = require('../assets/Icons/Categories/pump.png');
 const mechanicalIcon = require('../assets/mechanical.png');
 
+type CategoryHierarchyEntry = {
+  category: Category;
+  subCategories?: SubCategory[];
+};
+
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const [searchText, setSearchText] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchyEntry[]>([]);
+  const [catalogueLoaded, setCatalogueLoaded] = useState(false);
   const [currentAddress, setCurrentAddress] = useState<Address | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -75,17 +81,6 @@ export default function HomeScreen() {
   const { latitude, longitude, city } = useSelector((state: RootState) => state.location);
   const { startDate, endDate } = useSelector((state: RootState) => state.date);
 
-  const [mapRegion, setMapRegion] = useState({
-    latitude: latitude || 17.385044,  // Default coordinates (Hyderabad)
-    longitude: longitude || 78.486671,
-    latitudeDelta: 0.005,
-    longitudeDelta: 0.005,
-  });
-
-  // Add a ref for the MapView
-  const mapRef = useRef<MapView>(null);
-
-
   // Popular services data - updated to match exact mockup
   const popularServices = [
     { id: 'tractor', name: 'Tractor', subtitle: 'Rental', icon: tractorIcon },
@@ -98,7 +93,8 @@ export default function HomeScreen() {
     { id: 'view-more', name: 'View More', subtitle: '', icon: null, isViewMore: true },
   ];
 
-  // Mock data for "Book again" section
+  // TODO: Re-enable Book Again mock data once the API integration is ready.
+  /*
   const previousBookings = [
     {
       id: '1',
@@ -119,6 +115,7 @@ export default function HomeScreen() {
       icon: tractorIcon
     }
   ];
+  */
 
   // Initialize selectedDate from Redux if available
   useEffect(() => {
@@ -169,35 +166,29 @@ export default function HomeScreen() {
     fetchLocation();
   }, [dispatch]);
 
-  useEffect(() => {
-    if (latitude && longitude) {
-      const newRegion = {
-        latitude,
-        longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      };
-      setMapRegion(newRegion);
-      
-      // Animate to the new location
-      if (mapRef.current) {
-        mapRef.current.animateToRegion(newRegion, 500); // 500ms animation
-      }
-    }
-  }, [latitude, longitude]);
-
   // Fetch categories
-  const fetchCategories = async () => {
+  const fetchCatalogueData = async () => {
     try {
       const fetchedCategories = await CatalogueService.getCategories();
+      let fetchedHierarchy: CategoryHierarchyEntry[] = [];
+
+      try {
+        fetchedHierarchy = await CatalogueService.getCategoryHierarchy();
+      } catch (hierarchyError) {
+        console.warn('Failed to fetch category hierarchy, proceeding with categories only.', hierarchyError);
+      }
+
       setCategories(fetchedCategories);
+      setCategoryHierarchy(fetchedHierarchy);
+      setCatalogueLoaded(fetchedCategories.length > 0);
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      console.error('Error fetching categories or hierarchy:', error);
+      setCatalogueLoaded(false);
     }
   };
 
   useEffect(() => {
-    fetchCategories();
+    fetchCatalogueData();
   }, []);
 
   // Fetch default address
@@ -239,7 +230,7 @@ export default function HomeScreen() {
     setRefreshing(true);
     try {
       await Promise.all([
-        fetchCategories(),
+        fetchCatalogueData(),
         fetchWeatherData(),
         fetchDefaultAddress()
       ]);
@@ -257,19 +248,91 @@ export default function HomeScreen() {
     return city || 'Add location';
   };
 
-  const handleServicePress = (serviceName: string) => {
-    navigation.navigate('SearchResults', {
-      searchQuery: serviceName.toLowerCase(),
-      dateRange: { startDate: selectedDate.toISOString(), endDate: selectedDate.toISOString() },
-    });
+  const findCatalogueMatch = (query: string) => {
+    if (!query || !Array.isArray(categoryHierarchy) || categoryHierarchy.length === 0) {
+      return null;
+    }
+
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    let categoryFallback: { categoryId: string | null; subCategoryId: string | null } | null = null;
+
+    for (const entry of categoryHierarchy) {
+      if (!entry) continue;
+
+      const categoryName = (entry.category?.name || '').toLowerCase();
+      if (Array.isArray(entry.subCategories)) {
+        const matchedSubCategory = entry.subCategories.find(sub => {
+          const subName = (sub?.name || '').toLowerCase();
+          return subName.includes(normalized);
+        });
+
+        if (matchedSubCategory) {
+          return {
+            categoryId: entry.category?._id || null,
+            subCategoryId: matchedSubCategory._id || null,
+          };
+        }
+      }
+
+      if (!categoryFallback && categoryName.includes(normalized)) {
+        categoryFallback = {
+          categoryId: entry.category?._id || null,
+          subCategoryId: null,
+        };
+      }
+    }
+
+    return categoryFallback;
   };
 
-  const handleBookAgain = (booking: any) => {
-    navigation.navigate('SearchResults', {
-      searchQuery: booking.service.toLowerCase(),
-      dateRange: { startDate: selectedDate.toISOString(), endDate: selectedDate.toISOString() },
-    });
+  const buildCatalogueParams = (overrides: Record<string, any> = {}) => {
+    const params: Record<string, any> = {
+      selectedDate: selectedDate.toISOString(),
+      ...overrides,
+    };
+
+    if (catalogueLoaded && categories.length > 0) {
+      params.prefetchedCategories = categories;
+    }
+    if (catalogueLoaded && categoryHierarchy.length > 0) {
+      params.prefetchedHierarchy = categoryHierarchy;
+    }
+
+    return params;
   };
+
+  const handleServicePress = (serviceName: string) => {
+    const match = findCatalogueMatch(serviceName);
+
+    navigation.navigate('CategoryBrowser', buildCatalogueParams({
+      initialSearchQuery: serviceName,
+      ...(match?.categoryId ? { selectedCategoryId: match.categoryId } : {}),
+      ...(match?.subCategoryId ? { initialSubCategoryId: match.subCategoryId } : {}),
+      ...(match?.categoryId ? { preselectCategoryName: serviceName } : {}),
+    }));
+  };
+
+  const handleSearchSubmit = () => {
+    const query = searchText.trim();
+    const match = findCatalogueMatch(query);
+
+    navigation.navigate('CategoryBrowser', buildCatalogueParams({
+      initialSearchQuery: query,
+      ...(match?.categoryId ? { selectedCategoryId: match.categoryId } : {}),
+      ...(match?.subCategoryId ? { initialSubCategoryId: match.subCategoryId } : {}),
+    }));
+  };
+
+  // const handleBookAgain = (booking: any) => {
+  //   navigation.navigate('SearchResults', {
+  //     searchQuery: booking.service.toLowerCase(),
+  //     dateRange: { startDate: selectedDate.toISOString(), endDate: selectedDate.toISOString() },
+  //   });
+  // };
 
   const renderService = ({ item }: { item: any }) => {
     // Special rendering for View More card
@@ -277,7 +340,7 @@ export default function HomeScreen() {
       return (
         <TouchableOpacity 
           style={styles.serviceCard}
-          onPress={() => navigation.navigate('CategoryBrowser')}
+          onPress={() => navigation.navigate('CategoryBrowser', buildCatalogueParams())}
           activeOpacity={0.7}
         >
           <View style={styles.serviceCardContainer}>
@@ -367,17 +430,27 @@ export default function HomeScreen() {
         }
       >
         {/* Search Bar */}
-        <TouchableOpacity 
-          style={styles.searchBar}
-          onPress={() => navigation.navigate('SearchResults', {
-            searchQuery: searchText,
-            dateRange: { startDate: selectedDate.toISOString(), endDate: selectedDate.toISOString() },
-          })}
-          activeOpacity={0.9}
-        >
+        <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={scaleSize(20)} color={COLORS_NEW.text.muted} />
-          <Text style={styles.searchPlaceholder}>Search For Services</Text>
-        </TouchableOpacity>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search categories or subcategories"
+            placeholderTextColor={COLORS_NEW.text.muted}
+            value={searchText}
+            onChangeText={setSearchText}
+            returnKeyType="search"
+            onSubmitEditing={handleSearchSubmit}
+            autoCorrect={false}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')} activeOpacity={0.7}>
+              <Ionicons name="close-circle" size={scaleSize(18)} color={COLORS_NEW.text.muted} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={handleSearchSubmit} activeOpacity={0.7}>
+            <Ionicons name="arrow-forward" size={scaleSize(18)} color={COLORS_NEW.text.primary} />
+          </TouchableOpacity>
+        </View>
 
         {/* Date Selection */}
         <View style={styles.dateSection}>
@@ -447,45 +520,8 @@ export default function HomeScreen() {
           />
         </View>
 
-         {/* Map View */}
-        <View style={styles.mapSection}>
-          <TouchableOpacity 
-            style={styles.mapContainer} 
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('MapView', {
-              latitude: latitude ,
-              longitude: longitude ,
-            })}
-          >
-            <MapView
-              ref={mapRef}
-              style={styles.map}
-              provider={PROVIDER_GOOGLE}
-              region={mapRegion}  // Changed from initialRegion to region
-              scrollEnabled={false}
-              zoomEnabled={false}
-              rotateEnabled={false}
-              pitchEnabled={false}
-            >
-              {latitude && longitude && (
-                <Marker
-                  coordinate={{ latitude, longitude }}
-                  title="Your Location"
-                />
-              )}
-            </MapView>
-            {/* Grey overlay */}
-            <View style={styles.mapGreyOverlay} />
-            {/* Centered View map button */}
-            <View style={styles.mapCenterOverlay}>
-              <View style={styles.mapTextContainer}>
-                <Text style={styles.mapText}>View map</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Book Again Section */}
+        {/* Book Again Section - temporarily removed until API integration */}
+        {/*
         <View style={styles.bookAgainSection}>
           <Text style={styles.sectionTitle}>Book again</Text>
           {previousBookings.map((booking) => (
@@ -508,27 +544,43 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        */}
 
-        {/* Urgent Help CTA */}
+        {/* Service Request CTA */}
         <View style={styles.ctaContainer}>
           <View style={styles.ctaCard}>
             <View style={styles.ctaContent}>
-              <Text style={styles.ctaTitle}>Need Urgent Help ?</Text>
+              <Text style={styles.ctaTitle}>Need a Service ?</Text>
               <Text style={styles.ctaSubtext}>
-                Request a custom service from{'\n'}one of our provider
+                Post your requirements and let{'\n'}providers come to you
               </Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.ctaButton}
-              onPress={() => navigation.navigate('SearchResults', { 
-                urgent: true,
-                dateRange: { startDate: selectedDate.toISOString(), endDate: selectedDate.toISOString() },
-              })}
+              onPress={() => navigation.navigate('CreateServiceRequest')}
               activeOpacity={0.8}
             >
-              <Text style={styles.ctaButtonText}>Request now</Text>
+              <Text style={styles.ctaButtonText}>Post Request</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* My Requests Quick Access */}
+        <View style={styles.ctaContainer}>
+          <TouchableOpacity
+            style={styles.quickAccessCard}
+            onPress={() => navigation.navigate('MyServiceRequests')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.quickAccessContent}>
+              <Ionicons name="document-text-outline" size={scaleSize(24)} color={COLORS_NEW.accent} />
+              <View style={styles.quickAccessTextContainer}>
+                <Text style={styles.quickAccessTitle}>My Service Requests</Text>
+                <Text style={styles.quickAccessSubtext}>View and manage your posted requests</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={scaleSize(20)} color={COLORS_NEW.text.muted} />
+          </TouchableOpacity>
         </View>
 
         <View style={{ height: scaleSize(100) }} />
@@ -612,16 +664,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_NEW.surface,
     borderRadius: scaleSize(12),
     paddingHorizontal: spacing.md,
-    paddingVertical: scaleSize(14),
+    paddingVertical: scaleSize(10),
     marginHorizontal: spacing.md,
     marginTop: spacing.sm,
     marginBottom: spacing.sm,
+    gap: scaleSize(8),
   },
-  searchPlaceholder: {
-    ...typography.searchPlaceholder,
+  searchInput: {
     flex: 1,
-    marginLeft: scaleSize(10),
-    color: COLORS_NEW.text.muted,
+    ...typography.searchPlaceholder,
+    color: COLORS_NEW.text.primary,
   },
   dateSection: {
     paddingHorizontal: spacing.md,
@@ -735,33 +787,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: scaleSize(20),
   },
-  mapSection: {
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  mapContainer: {
-    height: scaleSize(150),
-    borderRadius: scaleSize(12),
-    overflow: 'hidden',
-    backgroundColor: COLORS_NEW.surface,
-  },
-  map: {
-    flex: 1,
-  },
-  mapOverlay: {
-    position: 'absolute',
-    bottom: scaleSize(12),
-    alignSelf: 'center',
-    backgroundColor: COLORS_NEW.background,
-    paddingHorizontal: scaleSize(20),
-    paddingVertical: scaleSize(8),
-    borderRadius: scaleSize(20),
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
   bookAgainSection: {
     paddingHorizontal: spacing.md,
     marginBottom: spacing.lg,
@@ -872,36 +897,33 @@ const styles = StyleSheet.create({
     ...typography.modalTitle,
     color: COLORS_NEW.text.primary,
   },
-   mapGreyOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)', // Semi-transparent grey overlay
-  },
-  mapCenterOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mapTextContainer: {
+  quickAccessCard: {
     backgroundColor: COLORS_NEW.background,
-    paddingHorizontal: scaleSize(24),
-    paddingVertical: scaleSize(10),
-    borderRadius: scaleSize(20),
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    borderRadius: scaleSize(12),
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS_NEW.border,
   },
-  mapText: {
+  quickAccessContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  quickAccessTextContainer: {
+    marginLeft: scaleSize(12),
+    flex: 1,
+  },
+  quickAccessTitle: {
     ...typography.ctaButtonText,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_NEW.text.primary,
+    marginBottom: scaleSize(2),
+  },
+  quickAccessSubtext: {
+    ...typography.serviceName,
+    color: COLORS_NEW.text.secondary,
   },
 });

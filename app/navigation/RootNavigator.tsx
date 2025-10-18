@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { checkAuth } from '../store/slices/authSlice';
+import useServiceRequestSocket from '../hooks/useServiceRequestSocket';
 
 // Screens
 import SplashScreen from '../screens/SplashScreen';
@@ -29,6 +30,11 @@ import AddressSelectionScreen from '../screens/AddressSelectionScreen';
 import AddAddressScreen from '../screens/AddAddressScreen';
 import PaymentSelectionScreen from '../screens/PaymentSelectionScreen';
 import SettingsScreen from '../screens/Settings/SettingsScreen';
+// Service Request Screens
+import CreateServiceRequestScreen from '../screens/CreateServiceRequestScreen';
+import MyServiceRequestsScreen from '../screens/MyServiceRequestsScreen';
+import AvailableRequestsScreen from '../screens/AvailableRequestsScreen';
+import ServiceRequestDetailsScreen from '../screens/ServiceRequestDetailsScreen';
 import AccountSettingsScreen from '../screens/Settings/AccountSettingsScreen';
 import PersonalizationScreen from '../screens/Settings/PersonalizationScreen';
 import PaymentSettingsScreen from '../screens/Settings/PaymentSettingsScreen';
@@ -43,6 +49,9 @@ const RootNavigator = () => {
   const dispatch: AppDispatch = useDispatch();
   const [showSplash, setShowSplash] = useState(true);
   const [hasSeenInfo, setHasSeenInfo] = useState<boolean | null>(null);
+
+  // Initialize socket handler for service requests
+  useServiceRequestSocket();
 
   useEffect(() => {
     // Check auth and info screen status while splash is showing
@@ -107,6 +116,11 @@ const RootNavigator = () => {
             <Stack.Screen name="PaymentSettings" component={PaymentSettingsScreen} />
             <Stack.Screen name="Help" component={HelpScreen} />
             <Stack.Screen name="Legal" component={LegalScreen} />
+            {/* Service Request Screens */}
+            <Stack.Screen name="CreateServiceRequest" component={CreateServiceRequestScreen} />
+            <Stack.Screen name="MyServiceRequests" component={MyServiceRequestsScreen} />
+            <Stack.Screen name="AvailableRequests" component={AvailableRequestsScreen} />
+            <Stack.Screen name="ServiceRequestDetails" component={ServiceRequestDetailsScreen} />
           </>
         ) : (
           <>
