@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS } from '../utils';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, fuzzyMatch } from '../utils';
 import { FONTS, typography, spacing, scaleFontSize, scaleSize } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -204,9 +204,20 @@ export default function HomeScreen() {
             longitude: defaultAddr.coordinates[0],
             city: defaultAddr.district || defaultAddr.state,
           }));
+        } else if (addresses.length > 0) {
+          // If no default address, use the first one
+          const firstAddr = addresses[0];
+          setCurrentAddress(firstAddr);
+          dispatch(setLocation({
+            latitude: firstAddr.coordinates[1],
+            longitude: firstAddr.coordinates[0],
+            city: firstAddr.district || firstAddr.state,
+          }));
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching default address:', error);
+        // Don't show alert here as it might be annoying on home screen
+        // Just log the error and fall back to location-based detection
       }
     }
   };
@@ -253,40 +264,46 @@ export default function HomeScreen() {
       return null;
     }
 
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
       return null;
     }
 
-    let categoryFallback: { categoryId: string | null; subCategoryId: string | null } | null = null;
+    let bestMatch: { categoryId: string | null; subCategoryId: string | null; score: number } | null = null;
 
     for (const entry of categoryHierarchy) {
       if (!entry) continue;
 
-      const categoryName = (entry.category?.name || '').toLowerCase();
-      if (Array.isArray(entry.subCategories)) {
-        const matchedSubCategory = entry.subCategories.find(sub => {
-          const subName = (sub?.name || '').toLowerCase();
-          return subName.includes(normalized);
-        });
+      const categoryName = entry.category?.name || '';
 
-        if (matchedSubCategory) {
-          return {
-            categoryId: entry.category?._id || null,
-            subCategoryId: matchedSubCategory._id || null,
-          };
+      // Check subcategories first (higher priority)
+      if (Array.isArray(entry.subCategories)) {
+        for (const sub of entry.subCategories) {
+          const subName = sub?.name || '';
+          if (fuzzyMatch(trimmedQuery, subName)) {
+            const match = {
+              categoryId: entry.category?._id || null,
+              subCategoryId: sub._id || null,
+              score: 1.0, // Subcategory matches have higher priority
+            };
+
+            // Return immediately for subcategory match
+            return match;
+          }
         }
       }
 
-      if (!categoryFallback && categoryName.includes(normalized)) {
-        categoryFallback = {
+      // Check category name if no subcategory matched
+      if (!bestMatch && fuzzyMatch(trimmedQuery, categoryName)) {
+        bestMatch = {
           categoryId: entry.category?._id || null,
           subCategoryId: null,
+          score: 0.5, // Category matches have lower priority
         };
       }
     }
 
-    return categoryFallback;
+    return bestMatch ? { categoryId: bestMatch.categoryId, subCategoryId: bestMatch.subCategoryId } : null;
   };
 
   const buildCatalogueParams = (overrides: Record<string, any> = {}) => {

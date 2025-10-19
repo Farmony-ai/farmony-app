@@ -1,5 +1,5 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import apiInterceptor from './apiInterceptor';
 import { API_BASE_URL, GOOGLE_MAPS_API_KEY } from '../config/api';
 
 export interface Address {
@@ -47,99 +47,109 @@ export interface UpdateAddressDto {
 }
 
 class AddressService {
-  private async getAuthHeaders() {
-    const token = await AsyncStorage.getItem('access_token');
-    if (!token) throw new Error('Authentication token not found');
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-
   async createAddress(dto: CreateAddressDto): Promise<Address> {
     try {
-      const headers = await this.getAuthHeaders();
-      const response = await axios.post(
-        `${API_BASE_URL}/addresses`,
-        dto,
-        { headers }
-      );
-      return response.data;
+      const result = await apiInterceptor.makeAuthenticatedRequest<Address>('/addresses', {
+        method: 'POST',
+        body: JSON.stringify(dto),
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to create address');
+      }
+
+      return result.data;
     } catch (error: any) {
       console.error('Error creating address:', error);
-      throw error.response?.data || error;
+      throw error;
     }
   }
 
   async getUserAddresses(userId: string): Promise<Address[]> {
     try {
-      const headers = await this.getAuthHeaders();
-      const response = await axios.get(
-        `${API_BASE_URL}/addresses/user/${userId}`,
-        { headers }
-      );
-      return response.data;
+      const result = await apiInterceptor.makeAuthenticatedRequest<Address[]>(`/addresses/user/${userId}`, {
+        method: 'GET',
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to fetch addresses');
+      }
+
+      return result.data;
     } catch (error: any) {
       console.error('Error fetching user addresses:', error);
-      throw error.response?.data || error;
+      throw error;
     }
   }
 
   async getAddressById(id: string): Promise<Address> {
     try {
-      const headers = await this.getAuthHeaders();
-      const response = await axios.get(
-        `${API_BASE_URL}/addresses/${id}`,
-        { headers }
-      );
-      return response.data;
+      const result = await apiInterceptor.makeAuthenticatedRequest<Address>(`/addresses/${id}`, {
+        method: 'GET',
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to fetch address');
+      }
+
+      return result.data;
     } catch (error: any) {
       console.error('Error fetching address:', error);
-      throw error.response?.data || error;
+      throw error;
     }
   }
 
   async updateAddress(id: string, dto: UpdateAddressDto): Promise<Address> {
     try {
-      const headers = await this.getAuthHeaders();
-      const response = await axios.patch(
-        `${API_BASE_URL}/addresses/${id}`,
-        dto,
-        { headers }
-      );
-      return response.data;
+      const result = await apiInterceptor.makeAuthenticatedRequest<Address>(`/addresses/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(dto),
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to update address');
+      }
+
+      return result.data;
     } catch (error: any) {
       console.error('Error updating address:', error);
-      throw error.response?.data || error;
+      throw error;
     }
   }
 
   async deleteAddress(id: string): Promise<Address> {
     try {
-      const headers = await this.getAuthHeaders();
-      const response = await axios.delete(
-        `${API_BASE_URL}/addresses/${id}`,
-        { headers }
-      );
-      return response.data;
+      const result = await apiInterceptor.makeAuthenticatedRequest<Address>(`/addresses/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to delete address');
+      }
+
+      return result.data;
     } catch (error: any) {
       console.error('Error deleting address:', error);
-      throw error.response?.data || error;
+      throw error;
     }
   }
 
   async setDefaultAddress(id: string): Promise<Address> {
     try {
-      const headers = await this.getAuthHeaders();
-      const response = await axios.patch(
-        `${API_BASE_URL}/addresses/${id}/set-default`,
-        {},
-        { headers }
-      );
-      return response.data;
+      const result = await apiInterceptor.makeAuthenticatedRequest<Address>(`/addresses/${id}/set-default`, {
+        method: 'PATCH',
+        body: JSON.stringify({}),
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to set default address');
+      }
+
+      console.log('✅ Default address set successfully:', result.data);
+      return result.data;
     } catch (error: any) {
       console.error('Error setting default address:', error);
-      throw error.response?.data || error;
+      throw error;
     }
   }
 

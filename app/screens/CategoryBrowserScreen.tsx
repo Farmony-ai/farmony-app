@@ -16,64 +16,14 @@ import {
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } from '../utils';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS, fuzzyMatch } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import CatalogueService, { Category, SubCategory } from '../services/CatalogueService';
 import categoryIcons from '../utils/icons';
+import HighlightedText from '../components/HighlightedText';
 
 const { width: screenWidth } = Dimensions.get('window');
-
-const normalizeText = (value: string) =>
-  value?.toLowerCase().replace(/[^a-z0-9]/g, '') ?? '';
-
-const buildVariants = (value: string) => {
-  const base = normalizeText(value);
-  if (!base) {
-    return [];
-  }
-  const variants = new Set<string>([base]);
-  if (base.endsWith('s')) {
-    variants.add(base.slice(0, -1));
-  }
-  variants.add(base.replace(/s$/g, ''));
-  return Array.from(variants).filter(Boolean);
-};
-
-const subsequenceMatch = (needle: string, haystack: string) => {
-  let idx = 0;
-  for (let i = 0; i < haystack.length && idx < needle.length; i += 1) {
-    if (haystack[i] === needle[idx]) {
-      idx += 1;
-    }
-  }
-  return idx === needle.length;
-};
-
-const fuzzyMatch = (query: string, candidate: string) => {
-  const queryVariants = buildVariants(query);
-  const candidateVariants = buildVariants(candidate);
-
-  if (!queryVariants.length) {
-    return true;
-  }
-
-  for (const q of queryVariants) {
-    for (const c of candidateVariants) {
-      if (!q || !c) {
-        continue;
-      }
-      if (c.includes(q) || q.includes(c)) {
-        return true;
-      }
-      if (subsequenceMatch(q, c)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-};
 
 // Minimal color palette
 const COLORS_MINIMAL = {
@@ -106,6 +56,8 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
   const [selectedSubCategory, setSelectedSubCategory] = useState<SubCategory | null>(null);
   const [subCategoriesLoading, setSubCategoriesLoading] = useState(false);
   const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy[]>([]);
+  const [categoryMatches, setCategoryMatches] = useState<Map<string, boolean>>(new Map());
+  const [subCategoryMatches, setSubCategoryMatches] = useState<Map<string, boolean>>(new Map());
 
   const {
     selectedCategoryId,
@@ -178,26 +130,37 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
 
   useEffect(() => {
     if (searchQuery) {
-      const filtered = categories.filter(cat => {
+      const matches = new Map<string, boolean>();
+
+      categories.forEach(cat => {
         const nameMatches = fuzzyMatch(searchQuery, cat.name);
         const hierarchyEntry = categoryHierarchy.find(entry => entry.category._id === cat._id);
         const subMatches = hierarchyEntry?.subCategories?.some(sub =>
           fuzzyMatch(searchQuery, sub?.name || '')
         ) ?? false;
-        return nameMatches || subMatches;
+
+        matches.set(cat._id, nameMatches || subMatches);
       });
-      setFilteredCategories(filtered);
-      if (filtered.length > 0) {
-        const isCurrentSelectedValid = filtered.some(cat => cat._id === selectedCategory?._id);
+
+      setCategoryMatches(matches);
+
+      // Auto-select first matching category if current is not matching
+      const matchingCategories = categories.filter(cat => matches.get(cat._id));
+      if (matchingCategories.length > 0) {
+        const isCurrentSelectedValid = matches.get(selectedCategory?._id || '');
         if (!isCurrentSelectedValid) {
           setSelectedSubCategory(null);
           setInitialSubCategoryResolved(false);
-          setSelectedCategory(filtered[0]);
+          setSelectedCategory(matchingCategories[0]);
         }
       }
     } else {
-      setFilteredCategories(categories);
+      // Clear matches when no search
+      setCategoryMatches(new Map());
     }
+
+    // Always show all categories
+    setFilteredCategories(categories);
   }, [searchQuery, categories, categoryHierarchy, selectedCategory]);
 
   useEffect(() => {
@@ -260,12 +223,19 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
 
   useEffect(() => {
     if (searchQuery) {
-      setFilteredSubCategories(
-        subCategories.filter(sub => fuzzyMatch(searchQuery, sub?.name || ''))
-      );
+      const matches = new Map<string, boolean>();
+
+      subCategories.forEach(sub => {
+        matches.set(sub._id, fuzzyMatch(searchQuery, sub?.name || ''));
+      });
+
+      setSubCategoryMatches(matches);
     } else {
-      setFilteredSubCategories(subCategories);
+      setSubCategoryMatches(new Map());
     }
+
+    // Always show all subcategories
+    setFilteredSubCategories(subCategories);
   }, [searchQuery, subCategories]);
 
   useEffect(() => {
@@ -382,12 +352,14 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
 
   const renderCategoryItem = ({ item }: { item: Category }) => {
     const isSelected = selectedCategory?._id === item._id;
-    
+    const isMatching = !searchQuery || categoryMatches.get(item._id) !== false;
+
     return (
       <TouchableOpacity
         style={[
           styles.categoryItem,
           isSelected && styles.categoryItemActive,
+          !isMatching && styles.categoryItemDimmed,
         ]}
         onPress={() => handleCategoryPress(item)}
         activeOpacity={0.7}
@@ -401,15 +373,19 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
             style={styles.categoryIcon}
           />
         </View>
-        <Text
+        <HighlightedText
+          text={item.name}
+          searchQuery={searchQuery}
           style={[
             styles.categoryText,
-            isSelected && styles.categoryTextActive,
+            ...(isSelected ? [styles.categoryTextActive] : []),
           ]}
+          highlightStyle={{
+            backgroundColor: '#FFEB3B',
+            fontWeight: '700',
+          }}
           numberOfLines={2}
-        >
-          {item.name}
-        </Text>
+        />
         {isSelected && (
           <View style={styles.selectedIndicator} />
         )}
@@ -419,12 +395,14 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
 
   const renderSubCategoryItem = ({ item }: { item: SubCategory }) => {
     const isSelected = selectedSubCategory?._id === item._id;
+    const isMatching = !searchQuery || subCategoryMatches.get(item._id) !== false;
 
     return (
       <TouchableOpacity
         style={[
           styles.subCategoryTile,
           isSelected && styles.subCategoryTileActive,
+          !isMatching && styles.subCategoryItemDimmed,
         ]}
         onPress={() => handleSubCategoryPress(item)}
         activeOpacity={0.7}
@@ -435,15 +413,19 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
             style={styles.subCategoryIcon}
           />
         </View>
-        <Text
+        <HighlightedText
+          text={item.name}
+          searchQuery={searchQuery}
           style={[
             styles.subCategoryText,
-            isSelected && styles.subCategoryTextActive,
+            ...(isSelected ? [styles.subCategoryTextActive] : []),
           ]}
+          highlightStyle={{
+            backgroundColor: '#FFEB3B',
+            fontWeight: '600',
+          }}
           numberOfLines={2}
-        >
-          {item.name}
-        </Text>
+        />
         <Text
           style={[
             styles.subCategorySubtext,
@@ -759,6 +741,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
+  },
+  categoryItemDimmed: {
+    opacity: 0.4,
+  },
+  subCategoryItemDimmed: {
+    opacity: 0.4,
   },
 });
 

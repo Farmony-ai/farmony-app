@@ -4,4 +4,5 @@ export * from './colors';
 export * from './spacing';
 export * from './validators';
 export * from './icons';
-export * from './shimGlobalRequire'; 
+export * from './shimGlobalRequire';
+export * from './searchUtils'; 

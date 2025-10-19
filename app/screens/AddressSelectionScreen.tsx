@@ -62,12 +62,12 @@ const AddressSelectionScreen = () => {
       setLoading(true);
       const userAddresses = await AddressService.getUserAddresses(user.id);
       setAddresses(userAddresses);
-      
+
       // Set the default address as selected
       const defaultAddress = userAddresses.find(addr => addr.isDefault);
       if (defaultAddress) {
         setSelectedAddressId(defaultAddress._id);
-        
+
         if (Array.isArray(defaultAddress.coordinates) && defaultAddress.coordinates.length === 2) {
           dispatch(setLocation({
             latitude: defaultAddress.coordinates[1],
@@ -76,8 +76,24 @@ const AddressSelectionScreen = () => {
           }));
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching addresses:', error);
+
+      // Show error message to user
+      Alert.alert(
+        'Error',
+        error?.message || 'Failed to load addresses. Please check your connection and try again.',
+        [
+          {
+            text: 'Retry',
+            onPress: () => fetchAddresses()
+          },
+          {
+            text: 'OK',
+            style: 'cancel'
+          }
+        ]
+      );
     } finally {
       setLoading(false);
     }
@@ -91,7 +107,7 @@ const AddressSelectionScreen = () => {
 
   const handleSelectAddress = async (address: Address) => {
     setSelectedAddressId(address._id);
-    
+
     // Update Redux store with selected address coordinates
     if (Array.isArray(address.coordinates) && address.coordinates.length === 2) {
       dispatch(setLocation({
@@ -105,8 +121,35 @@ const AddressSelectionScreen = () => {
     if (!address.isDefault) {
       try {
         await AddressService.setDefaultAddress(address._id);
-      } catch (error) {
+
+        // Update local state to reflect the change
+        setAddresses(prevAddresses =>
+          prevAddresses.map(addr => ({
+            ...addr,
+            isDefault: addr._id === address._id
+          }))
+        );
+
+        // Show success feedback
+        Alert.alert('Success', 'Default address updated successfully');
+      } catch (error: any) {
         console.error('Error setting default address:', error);
+
+        // Show error message to user
+        Alert.alert(
+          'Error',
+          error?.message || 'Failed to set default address. Please try again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Don't navigate away on error
+                return;
+              }
+            }
+          ]
+        );
+        return; // Don't navigate away if there was an error
       }
     }
 
