@@ -65,7 +65,7 @@ const RippleAnimation: React.FC<RippleAnimationProps> = ({
     return () => {
       animationLoop.forEach(animation => animation.stop());
     };
-  }, [duration]);
+  }, [animations, duration]);
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
@@ -75,12 +75,13 @@ const RippleAnimation: React.FC<RippleAnimationProps> = ({
           style={[
             styles.ripple,
             {
-              backgroundColor: color,
+              backgroundColor: 'transparent',
+              borderColor: color,
               transform: [
                 {
                   scale: anim.scale.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [0.5, 2],
+                    outputRange: [0.6, 2.6],
                   }),
                 },
               ],
@@ -97,12 +98,14 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
+    pointerEvents: 'none',
   },
   ripple: {
     position: 'absolute',
     width: '100%',
     height: '100%',
     borderRadius: 999,
+    borderWidth: 2,
   },
 });
 

@@ -1,4 +1,4 @@
-export const SPACING = {
+const spacingBase = {
   // Base spacing units
   XS: 4,
   SM: 8,
@@ -11,7 +11,23 @@ export const SPACING = {
   '5XL': 128,
 } as const;
 
-export const BORDER_RADIUS = {
+type SpacingBase = typeof spacingBase;
+
+const spacingAliases = Object.keys(spacingBase).reduce<Record<string, number>>(
+  (acc, key) => {
+    const value = spacingBase[key as keyof SpacingBase];
+    acc[key.toLowerCase()] = value;
+    return acc;
+  },
+  {},
+);
+
+export const SPACING = {
+  ...spacingBase,
+  ...spacingAliases,
+} as const;
+
+const borderRadiusBase = {
   NONE: 0,
   SM: 4,
   MD: 8,
@@ -19,6 +35,22 @@ export const BORDER_RADIUS = {
   XL: 16,
   '2XL': 24,
   FULL: 9999,
+} as const;
+
+type BorderRadiusBase = typeof borderRadiusBase;
+
+const borderRadiusAliases = Object.keys(borderRadiusBase).reduce<Record<string, number>>(
+  (acc, key) => {
+    const value = borderRadiusBase[key as keyof BorderRadiusBase];
+    acc[key.toLowerCase()] = value;
+    return acc;
+  },
+  {},
+);
+
+export const BORDER_RADIUS = {
+  ...borderRadiusBase,
+  ...borderRadiusAliases,
 } as const;
 
 export const SHADOWS = {
@@ -62,4 +94,4 @@ export const SHADOWS = {
     shadowRadius: 16,
     elevation: 8,
   },
-} as const; 
+} as const;

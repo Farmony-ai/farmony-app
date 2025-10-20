@@ -46,16 +46,20 @@ const BookingsScreen = () => {
 
   const fetchBookings = async (isRefresh = false) => {
     if (!user?.id) {
+      console.log('BookingsScreen: No user ID found');
       setLoading(false);
       return;
     }
 
     try {
       if (!isRefresh) setLoading(true);
+      console.log('BookingsScreen: Fetching unified bookings for user:', user.id);
       const data = await SeekerService.getUnifiedBookings(user.id);
+      console.log('BookingsScreen: Received bookings:', data.length, 'items');
+      console.log('BookingsScreen: Bookings data:', JSON.stringify(data, null, 2));
       setBookings(data);
     } catch (error) {
-      console.error('Error fetching bookings:', error);
+      console.error('BookingsScreen: Error fetching bookings:', error);
     } finally {
       setLoading(false);
       if (isRefresh) setRefreshing(false);
@@ -236,18 +240,41 @@ const BookingsScreen = () => {
     const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
     const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+    console.log(`BookingsScreen: Filtering booking ${booking.id}:`, {
+      title: booking.title,
+      displayStatus: booking.displayStatus,
+      serviceStartDate: booking.serviceStartDate,
+      bookingDateOnly: bookingDateOnly.toISOString(),
+      todayOnly: todayOnly.toISOString(),
+      activeTab,
+    });
+
     if (activeTab === 'upcoming') {
-      // Upcoming: searching, matched, in_progress, pending statuses OR future/today dates
+      // Upcoming: future/today bookings with active statuses OR no_accept with future dates
       const isFutureOrToday = bookingDateOnly >= todayOnly;
       const isActiveStatus = ['searching', 'matched', 'in_progress', 'pending'].includes(booking.displayStatus);
-      return isActiveStatus && isFutureOrToday;
+      const isFailedButFuture = booking.displayStatus === 'no_accept' && isFutureOrToday;
+
+      console.log(`  → Upcoming check: isFutureOrToday=${isFutureOrToday}, isActiveStatus=${isActiveStatus}, isFailedButFuture=${isFailedButFuture}`);
+
+      // Show in upcoming if:
+      // 1. Active status with future/today date, OR
+      // 2. Failed request (no_accept) but scheduled for future/today
+      return (isActiveStatus && isFutureOrToday) || isFailedButFuture;
     } else {
-      // Past: completed, cancelled, no_accept statuses OR past dates
+      // Past: completed, cancelled, no_accept statuses with past dates
       const isPastDate = bookingDateOnly < todayOnly;
       const isCompletedStatus = ['completed', 'cancelled', 'no_accept'].includes(booking.displayStatus);
-      return isCompletedStatus || isPastDate;
+
+      console.log(`  → Past check: isPastDate=${isPastDate}, isCompletedStatus=${isCompletedStatus}`);
+
+      // Show in past if:
+      // 1. Completed/cancelled/no_accept status with past date
+      return isCompletedStatus && isPastDate;
     }
   });
+
+  console.log(`BookingsScreen: Filtered ${filteredBookings.length} bookings for ${activeTab} tab`);
 
   const renderBookingCard = (booking: UnifiedBooking) => {
     // Map API fields to expected fields
@@ -258,7 +285,11 @@ const BookingsScreen = () => {
     // Navigate to appropriate detail screen
     const handlePress = () => {
       if (booking.type === 'service_request') {
-        navigation.navigate('ServiceRequestDetails', { requestId: booking.id });
+        // Pass the full booking object instead of just ID
+        navigation.navigate('ServiceRequestDetails', {
+          requestId: booking.id,
+          serviceRequest: booking // Pass the entire booking data
+        });
       } else {
         navigation.navigate('SeekerOrderDetail', { orderId: booking.id });
       }
@@ -370,13 +401,7 @@ const BookingsScreen = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Bookings</Text>
-        <TouchableOpacity 
-          style={styles.headerIcon} 
-          onPress={() => navigation.navigate('Provider')}
-          activeOpacity={0.7}
-        > 
-          <Ionicons name="briefcase-outline" size={20} color={COLORS_MINIMAL.accent} />
-        </TouchableOpacity>
+        
       </View>
 
       {/* Tab Bar */}
@@ -463,7 +488,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
