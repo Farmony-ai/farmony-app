@@ -1,9 +1,6 @@
 
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
+import apiInterceptor from './apiInterceptor';
 import { Category, SubCategory } from './CatalogueService';
-
-const BASE_URL = API_BASE_URL;
 
 // Interface for populated listing structure
 export interface PopulatedListingInBooking {
@@ -46,29 +43,70 @@ export interface SeekerBooking {
   [key: string]: any;
 }
 
-class SeekerService {
-  private getAuthHeaders(token?: string) {
-    return token
-      ? {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      : {};
-  }
+// Unified booking interface for both orders and service requests
+export interface UnifiedBooking {
+  id: string;
+  type: 'order' | 'service_request';
+  displayStatus: 'searching' | 'matched' | 'in_progress' | 'no_accept' | 'completed' | 'cancelled' | 'pending';
+  originalStatus: string;
+  title: string;
+  description?: string;
+  providerName?: string;
+  providerPhone?: string;
+  serviceStartDate: string;
+  serviceEndDate?: string;
+  location?: any;
+  totalAmount?: number;
+  createdAt: string;
+  updatedAt: string;
+  category?: any;
+  subcategory?: any;
+  images?: string[];
+  // Service request specific fields
+  isSearching?: boolean;
+  searchElapsedMinutes?: number;
+  nextWaveAt?: string;
+  matchedProvidersCount?: number;
+  urgency?: string;
+  budget?: {
+    min: number;
+    max: number;
+  };
+  orderId?: string;
+}
 
-  async getBookings(seekerId: string, token?: string): Promise<SeekerBooking[]> {
+class SeekerService {
+  async getBookings(seekerId: string): Promise<SeekerBooking[]> {
     try {
       console.log('getBookings for seeker:', seekerId);
-      const response = await axios.get(
-        `${BASE_URL}/orders/seeker/${seekerId}`,
-        this.getAuthHeaders(token)
-      );
-      console.log('Bookings response:', response.data);
-      return response.data as SeekerBooking[];
+      const result = await apiInterceptor.get<SeekerBooking[]>(`/orders/seeker/${seekerId}`);
+
+      if (result.success && result.data) {
+        console.log('Bookings response:', result.data);
+        return result.data;
+      } else {
+        throw new Error(result.error || 'Failed to fetch seeker bookings');
+      }
     } catch (error: any) {
-      console.error('SeekerService.getBookings error:', error?.response?.data || error?.message);
-      throw new Error(error?.response?.data?.message || 'Failed to fetch seeker bookings');
+      console.error('SeekerService.getBookings error:', error?.message);
+      throw new Error(error?.message || 'Failed to fetch seeker bookings');
+    }
+  }
+
+  async getUnifiedBookings(seekerId: string): Promise<UnifiedBooking[]> {
+    try {
+      console.log('getUnifiedBookings for seeker:', seekerId);
+      const result = await apiInterceptor.get<UnifiedBooking[]>(`/seeker/${seekerId}/bookings`);
+
+      if (result.success && result.data) {
+        console.log('Unified bookings response:', result.data);
+        return result.data;
+      } else {
+        throw new Error(result.error || 'Failed to fetch unified bookings');
+      }
+    } catch (error: any) {
+      console.error('SeekerService.getUnifiedBookings error:', error?.message);
+      throw new Error(error?.message || 'Failed to fetch unified bookings');
     }
   }
 }

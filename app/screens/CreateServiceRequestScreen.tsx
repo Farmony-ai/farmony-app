@@ -13,6 +13,7 @@ import {
   Modal,
   Alert,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -48,6 +49,7 @@ const DURATION_OPTIONS: DurationOption[] = [
   { label: '4 Hours', value: '4h', hours: 4 },
   { label: '8 Hours', value: '8h', hours: 8 },
   { label: 'Full Day', value: 'fullday', hours: 10 },
+  { label: 'Custom', value: 'custom', hours: 0 },
 ];
 
 const POWER_OPTIONS: PowerOption[] = [
@@ -156,6 +158,8 @@ const CreateServiceRequestScreen = () => {
   const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [durationModalVisible, setDurationModalVisible] = useState(false);
   const [powerModalVisible, setPowerModalVisible] = useState(false);
+  const [customHoursModalVisible, setCustomHoursModalVisible] = useState(false);
+  const [customHours, setCustomHours] = useState('2');
 
 const serviceTitle = useMemo(() => {
   if (preselectedSubCategoryName) return preselectedSubCategoryName;
@@ -409,12 +413,37 @@ useEffect(() => {
     }
   };
 
+  const handleDurationSelect = (option: DurationOption) => {
+    if (option.value === 'custom') {
+      setDurationModalVisible(false);
+      setCustomHoursModalVisible(true);
+    } else {
+      setSelectedDuration(option);
+      setDurationModalVisible(false);
+    }
+  };
+
+  const handleCustomHoursSubmit = () => {
+    const hours = parseInt(customHours, 10);
+    if (hours > 0 && hours <= 24) {
+      setSelectedDuration({
+        label: `${hours} Hours`,
+        value: 'custom',
+        hours: hours,
+      });
+      setCustomHoursModalVisible(false);
+    } else {
+      Alert.alert('Invalid Input', 'Please enter hours between 1 and 24');
+    }
+  };
+
   const renderOptionModal = (
     visible: boolean,
     onClose: () => void,
     options: Array<DurationOption | PowerOption>,
     onSelect: (option: DurationOption | PowerOption) => void,
-    selectedValue: string
+    selectedValue: string,
+    isDurationModal: boolean = false
   ) => (
     <Modal
       visible={visible}
@@ -439,7 +468,9 @@ useEffect(() => {
                     ]}
                     onPress={() => {
                       onSelect(option);
-                      onClose();
+                      if (!isDurationModal) {
+                        onClose();
+                      }
                     }}
                     activeOpacity={0.8}
                   >
@@ -454,6 +485,51 @@ useEffect(() => {
                   </TouchableOpacity>
                 );
               })}
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+
+  const renderCustomHoursModal = () => (
+    <Modal
+      visible={customHoursModalVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setCustomHoursModalVisible(false)}
+    >
+      <TouchableWithoutFeedback onPress={() => setCustomHoursModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View style={styles.modalContent}>
+              <Text style={styles.customHoursTitle}>Enter Custom Hours</Text>
+              <View style={styles.customHoursInputContainer}>
+                <Ionicons name="time-outline" size={20} color={COLORS.TEXT.SECONDARY} />
+                <TextInput
+                  value={customHours}
+                  onChangeText={setCustomHours}
+                  placeholder="Enter hours (1-24)"
+                  keyboardType="number-pad"
+                  style={styles.customHoursInput}
+                  maxLength={2}
+                  autoFocus
+                />
+              </View>
+              <View style={styles.customHoursButtons}>
+                <TouchableOpacity
+                  style={[styles.customHoursButton, styles.customHoursCancelButton]}
+                  onPress={() => setCustomHoursModalVisible(false)}
+                >
+                  <Text style={styles.customHoursCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.customHoursButton, styles.customHoursSubmitButton]}
+                  onPress={handleCustomHoursSubmit}
+                >
+                  <Text style={styles.customHoursSubmitText}>Submit</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -696,21 +772,25 @@ useEffect(() => {
             disabled={isSubmitting}
           />
         </View>
-        {/* {renderOptionModal(
+        {renderOptionModal(
           durationModalVisible,
           () => setDurationModalVisible(false),
-          durationOptions,
-          setSelectedDuration,
-          selectedDuration.value
+          DURATION_OPTIONS,
+          handleDurationSelect,
+          selectedDuration.value,
+          true
         )}
 
         {renderOptionModal(
           powerModalVisible,
           () => setPowerModalVisible(false),
-          powerOptions,
+          POWER_OPTIONS,
           setSelectedPower,
-          selectedPower.value
-        )} */}
+          selectedPower.value,
+          false
+        )}
+
+        {renderCustomHoursModal()}
 
         <Modal visible={Boolean(successData)} transparent animationType="none">
           <View style={styles.successModalBackdrop}>

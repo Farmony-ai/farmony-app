@@ -24,7 +24,8 @@ import {
   acceptServiceRequest,
 } from '../store/slices/serviceRequestsSlice';
 import ServiceRequestService from '../services/ServiceRequestService';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
+import RippleAnimation from '../components/RippleAnimation';
 
 const ServiceRequestDetailsScreen = () => {
   const navigation = useNavigation<any>();
@@ -40,6 +41,7 @@ const ServiceRequestDetailsScreen = () => {
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [quotePrice, setQuotePrice] = useState('');
   const [quoteMessage, setQuoteMessage] = useState('');
+  const [showOrderDetails, setShowOrderDetails] = useState(false);
 
   const isSeeker = currentRequest?.seekerId === user?.id ||
                    (typeof currentRequest?.seekerId === 'object' &&
@@ -149,62 +151,123 @@ const ServiceRequestDetailsScreen = () => {
     );
   }
 
-  const statusColor = ServiceRequestService.getStatusColor(currentRequest.status);
-  const urgencyColor = ServiceRequestService.getUrgencyColor(currentRequest.urgency);
-  const isExpired = new Date(currentRequest.expiresAt) < new Date();
+  const statusColor = ServiceRequestService.getStatusColor(currentRequest.status || 'unknown');
+  const urgencyColor = ServiceRequestService.getUrgencyColor(currentRequest.urgency || 'normal');
+  const isExpired = currentRequest.expiresAt ? new Date(currentRequest.expiresAt) < new Date() : false;
+  const isSearching = currentRequest.status === 'open' || currentRequest.status === 'matched';
   const canAccept =
     isProvider &&
-    (currentRequest.status === 'open' || currentRequest.status === 'matched') &&
+    isSearching &&
     !isExpired;
   const canCancel =
     isSeeker &&
-    (currentRequest.status === 'open' || currentRequest.status === 'matched');
+    isSearching;
+
+  // Calculate elapsed time for searching status
+  const getElapsedTime = () => {
+    if (!isSearching) return null;
+    const createdAt = new Date(currentRequest.createdAt).getTime();
+    const now = Date.now();
+    const elapsedMinutes = Math.floor((now - createdAt) / 60000);
+    return `${Math.floor(elapsedMinutes / 60)}:${String(elapsedMinutes % 60).padStart(2, '0')}`;
+  };
+
+  // Calculate time to next wave
+  const getTimeToNextWave = () => {
+    if (!currentRequest.nextWaveAt || !isSearching) return null;
+    const nextWave = new Date(currentRequest.nextWaveAt).getTime();
+    const now = Date.now();
+    const minutesLeft = Math.ceil((nextWave - now) / 60000);
+    if (minutesLeft <= 0) return 'Processing...';
+    return `${minutesLeft} min`;
+  };
+
+  // Format header subtitle: "Kukatpally • 19 Jun • 2 hrs"
+  const formatHeaderSubtitle = () => {
+    const parts = [];
+
+    // Extract location from address (get first part before comma)
+    if (currentRequest.address) {
+      const locationPart = currentRequest.address.split(',')[0].trim();
+      parts.push(locationPart);
+    }
+
+    // Format date
+    if (currentRequest.serviceStartDate) {
+      const date = new Date(currentRequest.serviceStartDate);
+      const formatted = date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+      parts.push(formatted);
+    }
+
+    // Add duration from metadata
+    if (currentRequest.metadata?.durationHours) {
+      parts.push(`${currentRequest.metadata.durationHours} hrs`);
+    } else if (currentRequest.metadata?.durationLabel) {
+      parts.push(currentRequest.metadata.durationLabel);
+    }
+
+    return parts.join(' • ');
+  };
+
+  // Get status badge configuration
+  const getStatusBadgeConfig = () => {
+    if (isSearching) {
+      return {
+        text: 'Searching',
+        backgroundColor: '#E3F2FD',
+        textColor: '#2196F3',
+      };
+    }
+    switch (currentRequest.status) {
+      case 'accepted':
+        return {
+          text: 'Matched',
+          backgroundColor: '#E8F5E9',
+          textColor: '#4CAF50',
+        };
+      case 'completed':
+        return {
+          text: 'Completed',
+          backgroundColor: '#F5F5F5',
+          textColor: '#757575',
+        };
+      case 'cancelled':
+        return {
+          text: 'Cancelled',
+          backgroundColor: '#F5F5F5',
+          textColor: '#757575',
+        };
+      default:
+        return {
+          text: currentRequest.status?.toUpperCase() || 'UNKNOWN',
+          backgroundColor: '#FFF3E0',
+          textColor: '#FF9800',
+        };
+    }
+  };
+
+  const statusBadge = getStatusBadgeConfig();
 
   return (
     <SafeAreaWrapper>
       <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Request Details</Text>
-          <View style={styles.statusBadge} backgroundColor={statusColor}>
-            <Text style={styles.statusText}>
-              {currentRequest.status.toUpperCase()}
-            </Text>
+        {/* Header - Figma Design */}
+        <View style={styles.headerNew}>
+          <View style={styles.headerTop}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color="#000" />
+            </TouchableOpacity>
+            <View style={[styles.statusBadgeNew, { backgroundColor: statusBadge.backgroundColor }]}>
+              <Text style={[styles.statusTextNew, { color: statusBadge.textColor }]}>
+                {statusBadge.text}
+              </Text>
+            </View>
           </View>
+          <Text style={styles.headerTitleNew}>{currentRequest.title}</Text>
+          <Text style={styles.headerSubtitle}>{formatHeaderSubtitle()}</Text>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Title and Description */}
-          <View style={styles.section}>
-            <Text style={styles.title}>{currentRequest.title}</Text>
-            <View style={styles.urgencyRow}>
-              <View style={[styles.urgencyBadge, { backgroundColor: urgencyColor }]}>
-                <MaterialIcons
-                  name={
-                    currentRequest.urgency === 'immediate'
-                      ? 'flash-on'
-                      : currentRequest.urgency === 'scheduled'
-                      ? 'schedule'
-                      : 'date-range'
-                  }
-                  size={14}
-                  color={COLORS.NEUTRAL.WHITE}
-                />
-                <Text style={styles.urgencyText}>
-                  {currentRequest.urgency.toUpperCase()}
-                </Text>
-              </View>
-              {isExpired && (
-                <View style={styles.expiredBadge}>
-                  <Text style={styles.expiredText}>EXPIRED</Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.description}>{currentRequest.description}</Text>
-          </View>
+        <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
 
           {/* Service Details */}
           <View style={styles.section}>
@@ -260,40 +323,186 @@ const ServiceRequestDetailsScreen = () => {
             )}
           </View>
 
-          {/* Location */}
+          {/* Map - Figma Design */}
           {currentRequest.location && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Service Location</Text>
-              {currentRequest.address && (
-                <Text style={styles.address}>{currentRequest.address}</Text>
-              )}
-              <View style={styles.mapContainer}>
+            <View style={styles.mapSection}>
+              <View style={styles.mapContainerNew}>
                 <MapView
                   provider={PROVIDER_GOOGLE}
-                  style={styles.map}
+                  style={styles.mapNew}
                   initialRegion={{
                     latitude: currentRequest.location.coordinates[1],
                     longitude: currentRequest.location.coordinates[0],
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
+                    latitudeDelta: isSearching ? 0.02 : 0.01,
+                    longitudeDelta: isSearching ? 0.02 : 0.01,
                   }}
                   scrollEnabled={false}
                   zoomEnabled={false}
                 >
-                  <Marker
-                    coordinate={{
-                      latitude: currentRequest.location.coordinates[1],
-                      longitude: currentRequest.location.coordinates[0],
-                    }}
-                    title="Service Location"
-                  />
+                  {isSearching ? (
+                    <>
+                      {/* Animated truck marker for searching */}
+                      <Marker
+                        coordinate={{
+                          latitude: currentRequest.location.coordinates[1],
+                          longitude: currentRequest.location.coordinates[0],
+                        }}
+                      >
+                        <View style={styles.truckMarker}>
+                          <MaterialCommunityIcons name="truck-delivery" size={32} color="#000" />
+                        </View>
+                      </Marker>
+
+                      {/* Show wave radius circles */}
+                      {currentRequest.waves?.map((wave: any, index: number) => (
+                        <Circle
+                          key={index}
+                          center={{
+                            latitude: currentRequest.location.coordinates[1],
+                            longitude: currentRequest.location.coordinates[0],
+                          }}
+                          radius={wave.radius || (index + 1) * 5000}
+                          strokeColor="rgba(59, 130, 246, 0.5)"
+                          fillColor="rgba(59, 130, 246, 0.1)"
+                          strokeWidth={2}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    /* Regular marker for non-searching states */
+                    <Marker
+                      coordinate={{
+                        latitude: currentRequest.location.coordinates[1],
+                        longitude: currentRequest.location.coordinates[0],
+                      }}
+                      title="Service Location"
+                    />
+                  )}
                 </MapView>
               </View>
+
+              {/* Finding Provider Section - Figma Design */}
+              {isSearching && (
+                <View style={styles.findingProviderSection}>
+                  <Text style={styles.findingProviderTitle}>Finding Provider</Text>
+                  <Text style={styles.findingProviderTime}>{getElapsedTime()} min elapsed</Text>
+
+                  {/* Progress Timeline */}
+                  <View style={styles.progressTimeline}>
+                    {/* Step 1 - Request Placed */}
+                    <View style={styles.timelineStep}>
+                      <View style={[styles.timelineIcon, styles.timelineIconCompleted]}>
+                        <Ionicons name="receipt-outline" size={20} color="#FFF" />
+                      </View>
+                      <View style={styles.timelineLine} />
+                    </View>
+
+                    {/* Step 2 - Finding Provider */}
+                    <View style={styles.timelineStep}>
+                      <View style={[styles.timelineIcon, styles.timelineIconActive]}>
+                        <Ionicons name="search-outline" size={20} color="#FFF" />
+                      </View>
+                      <View style={styles.timelineLine} />
+                    </View>
+
+                    {/* Step 3 - Provider Matched */}
+                    <View style={styles.timelineStep}>
+                      <View style={styles.timelineIcon}>
+                        <MaterialCommunityIcons name="truck-delivery-outline" size={20} color="#9E9E9E" />
+                      </View>
+                      <View style={styles.timelineLine} />
+                    </View>
+
+                    {/* Step 4 - Service Complete */}
+                    <View style={styles.timelineStepLast}>
+                      <View style={styles.timelineIcon}>
+                        <Ionicons name="home-outline" size={20} color="#9E9E9E" />
+                      </View>
+                    </View>
+                  </View>
+
+                  <Text style={styles.notificationText}>
+                    We will notify you if you match with a provider
+                  </Text>
+                </View>
+              )}
+
+              {/* Order Details Button - Figma Design */}
+              <TouchableOpacity
+                style={styles.orderDetailsButton}
+                onPress={() => setShowOrderDetails(!showOrderDetails)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.orderDetailsButtonText}>Order details</Text>
+              </TouchableOpacity>
+
+              {/* Expandable Order Details */}
+              {showOrderDetails && (
+                <View style={styles.orderDetailsContent}>
+                  {currentRequest.description && (
+                    <View style={styles.detailRowExpanded}>
+                      <Text style={styles.detailLabelExpanded}>Description</Text>
+                      <Text style={styles.detailValueExpanded}>{currentRequest.description}</Text>
+                    </View>
+                  )}
+
+                  {currentRequest.serviceStartDate && (
+                    <View style={styles.detailRowExpanded}>
+                      <Text style={styles.detailLabelExpanded}>Service Date</Text>
+                      <Text style={styles.detailValueExpanded}>
+                        {new Date(currentRequest.serviceStartDate).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </Text>
+                    </View>
+                  )}
+
+                  {currentRequest.metadata?.preferredTime && (
+                    <View style={styles.detailRowExpanded}>
+                      <Text style={styles.detailLabelExpanded}>Preferred Time</Text>
+                      <Text style={styles.detailValueExpanded}>{currentRequest.metadata.preferredTime}</Text>
+                    </View>
+                  )}
+
+                  {currentRequest.metadata?.durationLabel && (
+                    <View style={styles.detailRowExpanded}>
+                      <Text style={styles.detailLabelExpanded}>Duration</Text>
+                      <Text style={styles.detailValueExpanded}>{currentRequest.metadata.durationLabel}</Text>
+                    </View>
+                  )}
+
+                  {currentRequest.metadata?.powerLabel && (
+                    <View style={styles.detailRowExpanded}>
+                      <Text style={styles.detailLabelExpanded}>Power Phase</Text>
+                      <Text style={styles.detailValueExpanded}>{currentRequest.metadata.powerLabel}</Text>
+                    </View>
+                  )}
+
+                  {currentRequest.metadata?.operatorIncluded !== undefined && (
+                    <View style={styles.detailRowExpanded}>
+                      <Text style={styles.detailLabelExpanded}>Operator Included</Text>
+                      <Text style={styles.detailValueExpanded}>
+                        {currentRequest.metadata.operatorIncluded ? 'Yes' : 'No'}
+                      </Text>
+                    </View>
+                  )}
+
+                  {currentRequest.address && (
+                    <View style={styles.detailRowExpanded}>
+                      <Text style={styles.detailLabelExpanded}>Service Location</Text>
+                      <Text style={styles.detailValueExpanded}>{currentRequest.address}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
           )}
 
-          {/* Seeker/Provider Info */}
-          <View style={styles.section}>
+          {/* Seeker/Provider Info - Keep for reference but hidden in Figma design */}
+          <View style={[styles.section, { display: 'none' }]}>
             <Text style={styles.sectionTitle}>
               {isSeeker ? 'Request Information' : 'Seeker Information'}
             </Text>
@@ -525,6 +734,41 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
+  searchingOverlay: {
+    backgroundColor: '#F0F8FF',
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.md,
+  },
+  searchingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  searchingAnimation: {
+    width: 30,
+    height: 30,
+    marginRight: SPACING.sm,
+  },
+  searchingTextContainer: {
+    flex: 1,
+  },
+  searchingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3B82F6',
+    marginBottom: 2,
+  },
+  searchingSubtext: {
+    fontSize: 13,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  nextWaveText: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '500',
+    marginTop: SPACING.xs,
+  },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -564,6 +808,158 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: COLORS.TEXT.SECONDARY,
     fontSize: 14,
+  },
+  // New Figma-based styles
+  headerNew: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  backButton: {
+    padding: 4,
+  },
+  statusBadgeNew: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statusTextNew: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  headerTitleNew: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  mapSection: {
+    backgroundColor: '#FFF',
+  },
+  mapContainerNew: {
+    height: 400,
+    backgroundColor: '#F5F5F5',
+  },
+  mapNew: {
+    flex: 1,
+  },
+  truckMarker: {
+    backgroundColor: '#FFF',
+    padding: 8,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  findingProviderSection: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.lg,
+    backgroundColor: '#FFF',
+  },
+  findingProviderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 4,
+  },
+  findingProviderTime: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: SPACING.lg,
+  },
+  progressTimeline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.sm,
+  },
+  timelineStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  timelineStepLast: {
+    alignItems: 'center',
+  },
+  timelineIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timelineIconCompleted: {
+    backgroundColor: '#000',
+  },
+  timelineIconActive: {
+    backgroundColor: '#000',
+  },
+  timelineLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#E0E0E0',
+    marginHorizontal: 4,
+  },
+  notificationText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  orderDetailsButton: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+    paddingVertical: SPACING.md,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  orderDetailsButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  orderDetailsContent: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 8,
+  },
+  detailRowExpanded: {
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  detailLabelExpanded: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 4,
+  },
+  detailValueExpanded: {
+    fontSize: 15,
+    color: '#333',
+    fontWeight: '500',
   },
 });
 

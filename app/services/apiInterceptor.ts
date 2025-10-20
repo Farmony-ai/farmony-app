@@ -253,6 +253,36 @@ class ApiInterceptor {
       method: 'GET',
     });
   }
+
+  // Axios-like convenience methods
+  async get<T>(endpoint: string): Promise<{ success: boolean; data?: T; error?: string }> {
+    return this.makeAuthenticatedRequest<T>(endpoint, { method: 'GET' });
+  }
+
+  async post<T>(endpoint: string, body?: any): Promise<{ success: boolean; data?: T; error?: string }> {
+    return this.makeAuthenticatedRequest<T>(endpoint, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  async patch<T>(endpoint: string, body?: any): Promise<{ success: boolean; data?: T; error?: string }> {
+    return this.makeAuthenticatedRequest<T>(endpoint, {
+      method: 'PATCH',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  async put<T>(endpoint: string, body?: any): Promise<{ success: boolean; data?: T; error?: string }> {
+    return this.makeAuthenticatedRequest<T>(endpoint, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  async delete<T>(endpoint: string): Promise<{ success: boolean; data?: T; error?: string }> {
+    return this.makeAuthenticatedRequest<T>(endpoint, { method: 'DELETE' });
+  }
 }
 
 // Create singleton instance

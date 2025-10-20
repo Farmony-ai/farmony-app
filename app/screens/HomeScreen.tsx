@@ -563,43 +563,6 @@ export default function HomeScreen() {
         </View>
         */}
 
-        {/* Service Request CTA */}
-        <View style={styles.ctaContainer}>
-          <View style={styles.ctaCard}>
-            <View style={styles.ctaContent}>
-              <Text style={styles.ctaTitle}>Need a Service ?</Text>
-              <Text style={styles.ctaSubtext}>
-                Post your requirements and let{'\n'}providers come to you
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.ctaButton}
-              onPress={() => navigation.navigate('CreateServiceRequest')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.ctaButtonText}>Post Request</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* My Requests Quick Access */}
-        <View style={styles.ctaContainer}>
-          <TouchableOpacity
-            style={styles.quickAccessCard}
-            onPress={() => navigation.navigate('MyServiceRequests')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.quickAccessContent}>
-              <Ionicons name="document-text-outline" size={scaleSize(24)} color={COLORS_NEW.accent} />
-              <View style={styles.quickAccessTextContainer}>
-                <Text style={styles.quickAccessTitle}>My Service Requests</Text>
-                <Text style={styles.quickAccessSubtext}>View and manage your posted requests</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={scaleSize(20)} color={COLORS_NEW.text.muted} />
-          </TouchableOpacity>
-        </View>
-
         <View style={{ height: scaleSize(100) }} />
       </ScrollView>
 
@@ -856,41 +819,6 @@ const styles = StyleSheet.create({
     color: COLORS_NEW.accent,
     fontFamily: FONTS.POPPINS.MEDIUM,
   },
-  ctaContainer: {
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  ctaCard: {
-    backgroundColor: '#F3F0FF',
-    borderRadius: scaleSize(12),
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  ctaContent: {
-    flex: 1,
-  },
-  ctaTitle: {
-    ...typography.ctaTitle,
-    color: COLORS_NEW.text.primary,
-    marginBottom: scaleSize(6),
-  },
-  ctaSubtext: {
-    ...typography.ctaSubtext,
-    color: COLORS_NEW.text.secondary,
-    lineHeight: scaleSize(18),
-  },
-  ctaButton: {
-    backgroundColor: COLORS_NEW.accent,
-    paddingHorizontal: scaleSize(18),
-    paddingVertical: scaleSize(10),
-    borderRadius: scaleSize(8),
-  },
-  ctaButtonText: {
-    ...typography.ctaButtonText,
-    color: 'white',
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -913,34 +841,5 @@ const styles = StyleSheet.create({
   modalTitle: {
     ...typography.modalTitle,
     color: COLORS_NEW.text.primary,
-  },
-  quickAccessCard: {
-    backgroundColor: COLORS_NEW.background,
-    borderRadius: scaleSize(12),
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: COLORS_NEW.border,
-  },
-  quickAccessContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  quickAccessTextContainer: {
-    marginLeft: scaleSize(12),
-    flex: 1,
-  },
-  quickAccessTitle: {
-    ...typography.ctaButtonText,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS_NEW.text.primary,
-    marginBottom: scaleSize(2),
-  },
-  quickAccessSubtext: {
-    ...typography.serviceName,
-    color: COLORS_NEW.text.secondary,
   },
 });

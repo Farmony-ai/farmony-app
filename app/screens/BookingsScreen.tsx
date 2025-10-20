@@ -15,7 +15,9 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import SeekerService, { SeekerBooking, PopulatedListingInBooking } from '../services/SeekerService';
+import SeekerService, { UnifiedBooking } from '../services/SeekerService';
+import RippleAnimation from '../components/RippleAnimation';
+import UnifiedBookingSocketHandler from '../services/UnifiedBookingSocketHandler';
 
 // Ultra-minimal color scheme
 const COLORS_MINIMAL = {
@@ -37,7 +39,7 @@ const COLORS_MINIMAL = {
 const BookingsScreen = () => {
   const navigation = useNavigation<any>();
   const { user, token } = useSelector((state: RootState) => state.auth);
-  const [bookings, setBookings] = useState<SeekerBooking[]>([]);
+  const [bookings, setBookings] = useState<UnifiedBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
@@ -50,7 +52,7 @@ const BookingsScreen = () => {
 
     try {
       if (!isRefresh) setLoading(true);
-      const data = await SeekerService.getBookings(user.id, token || undefined);
+      const data = await SeekerService.getUnifiedBookings(user.id);
       setBookings(data);
     } catch (error) {
       console.error('Error fetching bookings:', error);
@@ -66,48 +68,122 @@ const BookingsScreen = () => {
     }, [user?.id, token])
   );
 
+  // Socket connection for real-time updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Connect socket for real-time updates
+    UnifiedBookingSocketHandler.connect(user.id, (updatedBooking) => {
+      console.log('Real-time booking update:', updatedBooking);
+
+      setBookings(prevBookings => {
+        // Find and update existing booking
+        const index = prevBookings.findIndex(b => b.id === updatedBooking.id);
+
+        if (index >= 0) {
+          // Update existing booking
+          const updated = [...prevBookings];
+          updated[index] = {
+            ...updated[index],
+            ...updatedBooking,
+          } as UnifiedBooking;
+          return updated;
+        } else if (updatedBooking.type && updatedBooking.title) {
+          // Add new booking if it's complete enough
+          return [...prevBookings, updatedBooking as UnifiedBooking].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        }
+
+        return prevBookings;
+      });
+    });
+
+    // Cleanup on unmount
+    return () => {
+      UnifiedBookingSocketHandler.disconnect();
+    };
+  }, [user?.id]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchBookings(true);
   };
 
-  const getStatusColor = (status: string) => {
-    // Normalize status to handle both 'canceled' and 'cancelled'
-    const normalizedStatus = status === 'canceled' ? 'cancelled' : status;
-    
-    switch (normalizedStatus) {
-      case 'pending':
-        return COLORS_MINIMAL.warning;
-      case 'accepted':
-        return COLORS_MINIMAL.accent;
+  const getStatusDisplay = (booking: UnifiedBooking) => {
+    switch (booking.displayStatus) {
+      case 'searching':
+        const minutes = booking.searchElapsedMinutes || 0;
+        const formattedTime = `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
+        return {
+          label: 'Searching',
+          sublabel: `Finding provider... ${formattedTime} elapsed`,
+          color: COLORS_MINIMAL.info,
+          icon: 'search-outline',
+          showAnimation: true,
+        };
+      case 'matched':
+        return {
+          label: 'Matched',
+          sublabel: booking.providerName ? `${booking.providerName} • ETA 23m` : 'Provider assigned',
+          color: COLORS_MINIMAL.accent,
+          icon: 'checkmark-circle-outline',
+        };
+      case 'in_progress':
+        return {
+          label: 'In Progress',
+          sublabel: 'On job • 2h 10m',
+          color: COLORS_MINIMAL.accent,
+          icon: 'time-outline',
+        };
+      case 'no_accept':
+        return {
+          label: 'No Accept',
+          sublabel: 'No provider accepted',
+          color: COLORS_MINIMAL.warning,
+          icon: 'alert-circle-outline',
+        };
       case 'completed':
-        return COLORS_MINIMAL.info;
+        return {
+          label: 'Completed',
+          sublabel: booking.totalAmount ? `₹${booking.totalAmount.toLocaleString()}` : 'Completed',
+          color: COLORS_MINIMAL.text.muted,
+          icon: 'checkmark-done-outline',
+        };
       case 'cancelled':
-      case 'rejected':
-        return COLORS_MINIMAL.danger;
+        return {
+          label: 'Cancelled',
+          sublabel: 'Cancelled',
+          color: COLORS_MINIMAL.text.muted,
+          icon: 'close-circle-outline',
+        };
+      case 'pending':
+        return {
+          label: 'Pending',
+          sublabel: 'Awaiting confirmation',
+          color: COLORS_MINIMAL.warning,
+          icon: 'time-outline',
+        };
       default:
-        return COLORS_MINIMAL.text.muted;
+        return {
+          label: booking.displayStatus,
+          sublabel: '',
+          color: COLORS_MINIMAL.text.secondary,
+          icon: 'ellipse-outline',
+        };
     }
   };
 
   const getStatusIcon = (status: string) => {
-    // Normalize status to handle both 'canceled' and 'cancelled'
-    const normalizedStatus = status === 'canceled' ? 'cancelled' : status;
-    
-    switch (normalizedStatus) {
-      case 'pending':
-        return 'time-outline';
-      case 'accepted':
-        return 'checkmark-circle-outline';
-      case 'completed':
-        return 'checkmark-done-outline';
-      case 'cancelled':
-      case 'rejected':
-        return 'close-circle-outline';
-      default:
-        return 'ellipse-outline';
-    }
+    const display = getStatusDisplay({ displayStatus: status } as UnifiedBooking);
+    return display.icon || 'ellipse-outline';
   };
+
+  const getStatusColor = (status: string) => {
+    const display = getStatusDisplay({ displayStatus: status } as UnifiedBooking);
+    return display.color || COLORS_MINIMAL.text.muted;
+  };
+
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -128,95 +204,72 @@ const BookingsScreen = () => {
   };
 
   // Helper function to get display title and subtitle from booking
-  const getBookingDisplayInfo = (booking: SeekerBooking) => {
-    let title = '';
+  const getBookingDisplayInfo = (booking: UnifiedBooking) => {
+    let title = booking.title || 'Service';
     let subtitle = '';
 
-    // Check if listingId is populated with listing data
-    if (typeof booking.listingId === 'object' && booking.listingId !== null) {
-      const populatedListing = booking.listingId as PopulatedListingInBooking;
-
-      // Priority for title: subcategory name > listing title > serviceType > orderType
-      if (populatedListing.subCategoryId?.name) {
-        title = populatedListing.subCategoryId.name;
-      } else if (populatedListing.subcategory) {
-        title = populatedListing.subcategory;
-      } else if (populatedListing.title) {
-        title = populatedListing.title;
-      } else if (booking.serviceType) {
-        title = booking.serviceType;
-      } else if (booking.orderType) {
-        title = booking.orderType;
-      } else {
-        title = 'Service Booking';
-      }
-
-      // Subtitle: category name (if available)
-      if (populatedListing.categoryId?.name) {
-        subtitle = populatedListing.categoryId.name;
-      } else if (populatedListing.category) {
-        subtitle = populatedListing.category;
-      } else if (booking.category) {
-        subtitle = booking.category;
+    // For service requests, show category/subcategory
+    if (booking.type === 'service_request') {
+      if (booking.subcategory?.name) {
+        subtitle = booking.subcategory.name;
+      } else if (booking.category?.name) {
+        subtitle = booking.category.name;
       }
     } else {
-      // Fallback for non-populated data
-      if (booking.listingTitle) {
-        title = booking.listingTitle;
-      } else if (booking.serviceType) {
-        title = booking.serviceType;
-      } else if (booking.orderType) {
-        title = booking.orderType;
-      } else {
-        title = 'Service Booking';
-      }
-
-      if (booking.category) {
-        subtitle = booking.category;
+      // For orders, show category
+      if (booking.subcategory?.name) {
+        subtitle = booking.category?.name || '';
+      } else if (booking.category?.name) {
+        subtitle = booking.category.name;
       }
     }
 
     return { title, subtitle };
   };
 
-  // Filter bookings based on active tab - FIXED to handle 'canceled' status
+  // Filter bookings based on active tab
   const filteredBookings = bookings.filter(booking => {
-    const bookingDate = new Date(booking.serviceStartDate || booking.scheduledDate || booking.createdAt);
+    const bookingDate = new Date(booking.serviceStartDate || booking.createdAt);
     const now = new Date();
 
-    // Normalize status to handle both 'canceled' and 'cancelled'
-    const normalizedStatus = (booking.status as any) === 'canceled' ? 'cancelled' : booking.status;
+    // Reset time to start of day for proper date comparison
+    const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
+    const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     if (activeTab === 'upcoming') {
-      // Show only pending or accepted bookings with future dates
-      // Explicitly exclude cancelled bookings from upcoming
-      return (normalizedStatus === 'pending' || normalizedStatus === 'accepted') &&
-             bookingDate >= now;
+      // Upcoming: searching, matched, in_progress, pending statuses OR future/today dates
+      const isFutureOrToday = bookingDateOnly >= todayOnly;
+      const isActiveStatus = ['searching', 'matched', 'in_progress', 'pending'].includes(booking.displayStatus);
+      return isActiveStatus && isFutureOrToday;
     } else {
-      // Past tab shows:
-      // 1. All completed bookings
-      // 2. All cancelled/rejected bookings (regardless of date)
-      // 3. Any booking with a past date
-      return normalizedStatus === 'completed' ||
-             normalizedStatus === 'cancelled' ||
-             normalizedStatus === 'rejected' ||
-             bookingDate < now;
+      // Past: completed, cancelled, no_accept statuses OR past dates
+      const isPastDate = bookingDateOnly < todayOnly;
+      const isCompletedStatus = ['completed', 'cancelled', 'no_accept'].includes(booking.displayStatus);
+      return isCompletedStatus || isPastDate;
     }
   });
 
-  const renderBookingCard = (booking: SeekerBooking) => {
+  const renderBookingCard = (booking: UnifiedBooking) => {
     // Map API fields to expected fields
-    const bookingDate = booking.scheduledDate || booking.serviceStartDate || booking.createdAt;
-    const bookingCost = booking.totalCost ?? booking.totalAmount ?? 0;
-    const displayStatus = (booking.status as any) === 'canceled' ? 'cancelled' : booking.status;
+    const bookingDate = booking.serviceStartDate || booking.createdAt;
     const { title, subtitle } = getBookingDisplayInfo(booking);
+    const statusDisplay = getStatusDisplay(booking);
+
+    // Navigate to appropriate detail screen
+    const handlePress = () => {
+      if (booking.type === 'service_request') {
+        navigation.navigate('ServiceRequestDetails', { requestId: booking.id });
+      } else {
+        navigation.navigate('SeekerOrderDetail', { orderId: booking.id });
+      }
+    };
 
     return (
       <TouchableOpacity
-        key={booking._id}
+        key={booking.id}
         style={styles.bookingCard}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate('SeekerOrderDetail', { orderId: booking._id })}
+        onPress={handlePress}
       >
         <View style={styles.bookingHeader}>
           <View style={styles.bookingTitleRow}>
@@ -230,29 +283,34 @@ const BookingsScreen = () => {
                 </Text>
               )}
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(booking.status)}15` }]}>
-              <Ionicons
-                name={getStatusIcon(booking.status)}
-                size={12}
-                color={getStatusColor(booking.status)}
-              />
-              <Text style={[styles.statusText, { color: getStatusColor(booking.status) }]}>
-                {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
+            <View style={[styles.statusBadge, { backgroundColor: `${statusDisplay.color}15` }]}>
+              {statusDisplay.showAnimation ? (
+                <RippleAnimation color={statusDisplay.color} size={12} duration={1500} />
+              ) : (
+                <Ionicons
+                  name={statusDisplay.icon}
+                  size={12}
+                  color={statusDisplay.color}
+                />
+              )}
+              <Text style={[styles.statusText, { color: statusDisplay.color, marginLeft: statusDisplay.showAnimation ? 8 : 4 }]}>
+                {statusDisplay.label}
               </Text>
             </View>
           </View>
         </View>
 
         <View style={styles.bookingDetails}>
+          {/* Show status sublabel if available */}
+          {statusDisplay.sublabel && (
+            <View style={styles.detailRow}>
+              <Text style={styles.statusSublabel}>{statusDisplay.sublabel}</Text>
+            </View>
+          )}
+
           <View style={styles.detailRow}>
             <Ionicons name="calendar-outline" size={14} color={COLORS_MINIMAL.text.muted} />
             <Text style={styles.detailText}>{formatDate(bookingDate)}</Text>
-            {booking.scheduledTime && (
-              <>
-                <Text style={styles.detailSeparator}>•</Text>
-                <Text style={styles.detailText}>{booking.scheduledTime}</Text>
-              </>
-            )}
           </View>
 
           {booking.providerName && (
@@ -279,13 +337,26 @@ const BookingsScreen = () => {
               </Text>
             </View>
           )}
+
+          {/* Show budget range for service requests without a price */}
+          {booking.type === 'service_request' && !booking.totalAmount && booking.budget && (
+            <View style={styles.detailRow}>
+              <Ionicons name="cash-outline" size={14} color={COLORS_MINIMAL.text.muted} />
+              <Text style={styles.detailText}>
+                Budget: ₹{booking.budget.min.toLocaleString()} - ₹{booking.budget.max.toLocaleString()}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.bookingFooter}>
-          <View style={styles.priceContainer}>
-            <Text style={styles.priceLabel}>Total</Text>
-            <Text style={styles.priceValue}>₹{bookingCost.toLocaleString()}</Text>
-          </View>
+          {/* Only show price if available (hide for unmatched service requests) */}
+          {booking.totalAmount && (
+            <View style={styles.priceContainer}>
+              <Text style={styles.priceLabel}>Total</Text>
+              <Text style={styles.priceValue}>₹{booking.totalAmount.toLocaleString()}</Text>
+            </View>
+          )}
           <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
         </View>
       </TouchableOpacity>
@@ -478,6 +549,12 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  statusSublabel: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS_MINIMAL.text.secondary,
+    fontStyle: 'italic',
   },
   bookingDetails: {
     gap: 8,
