@@ -189,14 +189,20 @@ const ServiceRequestDetailsScreen = () => {
     // Extract location from address (get first part before comma)
     if (currentRequest.address) {
       const locationPart = currentRequest.address.split(',')[0].trim();
-      parts.push(locationPart);
+      if (locationPart) parts.push(locationPart);
     }
 
     // Format date
     if (currentRequest.serviceStartDate) {
-      const date = new Date(currentRequest.serviceStartDate);
-      const formatted = date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
-      parts.push(formatted);
+      try {
+        const date = new Date(currentRequest.serviceStartDate);
+        if (!isNaN(date.getTime())) {
+          const formatted = date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+          parts.push(formatted);
+        }
+      } catch (e) {
+        console.error('Error formatting service start date:', e);
+      }
     }
 
     // Add duration from metadata
@@ -206,7 +212,7 @@ const ServiceRequestDetailsScreen = () => {
       parts.push(currentRequest.metadata.durationLabel);
     }
 
-    return parts.join(' • ');
+    return parts.length > 0 ? parts.join(' • ') : 'Service Request';
   };
 
   // Get status badge configuration
@@ -268,71 +274,16 @@ const ServiceRequestDetailsScreen = () => {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
-
-          {/* Service Details */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Service Details</Text>
-
-            <View style={styles.detailRow}>
-              <MaterialIcons name="calendar-today" size={20} color={COLORS.TEXT.SECONDARY} />
-              <View style={styles.detailContent}>
-                <Text style={styles.detailLabel}>Service Period</Text>
-                <Text style={styles.detailValue}>
-                  {ServiceRequestService.formatRequestDate(currentRequest.serviceStartDate)} - {' '}
-                  {ServiceRequestService.formatRequestDate(currentRequest.serviceEndDate)}
-                </Text>
-              </View>
-            </View>
-
-            {currentRequest.budget && (
-              <View style={styles.detailRow}>
-                <MaterialCommunityIcons
-                  name="currency-inr"
-                  size={20}
-                  color={COLORS.TEXT.SECONDARY}
-                />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Budget Range</Text>
-                  <Text style={styles.detailValue}>
-                    ₹{currentRequest.budget.min} - ₹{currentRequest.budget.max}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {currentRequest.metadata?.quantity && (
-              <View style={styles.detailRow}>
-                <MaterialIcons name="straighten" size={20} color={COLORS.TEXT.SECONDARY} />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Quantity</Text>
-                  <Text style={styles.detailValue}>
-                    {currentRequest.metadata.quantity} {currentRequest.metadata.unitOfMeasure}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {currentRequest.categoryId && typeof currentRequest.categoryId === 'object' && (
-              <View style={styles.detailRow}>
-                <MaterialIcons name="category" size={20} color={COLORS.TEXT.SECONDARY} />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Category</Text>
-                  <Text style={styles.detailValue}>{currentRequest.categoryId.name}</Text>
-                </View>
-              </View>
-            )}
-          </View>
-
           {/* Map - Figma Design */}
-          {currentRequest.location && (
+          {currentRequest.location && currentRequest.location.coordinates && currentRequest.location.coordinates.length === 2 && (
             <View style={styles.mapSection}>
               <View style={styles.mapContainerNew}>
                 <MapView
                   provider={PROVIDER_GOOGLE}
                   style={styles.mapNew}
                   initialRegion={{
-                    latitude: currentRequest.location.coordinates[1],
-                    longitude: currentRequest.location.coordinates[0],
+                    latitude: currentRequest.location.coordinates[1] || 0,
+                    longitude: currentRequest.location.coordinates[0] || 0,
                     latitudeDelta: isSearching ? 0.02 : 0.01,
                     longitudeDelta: isSearching ? 0.02 : 0.01,
                   }}
@@ -501,72 +452,6 @@ const ServiceRequestDetailsScreen = () => {
             </View>
           )}
 
-          {/* Seeker/Provider Info - Keep for reference but hidden in Figma design */}
-          <View style={[styles.section, { display: 'none' }]}>
-            <Text style={styles.sectionTitle}>
-              {isSeeker ? 'Request Information' : 'Seeker Information'}
-            </Text>
-
-            {isSeeker ? (
-              <>
-                {currentRequest.matchedProviderIds && (
-                  <View style={styles.infoRow}>
-                    <MaterialIcons name="group" size={20} color={COLORS.PRIMARY.MAIN} />
-                    <Text style={styles.infoText}>
-                      {currentRequest.matchedProviderIds.length} providers matched
-                    </Text>
-                  </View>
-                )}
-                {currentRequest.viewCount > 0 && (
-                  <View style={styles.infoRow}>
-                    <Ionicons name="eye-outline" size={20} color={COLORS.TEXT.SECONDARY} />
-                    <Text style={styles.infoText}>
-                      Viewed by {currentRequest.viewCount} providers
-                    </Text>
-                  </View>
-                )}
-                {currentRequest.acceptedProviderId && (
-                  <View style={styles.infoRow}>
-                    <MaterialIcons name="check-circle" size={20} color="#4CAF50" />
-                    <Text style={styles.infoText}>
-                      Accepted by provider
-                    </Text>
-                  </View>
-                )}
-              </>
-            ) : (
-              <>
-                {typeof currentRequest.seekerId === 'object' && (
-                  <>
-                    <View style={styles.infoRow}>
-                      <Ionicons name="person-outline" size={20} color={COLORS.TEXT.SECONDARY} />
-                      <Text style={styles.infoText}>{currentRequest.seekerId.name}</Text>
-                    </View>
-                    {currentRequest.seekerId.phone && (
-                      <TouchableOpacity style={styles.infoRow} onPress={handleContactSeeker}>
-                        <Ionicons name="call-outline" size={20} color={COLORS.PRIMARY.MAIN} />
-                        <Text style={[styles.infoText, { color: COLORS.PRIMARY.MAIN }]}>
-                          {currentRequest.seekerId.phone}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </View>
-
-          {/* Expiry Info */}
-          <View style={styles.section}>
-            <View style={styles.expiryInfo}>
-              <MaterialIcons name="timer" size={20} color={COLORS.TEXT.SECONDARY} />
-              <Text style={styles.expiryText}>
-                {isExpired
-                  ? 'This request has expired'
-                  : `Expires on ${new Date(currentRequest.expiresAt).toLocaleString()}`}
-              </Text>
-            </View>
-          </View>
         </ScrollView>
 
         {/* Action Buttons */}
