@@ -71,6 +71,7 @@ export default function HomeScreen() {
   const [currentAddress, setCurrentAddress] = useState<Address | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customDate, setCustomDate] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
@@ -120,7 +121,11 @@ export default function HomeScreen() {
   // Initialize selectedDate from Redux if available
   useEffect(() => {
     if (startDate) {
-      setSelectedDate(new Date(startDate));
+      const initialSelected = new Date(startDate);
+      setSelectedDate(initialSelected);
+      if (endDate && endDate === startDate) {
+        setCustomDate(startDate);
+      }
     }
   }, [startDate]);
 
@@ -473,6 +478,26 @@ export default function HomeScreen() {
         <View style={styles.dateSection}>
           <Text style={styles.dateLabel}>When do you need it ?</Text>
           <View style={styles.dateButtons}>
+            {customDate && (() => {
+              const isSelected = selectedDate.toISOString().split('T')[0] === customDate;
+              return (
+                <TouchableOpacity
+                  style={[styles.dateButton, isSelected && styles.dateButtonActive]}
+                  onPress={() => {
+                    const selected = new Date(customDate);
+                    setSelectedDate(selected);
+                    dispatch(setDateRange({ startDate: customDate, endDate: customDate }));
+                  }}
+                >
+                  <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextActive]}>
+                    {new Date(customDate).toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'short',
+                    })}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
             <TouchableOpacity 
               style={[styles.dateButton, 
                 selectedDate.toDateString() === new Date().toDateString() && styles.dateButtonActive]}
@@ -481,6 +506,7 @@ export default function HomeScreen() {
                 setSelectedDate(today);
                 const dateString = today.toISOString().split('T')[0];
                 dispatch(setDateRange({ startDate: dateString, endDate: dateString }));
+                setCustomDate(null);
               }}
             >
               <Text style={[styles.dateButtonText, 
@@ -501,6 +527,7 @@ export default function HomeScreen() {
                 setSelectedDate(tomorrow);
                 const dateString = tomorrow.toISOString().split('T')[0];
                 dispatch(setDateRange({ startDate: dateString, endDate: dateString }));
+                setCustomDate(null);
               }}
             >
               <Text style={[styles.dateButtonText, 
@@ -584,6 +611,8 @@ export default function HomeScreen() {
             <DateRangeCalendar
               onConfirm={(start, end) => {
                 dispatch(setDateRange({ startDate: start, endDate: end }));
+                setCustomDate(start === end ? start : null);
+                setSelectedDate(new Date(start));
                 setShowDatePicker(false);
               }}
               initialStartDate={startDate ?? undefined}

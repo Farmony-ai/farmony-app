@@ -46,7 +46,9 @@ export interface CreateServiceRequestDto {
   subCategoryId?: string;
   title: string;
   description: string;
-  location: {
+  addressId?: string;
+  serviceAddressId?: string;
+  location?: {
     lat: number;
     lon: number;
   };

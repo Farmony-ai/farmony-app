@@ -27,6 +27,7 @@ import { RootState, AppDispatch } from '../store';
 import { createServiceRequest } from '../store/slices/serviceRequestsSlice';
 import CatalogueService, { Category, SubCategory } from '../services/CatalogueService';
 import AddressService, { Address } from '../services/AddressService';
+import { CreateServiceRequestDto } from '../services/ServiceRequestService';
 
 type CategoryHierarchyEntry = {
   category: Category;
@@ -373,15 +374,19 @@ useEffect(() => {
 
     const addressText = formatAddress(selectedAddress);
 
-    const requestData = {
+    const requestData: CreateServiceRequestDto = {
       categoryId: selectedCategory._id,
       subCategoryId: selectedSubCategory?._id,
       title: serviceTitle,
       description: descriptionLines.join('\n'),
-      location: {
-        lat: latitude,
-        lon: longitude,
-      },
+      ...(selectedAddress?._id
+        ? { addressId: selectedAddress._id }
+        : {
+            location: {
+              lat: latitude,
+              lon: longitude,
+            },
+          }),
       address: addressText || undefined,
       serviceStartDate: selectedDate,
       serviceEndDate: selectedDate,
