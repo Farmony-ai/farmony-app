@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  RefreshControl, 
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
   StatusBar,
-  ActivityIndicator 
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -17,6 +18,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import SeekerService, { UnifiedBooking } from '../services/SeekerService';
 import RippleAnimation from '../components/RippleAnimation';
+import categoryIcons from '../utils/icons';
 import UnifiedBookingSocketHandler from '../services/UnifiedBookingSocketHandler';
 
 // Ultra-minimal color scheme
@@ -35,6 +37,84 @@ const COLORS_MINIMAL = {
   danger: '#EF4444',
   info: '#3B82F6',
 };
+
+const ICON_KEY_ALIASES: Record<string, string> = {
+  water: 'water-pump',
+  pump: 'water-pump',
+  'water-pump': 'water-pump',
+  irrigation: 'sprinkler',
+  sprinkler: 'sprinkler',
+  drip: 'drip',
+  tractor: 'tractor',
+  rotavator: 'rotavator',
+  harvester: 'harvester',
+  thresher: 'thresher',
+  plough: 'plough',
+  sprayer: 'sprayer',
+  'seed-drill': 'seed-drill',
+  drill: 'drill',
+  welder: 'welder',
+  electrician: 'electrician',
+  plumber: 'plumber',
+  farmer: 'farmer',
+  worker: 'worker',
+  carpenter: 'carpenter',
+  mason: 'mason',
+  painter: 'painter',
+  'hand-tools': 'hand-tools',
+  'power-tools': 'power-tools',
+  tools: 'tools',
+};
+
+const TITLE_KEYWORD_ALIASES: Record<string, string> = {
+  'water pump': 'water-pump',
+  'pump': 'water-pump',
+  'tractor': 'tractor',
+  'rotavator': 'rotavator',
+  'harvester': 'harvester',
+  'thresher': 'thresher',
+  'plough': 'plough',
+  'seed drill': 'seed-drill',
+  'sprayer': 'sprayer',
+  'drip': 'drip',
+  'sprinkler': 'sprinkler',
+  'flour mill': 'flour-mill',
+  'oil press': 'oil-press',
+  'welder': 'welder',
+  'electrician': 'electrician',
+  'plumber': 'plumber',
+  'carpenter': 'carpenter',
+  'mason': 'mason',
+  'painter': 'painter',
+  'worker': 'worker',
+  'farmer': 'farmer',
+};
+
+const TITLE_STOP_WORDS = new Set([
+  'hp',
+  'kw',
+  'ton',
+  'tons',
+  'ltr',
+  'litre',
+  'liter',
+  'rent',
+  'rental',
+  'hire',
+  'service',
+  'services',
+  'job',
+  'unit',
+  'units',
+  'for',
+  'and',
+  'with',
+  'of',
+  'at',
+  'the',
+  'a',
+  'an',
+]);
 
 const BookingsScreen = () => {
   const navigation = useNavigation<any>();
@@ -118,54 +198,67 @@ const BookingsScreen = () => {
     switch (booking.displayStatus) {
       case 'searching':
         const minutes = booking.searchElapsedMinutes || 0;
-        const formattedTime = `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
         return {
           label: 'Searching',
-          sublabel: `Finding provider... ${formattedTime} elapsed`,
-          color: COLORS_MINIMAL.info,
+          sublabel:
+            minutes > 0
+              ? `Finding provider • ${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')} elapsed`
+              : 'Finding provider',
+          color: '#2563EB',
+          chipBackground: 'rgba(37, 99, 235, 0.12)',
           icon: 'search-outline',
           showAnimation: true,
         };
       case 'matched':
         return {
           label: 'Matched',
-          sublabel: booking.providerName ? `${booking.providerName} • ETA 23m` : 'Provider assigned',
-          color: COLORS_MINIMAL.accent,
+          sublabel: booking.providerName
+            ? `${booking.providerName}${
+                booking.providerEta ? ` • ETA ${booking.providerEta}` : ''
+              }`
+            : 'Provider assigned',
+          color: '#059669',
+          chipBackground: 'rgba(5, 150, 105, 0.14)',
           icon: 'checkmark-circle-outline',
         };
       case 'in_progress':
         return {
           label: 'In Progress',
-          sublabel: 'On job • 2h 10m',
-          color: COLORS_MINIMAL.accent,
+          sublabel: 'Job in progress',
+          color: '#0F172A',
+          chipBackground: 'rgba(15, 23, 42, 0.12)',
           icon: 'time-outline',
         };
       case 'no_accept':
         return {
-          label: 'No Accept',
+          label: 'No providers',
           sublabel: 'No provider accepted',
-          color: COLORS_MINIMAL.warning,
+          color: '#EA580C',
+          chipBackground: 'rgba(234, 88, 12, 0.14)',
           icon: 'alert-circle-outline',
         };
       case 'completed':
         return {
           label: 'Completed',
-          sublabel: booking.totalAmount ? `₹${booking.totalAmount.toLocaleString()}` : 'Completed',
-          color: COLORS_MINIMAL.text.muted,
+          sublabel: booking.totalAmount ? `Paid ₹${booking.totalAmount.toLocaleString('en-IN')}` : 'Completed',
+          color: '#475569',
+          chipBackground: 'rgba(148, 163, 184, 0.16)',
           icon: 'checkmark-done-outline',
         };
       case 'cancelled':
         return {
           label: 'Cancelled',
           sublabel: 'Cancelled',
-          color: COLORS_MINIMAL.text.muted,
+          color: '#94A3B8',
+          chipBackground: 'rgba(226, 232, 240, 0.5)',
           icon: 'close-circle-outline',
         };
       case 'pending':
         return {
           label: 'Pending',
           sublabel: 'Awaiting confirmation',
-          color: COLORS_MINIMAL.warning,
+          color: '#F59E0B',
+          chipBackground: 'rgba(245, 158, 11, 0.14)',
           icon: 'time-outline',
         };
       default:
@@ -173,38 +266,237 @@ const BookingsScreen = () => {
           label: booking.displayStatus,
           sublabel: '',
           color: COLORS_MINIMAL.text.secondary,
+          chipBackground: 'rgba(148, 163, 184, 0.12)',
           icon: 'ellipse-outline',
         };
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    const display = getStatusDisplay({ displayStatus: status } as UnifiedBooking);
-    return display.icon || 'ellipse-outline';
-  };
-
-  const getStatusColor = (status: string) => {
-    const display = getStatusDisplay({ displayStatus: status } as UnifiedBooking);
-    return display.color || COLORS_MINIMAL.text.muted;
-  };
-
-
-  const formatDate = (dateString: string) => {
+  const formatDateShort = (dateString: string | undefined) => {
+    if (!dateString) return null;
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString('en-GB', {
       day: 'numeric',
-      year: 'numeric'
+      month: 'short',
     });
   };
 
-  const formatTime = (dateString: string) => {
+  const formatTimeShort = (dateString: string | undefined) => {
+    if (!dateString) return null;
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true
     });
+  };
+
+  const coerceNumber = (value: any) => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value.replace(/[^0-9.]/g, ''));
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
+
+  const formatCurrency = (value: number | null | undefined) => {
+    if (value === null || value === undefined || Number.isNaN(value)) return null;
+    return `₹ ${value.toLocaleString('en-IN', {
+      maximumFractionDigits: 0,
+    })}`;
+  };
+
+  const slugifyIconKey = (value: string | null | undefined) => {
+    if (!value) return null;
+    const slug = value
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, '-and-')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    return slug || null;
+  };
+
+  const extractIconCandidates = (entity: any): string[] => {
+    if (!entity) return [];
+
+    if (typeof entity === 'string') {
+      const slug = slugifyIconKey(entity);
+      return slug ? [slug, entity] : [entity];
+    }
+
+    const candidates: string[] = [];
+    const possibleKeys = [
+      'icon',
+      'iconKey',
+      'iconName',
+      'iconSlug',
+      'slug',
+      'code',
+      'key',
+      'imageKey',
+      'image',
+    ];
+
+    possibleKeys.forEach((key) => {
+      const value = entity?.[key];
+      if (typeof value === 'string' && value.trim()) {
+        candidates.push(value.trim());
+      }
+    });
+
+    if (typeof entity?.name === 'string') {
+      const slug = slugifyIconKey(entity.name);
+      if (slug) candidates.push(slug);
+    }
+
+    if (typeof entity?.title === 'string') {
+      const slug = slugifyIconKey(entity.title);
+      if (slug) candidates.push(slug);
+    }
+
+    if (typeof entity?.category === 'string') {
+      const slug = slugifyIconKey(entity.category);
+      if (slug) candidates.push(slug);
+    }
+
+    if (typeof entity?.subcategory === 'string') {
+      const slug = slugifyIconKey(entity.subcategory);
+      if (slug) candidates.push(slug);
+    }
+
+    return candidates;
+  };
+
+  const getServiceIconSource = (booking: UnifiedBooking) => {
+    const candidates: string[] = [];
+
+    const lowerTitle = (booking.title || '').toLowerCase();
+    if (lowerTitle) {
+      Object.entries(TITLE_KEYWORD_ALIASES).forEach(([keyword, iconKey]) => {
+        if (lowerTitle.includes(keyword)) {
+          candidates.push(iconKey);
+        }
+      });
+    }
+
+    const subcategoryCandidates = [
+      (booking as any).subcategory,
+      (booking as any).subCategory,
+      (booking as any).subCategoryId,
+      (booking.metadata as any)?.subcategory,
+      (booking.metadata as any)?.subCategory,
+    ];
+
+    const categoryCandidates = [
+      booking.category,
+      (booking as any).categoryId,
+      (booking.metadata as any)?.category,
+    ];
+
+    subcategoryCandidates.forEach((entity) => {
+      candidates.push(...extractIconCandidates(entity));
+    });
+    categoryCandidates.forEach((entity) => {
+      candidates.push(...extractIconCandidates(entity));
+    });
+
+    const titleSlug = slugifyIconKey(booking.title);
+    if (titleSlug) {
+      candidates.push(titleSlug);
+
+      const parts = titleSlug
+        .split('-')
+        .filter(Boolean)
+        .filter((part) => !TITLE_STOP_WORDS.has(part))
+        .filter((part) => !/^\d+$/.test(part));
+
+      for (let len = Math.min(3, parts.length); len >= 2; len -= 1) {
+        for (let i = 0; i <= parts.length - len; i += 1) {
+          const segment = parts.slice(i, i + len).join('-');
+          candidates.push(segment);
+        }
+      }
+
+      parts.forEach((part) => candidates.push(part));
+    }
+
+    const normalizedCandidates = candidates
+      .map((candidate) => {
+        if (!candidate) return null;
+        const normalized = slugifyIconKey(candidate) || candidate;
+        return ICON_KEY_ALIASES[normalized] || normalized;
+      })
+      .filter(Boolean) as string[];
+
+    for (const candidate of normalizedCandidates) {
+      if (candidate && categoryIcons[candidate]) {
+        return categoryIcons[candidate];
+      }
+    }
+
+    return categoryIcons['tools'];
+  };
+
+  const getDisplayId = (booking: UnifiedBooking) => {
+    const raw =
+      booking.referenceNumber ||
+      booking.displayId ||
+      booking.shortCode ||
+      booking.bookingCode ||
+      booking.orderNumber ||
+      booking.id;
+    if (!raw) return null;
+    const cleaned = raw.toString().replace(/^#/, '');
+    if (!cleaned) return null;
+    if (cleaned === booking.id && cleaned.length > 8) {
+      return `#${cleaned.slice(-8).toUpperCase()}`;
+    }
+    return `#${cleaned}`;
+  };
+
+  const getDurationLabel = (booking: UnifiedBooking) => {
+    const durationLabel =
+      booking.metadata?.durationLabel ||
+      (booking.metadata?.durationHours
+        ? `${booking.metadata.durationHours} hrs`
+        : null);
+    return durationLabel || null;
+  };
+
+  const getPriceBadge = (booking: UnifiedBooking) => {
+    const totalAmount = coerceNumber(booking.totalAmount);
+    const quotedPrice = coerceNumber(booking.metadata?.quotedPrice);
+    const estimatedAmount = coerceNumber(booking.estimatedAmount);
+    const budgetMax =
+      typeof booking.budget === 'object' ? coerceNumber(booking.budget?.max) : null;
+    const budgetScalar =
+      typeof booking.budget === 'number' ? coerceNumber(booking.budget) : null;
+
+    const amount =
+      totalAmount ??
+      quotedPrice ??
+      estimatedAmount ??
+      budgetMax ??
+      budgetScalar;
+
+    if (!amount) return null;
+
+    const formatted = formatCurrency(amount);
+    if (!formatted) return null;
+
+    const isLocked = ['matched', 'in_progress', 'completed'].includes(
+      booking.displayStatus || ''
+    );
+
+    return {
+      text: `${formatted} ${isLocked ? 'locked' : '(est)'}`,
+      variant: isLocked ? 'locked' : 'estimate',
+    };
   };
 
   // Helper function to get display title and subtitle from booking
@@ -277,10 +569,21 @@ const BookingsScreen = () => {
   console.log(`BookingsScreen: Filtered ${filteredBookings.length} bookings for ${activeTab} tab`);
 
   const renderBookingCard = (booking: UnifiedBooking) => {
-    // Map API fields to expected fields
     const bookingDate = booking.serviceStartDate || booking.createdAt;
     const { title, subtitle } = getBookingDisplayInfo(booking);
     const statusDisplay = getStatusDisplay(booking);
+    const serviceIcon = getServiceIconSource(booking);
+    const displayId = getDisplayId(booking);
+    const fallbackId =
+      !displayId && booking.id ? `#${booking.id.slice(-8).toUpperCase()}` : null;
+    const priceBadge = getPriceBadge(booking);
+    const locationLabel = booking.location?.address
+      ? booking.location.address.split(',')[0]?.trim()
+      : null;
+    const dateLabel = formatDateShort(bookingDate);
+    const durationLabel = getDurationLabel(booking);
+    const fallbackTime = durationLabel ? null : formatTimeShort(bookingDate);
+    const metaParts = [locationLabel, dateLabel, durationLabel || fallbackTime].filter(Boolean);
 
     // Navigate to appropriate detail screen
     const handlePress = () => {
@@ -298,98 +601,82 @@ const BookingsScreen = () => {
     return (
       <TouchableOpacity
         key={booking.id}
-        style={styles.bookingCard}
+        style={styles.bookingItem}
         activeOpacity={0.7}
         onPress={handlePress}
       >
-        <View style={styles.bookingHeader}>
-          <View style={styles.bookingTitleRow}>
-            <View style={styles.titleContainer}>
-              <Text style={styles.bookingTitle}>
-                {title}
+        <View style={styles.bookingRow}>
+          <Image source={serviceIcon} style={styles.serviceIcon} resizeMode="contain" />
+          <View style={styles.bookingContent}>
+            <View style={styles.bookingTopRow}>
+              <View style={styles.bookingTitleStack}>
+                <Text style={styles.bookingTitle}>{title}</Text>
+                {(displayId || fallbackId) && (
+                  <Text style={styles.bookingIdText}>{displayId || fallbackId}</Text>
+                )}
+              </View>
+              {priceBadge ? (
+                <View
+                  style={[
+                    styles.priceBadge,
+                    priceBadge.variant === 'locked'
+                      ? styles.priceBadgeLocked
+                      : styles.priceBadgeEstimate,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.priceBadgeText,
+                      priceBadge.variant === 'locked'
+                        ? styles.priceBadgeTextLocked
+                        : styles.priceBadgeTextEstimate,
+                    ]}
+                  >
+                    {priceBadge.text}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {subtitle ? (
+              <Text style={styles.bookingSubtitle} numberOfLines={1}>
+                {subtitle}
               </Text>
-              {subtitle && (
-                <Text style={styles.bookingSubtitle}>
-                  {subtitle}
+            ) : null}
+
+            <View style={styles.statusLine}>
+              <View
+                style={[
+                  styles.statusChip,
+                  { backgroundColor: statusDisplay.chipBackground || 'rgba(148, 163, 184, 0.12)' },
+                ]}
+              >
+                {statusDisplay.showAnimation ? (
+                  <View style={styles.statusChipAnimation}>
+                    <RippleAnimation color={statusDisplay.color} size={20} duration={1600} />
+                  </View>
+                ) : (
+                  <Ionicons name={statusDisplay.icon} size={14} color={statusDisplay.color} />
+                )}
+                <Text style={[styles.statusChipText, { color: statusDisplay.color }]}>
+                  {statusDisplay.label}
                 </Text>
-              )}
+              </View>
+              {statusDisplay.sublabel ? (
+                <Text style={styles.statusLineText} numberOfLines={1}>
+                  {statusDisplay.sublabel}
+                </Text>
+              ) : null}
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: `${statusDisplay.color}15` }]}>
-              {statusDisplay.showAnimation ? (
-                <RippleAnimation color={statusDisplay.color} size={12} duration={1500} />
-              ) : (
-                <Ionicons
-                  name={statusDisplay.icon}
-                  size={12}
-                  color={statusDisplay.color}
-                />
-              )}
-              <Text style={[styles.statusText, { color: statusDisplay.color, marginLeft: statusDisplay.showAnimation ? 8 : 4 }]}>
-                {statusDisplay.label}
+
+            {metaParts.length > 0 ? (
+              <Text style={styles.metaLine} numberOfLines={1}>
+                {metaParts.join(' • ')}
               </Text>
-            </View>
+            ) : null}
           </View>
         </View>
-
-        <View style={styles.bookingDetails}>
-          {/* Show status sublabel if available */}
-          {statusDisplay.sublabel && (
-            <View style={styles.detailRow}>
-              <Text style={styles.statusSublabel}>{statusDisplay.sublabel}</Text>
-            </View>
-          )}
-
-          <View style={styles.detailRow}>
-            <Ionicons name="calendar-outline" size={14} color={COLORS_MINIMAL.text.muted} />
-            <Text style={styles.detailText}>{formatDate(bookingDate)}</Text>
-          </View>
-
-          {booking.providerName && (
-            <View style={styles.detailRow}>
-              <Ionicons name="person-outline" size={14} color={COLORS_MINIMAL.text.muted} />
-              <Text style={styles.detailText}>{booking.providerName}</Text>
-            </View>
-          )}
-
-          {booking.location?.address && (
-            <View style={styles.detailRow}>
-              <Ionicons name="location-outline" size={14} color={COLORS_MINIMAL.text.muted} />
-              <Text style={styles.detailText} numberOfLines={1}>
-                {booking.location.address}
-              </Text>
-            </View>
-          )}
-
-          {booking.serviceEndDate && booking.serviceEndDate !== booking.serviceStartDate && (
-            <View style={styles.detailRow}>
-              <Ionicons name="time-outline" size={14} color={COLORS_MINIMAL.text.muted} />
-              <Text style={styles.detailText}>
-                Until {formatDate(booking.serviceEndDate)}
-              </Text>
-            </View>
-          )}
-
-          {/* Show budget range for service requests without a price */}
-          {booking.type === 'service_request' && !booking.totalAmount && booking.budget && (
-            <View style={styles.detailRow}>
-              <Ionicons name="cash-outline" size={14} color={COLORS_MINIMAL.text.muted} />
-              <Text style={styles.detailText}>
-                Budget: ₹{booking.budget.min.toLocaleString()} - ₹{booking.budget.max.toLocaleString()}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.bookingFooter}>
-          {/* Only show price if available (hide for unmatched service requests) */}
-          {booking.totalAmount && (
-            <View style={styles.priceContainer}>
-              <Text style={styles.priceLabel}>Total</Text>
-              <Text style={styles.priceValue}>₹{booking.totalAmount.toLocaleString()}</Text>
-            </View>
-          )}
-          <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
-        </View>
+        <View style={styles.listDivider} />
       </TouchableOpacity>
     );
   };
@@ -532,96 +819,111 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     alignItems: 'center',
   },
-  bookingCard: {
-    backgroundColor: COLORS_MINIMAL.background,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS_MINIMAL.border,
+  bookingItem: {
+    paddingVertical: 12,
   },
-  bookingHeader: {
-    marginBottom: 12,
-  },
-  bookingTitleRow: {
+  bookingRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 16,
   },
-  titleContainer: {
+  serviceIcon: {
+    width: 64,
+    height: 64,
+  },
+  bookingContent: {
     flex: 1,
-    marginRight: 12,
   },
   bookingTitle: {
     fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
+  bookingTitleStack: {
+    flex: 1,
+    marginRight: 12,
+  },
+  bookingIdText: {
+    marginTop: 2,
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS_MINIMAL.text.muted,
+  },
   bookingSubtitle: {
+    marginTop: 4,
     fontSize: 13,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.secondary,
-    marginTop: 2,
   },
-  statusBadge: {
+  bookingTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    gap: 4,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
-  statusText: {
-    fontSize: 11,
+  priceBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  priceBadgeEstimate: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  priceBadgeLocked: {
+    backgroundColor: 'rgba(5, 150, 105, 0.12)',
+    borderColor: '#34D399',
+  },
+  priceBadgeText: {
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.MEDIUM,
   },
-  statusSublabel: {
-    fontSize: 13,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS_MINIMAL.text.secondary,
-    fontStyle: 'italic',
+  priceBadgeTextEstimate: {
+    color: '#475569',
   },
-  bookingDetails: {
-    gap: 8,
-    marginBottom: 12,
+  priceBadgeTextLocked: {
+    color: '#047857',
   },
-  detailRow: {
+  statusLine: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 12,
+    gap: 10,
+  },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
     gap: 6,
   },
-  detailText: {
+  statusChipAnimation: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  statusLineText: {
+    flex: 1,
     fontSize: 13,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.secondary,
-    flex: 1,
   },
-  detailSeparator: {
+  metaLine: {
+    marginTop: 12,
     fontSize: 13,
-    color: COLORS_MINIMAL.text.muted,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS_MINIMAL.text.secondary,
   },
-  bookingFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS_MINIMAL.divider,
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-  },
-  priceLabel: {
-    fontSize: 12,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS_MINIMAL.text.muted,
-  },
-  priceValue: {
-    fontSize: 18,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS_MINIMAL.text.primary,
+  listDivider: {
+    marginTop: 18,
+    height: 1,
+    backgroundColor: COLORS_MINIMAL.divider,
   },
   emptyState: {
     alignItems: 'center',
