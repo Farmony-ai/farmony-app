@@ -1172,6 +1172,62 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.NEUTRAL.WHITE,
   },
+  // Custom Hours Modal Styles
+  customHoursTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.MD,
+    textAlign: 'center',
+  },
+  customHoursInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    borderRadius: BORDER_RADIUS.MD,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS,
+    marginBottom: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+  },
+  customHoursInput: {
+    flex: 1,
+    fontSize: FONT_SIZES.MD,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    marginLeft: SPACING.XS,
+    paddingVertical: SPACING.XS,
+  },
+  customHoursButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: SPACING.SM,
+  },
+  customHoursButton: {
+    flex: 1,
+    paddingVertical: SPACING.SM,
+    borderRadius: BORDER_RADIUS.MD,
+    alignItems: 'center',
+  },
+  customHoursCancelButton: {
+    backgroundColor: COLORS.BACKGROUND.SECONDARY,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  customHoursSubmitButton: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+  },
+  customHoursCancelText: {
+    fontSize: FONT_SIZES.MD,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  customHoursSubmitText: {
+    fontSize: FONT_SIZES.MD,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.NEUTRAL.WHITE,
+  },
 });
 
 export default CreateServiceRequestScreen;
