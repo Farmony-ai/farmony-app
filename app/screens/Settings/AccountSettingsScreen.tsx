@@ -96,6 +96,7 @@ const AccountSettingsScreen = () => {
   const [uploadingProfilePicture, setUploadingProfilePicture] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load user profile data including profile picture
   useEffect(() => {
@@ -124,7 +125,12 @@ const AccountSettingsScreen = () => {
                 console.warn('Invalid date format:', profileData.dateOfBirth);
               }
             }
-            // Add more fields as they become available in the backend
+            if (profileData.bio) {
+              setBio(profileData.bio);
+            }
+            if (profileData.occupation) {
+              setOccupation(profileData.occupation);
+            }
           }
         } catch (error) {
           console.error('Failed to load user profile:', error);
@@ -219,8 +225,75 @@ const AccountSettingsScreen = () => {
     }
   };
 
-  const handleSaveChanges = () => {
-    console.log('Profile changes saved (simulated).');
+  const handleSaveChanges = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'User ID not found');
+      return;
+    }
+
+    // Validate required fields
+    if (!name.trim()) {
+      Alert.alert('Validation Error', 'Name is required');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // Prepare update data
+      const updateData: any = {
+        name: name.trim(),
+      };
+
+      // Add optional fields if they exist
+      if (email && email.trim()) {
+        updateData.email = email.trim();
+      }
+
+      if (gender) {
+        updateData.gender = gender.toLowerCase();
+      }
+
+      if (dob) {
+        // Format date as YYYY-MM-DD
+        const year = dob.getFullYear();
+        const month = String(dob.getMonth() + 1).padStart(2, '0');
+        const day = String(dob.getDate()).padStart(2, '0');
+        updateData.dateOfBirth = `${year}-${month}-${day}`;
+      }
+
+      if (bio && bio.trim()) {
+        updateData.bio = bio.trim();
+      }
+
+      if (occupation && occupation.trim()) {
+        updateData.occupation = occupation.trim();
+      }
+
+      console.log('Updating user profile with data:', updateData);
+
+      // Call API to update user
+      const result = await usersAPI.updateUser(user.id, updateData);
+
+      if (result.success && result.data) {
+        // Update Redux store with new user data
+        dispatch(setUser({
+          ...user,
+          ...result.data.user,
+          profilePictureUrl: avatarUrl || user.profilePictureUrl,
+        }));
+
+        Alert.alert('Success', 'Profile updated successfully');
+        navigation.goBack();
+      } else {
+        Alert.alert('Update Failed', result.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Profile update error:', error);
+      Alert.alert('Update Error', 'An unexpected error occurred');
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   const formatDisplayDate = (date) => {
@@ -241,8 +314,12 @@ const AccountSettingsScreen = () => {
           <Ionicons name="arrow-back" size={24} color={COLORS_MINIMAL.text.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        <TouchableOpacity onPress={handleSaveChanges} activeOpacity={0.7}>
-          <Text style={styles.saveText}>Save</Text>
+        <TouchableOpacity onPress={handleSaveChanges} activeOpacity={0.7} disabled={isSaving}>
+          {isSaving ? (
+            <ActivityIndicator size="small" color={COLORS_MINIMAL.accent} />
+          ) : (
+            <Text style={styles.saveText}>Save</Text>
+          )}
         </TouchableOpacity>
       </View>
 

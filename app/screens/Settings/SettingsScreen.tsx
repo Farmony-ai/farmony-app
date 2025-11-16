@@ -100,11 +100,7 @@ const SettingsScreen = () => {
   };
 
   const renderHeader = () => (
-    <TouchableOpacity
-      style={styles.headerContainer}
-      onPress={() => navigation.navigate('AccountSettings')}
-      activeOpacity={0.7}
-    >
+    <View style={styles.headerContainer}>
       {currentUser.avatarUrl ? (
         <Image source={{ uri: currentUser.avatarUrl }} style={styles.avatar} />
       ) : (
@@ -121,10 +117,9 @@ const SettingsScreen = () => {
             </View>
           )}
         </View>
-        <Text style={styles.headerSubtitle}>View and edit profile</Text>
+        <Text style={styles.headerSubtitle}>{currentUser.phone}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={COLORS_MINIMAL.text.muted} />
-    </TouchableOpacity>
+    </View>
   );
 
   const sections = [
@@ -133,8 +128,9 @@ const SettingsScreen = () => {
       items: [
         { icon: 'person-outline', label: 'Edit Profile', onPress: () => navigation.navigate('AccountSettings') },
         { icon: 'location-outline', label: 'Addresses', onPress: () => navigation.navigate('AddressSelection') },
-        { icon: 'shield-checkmark-outline', label: 'Security', onPress: () => {} },
-        { icon: 'card-outline', label: 'Payment Methods', onPress: () => navigation.navigate('PaymentSettings') },
+        // Temporarily hidden: Security and Payment Methods
+        // { icon: 'shield-checkmark-outline', label: 'Security', onPress: () => {} },
+        // { icon: 'card-outline', label: 'Payment Methods', onPress: () => navigation.navigate('PaymentSettings') },
       ],
     },
     {
@@ -218,7 +214,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
@@ -261,6 +257,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS_MINIMAL.text.muted,
     marginTop: 2,
+  },
+  headerEmail: {
+    fontFamily: FONTS.POPPINS.REGULAR,
+    fontSize: 12,
+    color: COLORS_MINIMAL.text.muted,
+    marginTop: 1,
   },
   verifiedBadge: {
     backgroundColor: COLORS_MINIMAL.surface,

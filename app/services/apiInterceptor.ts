@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
+import TokenStorage from '../utils/TokenStorage';
+import firebaseTokenHelper from './firebaseTokenHelper';
 
 interface LoginResponse {
   access_token: string;
@@ -14,6 +16,8 @@ interface LoginResponse {
 class ApiInterceptor {
   private isRefreshing: boolean = false;
   private refreshSubscribers: Array<(token: string) => void> = [];
+  private lastRefreshAttempt: number = 0;
+  private readonly REFRESH_COOLDOWN_MS = 5000; // Prevent refresh spam
 
   // Subscribe to token refresh
   private subscribeToRefresh(callback: (token: string) => void) {
@@ -47,40 +51,32 @@ class ApiInterceptor {
     }
   }
 
-  // Save tokens to storage
+  // Save tokens to storage using TokenStorage utility
   private async saveTokens(accessToken: string, refreshToken: string, expiresIn?: number): Promise<void> {
     try {
-      const promises = [
-        AsyncStorage.setItem('access_token', accessToken),
-        AsyncStorage.setItem('refresh_token', refreshToken),
-        AsyncStorage.setItem('token', accessToken), // Legacy support
-      ];
-      
-      if (expiresIn) {
-        const expiryTime = new Date().getTime() + (expiresIn * 1000);
-        promises.push(AsyncStorage.setItem('token_expiry', expiryTime.toString()));
-      }
-      
-      await Promise.all(promises);
-      console.log('✅ Tokens saved successfully');
+      await TokenStorage.saveTokens({
+        accessToken,
+        refreshToken,
+        expiresIn: expiresIn || 900,
+        tokenType: 'Bearer',
+      });
+
+      // Also save legacy token for backward compatibility
+      await AsyncStorage.setItem('token', accessToken);
+      console.log('✅ [ApiInterceptor] Tokens saved successfully');
     } catch (error) {
-      console.error('Failed to save tokens:', error);
+      console.error('❌ [ApiInterceptor] Failed to save tokens:', error);
     }
   }
 
-  // Clear tokens from storage
+  // Clear tokens from storage using TokenStorage utility
   private async clearTokens(): Promise<void> {
     try {
-      await Promise.all([
-        AsyncStorage.removeItem('access_token'),
-        AsyncStorage.removeItem('refresh_token'),
-        AsyncStorage.removeItem('user'),
-        AsyncStorage.removeItem('token'), // Legacy
-        AsyncStorage.removeItem('token_expiry'),
-      ]);
-      console.log('✅ Tokens cleared');
+      await TokenStorage.clearTokens();
+      await AsyncStorage.removeItem('user'); // Also clear user data
+      console.log('✅ [ApiInterceptor] Tokens cleared');
     } catch (error) {
-      console.error('Failed to clear tokens:', error);
+      console.error('❌ [ApiInterceptor] Failed to clear tokens:', error);
     }
   }
 
@@ -95,32 +91,25 @@ class ApiInterceptor {
 
     try {
       console.log('🔄 Attempting token refresh...');
-      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken }),
-      });
 
-      const data = await response.json();
+      // Use Firebase SDK to refresh the ID token
+      // This is the recommended way for Firebase Authentication
+      const newIdToken = await firebaseTokenHelper.getIdToken(true); // Force refresh
 
-      if (response.ok && data.access_token) {
-        const { access_token, refresh_token, expires_in } = data;
-        await this.saveTokens(access_token, refresh_token || refreshToken, expires_in);
-        this.notifyRefreshSubscribers(access_token);
+      if (newIdToken) {
+        await this.saveTokens(newIdToken, refreshToken, 3600); // Firebase tokens expire in 1 hour
+        this.notifyRefreshSubscribers(newIdToken);
         this.isRefreshing = false;
-        console.log('✅ Token refreshed successfully');
-        return access_token;
+        console.log('✅ Token refreshed successfully via Firebase SDK');
+        return newIdToken;
       } else {
-        console.error('❌ Token refresh failed:', data);
+        console.error('❌ Token refresh failed - no Firebase user');
         await this.clearTokens();
         this.isRefreshing = false;
-        // IMPORTANT: Propagate logout or redirect to login screen from here in your app
         return null;
       }
     } catch (error) {
-      console.error('Token refresh failed:', error);
+      console.error('❌ Token refresh failed:', error);
       await this.clearTokens();
       this.isRefreshing = false;
       return null;
@@ -133,10 +122,25 @@ class ApiInterceptor {
     retryCount: number = 0
   ): Promise<{ success: boolean; data?: T; error?: string }> {
     try {
+      // **PROACTIVE REFRESH**: Check if token needs refresh before making request
+      const shouldRefresh = await TokenStorage.shouldRefreshToken();
+      if (shouldRefresh && retryCount === 0) {
+        const refreshToken = await TokenStorage.getRefreshToken();
+        if (refreshToken) {
+          const now = Date.now();
+          // Prevent refresh spam with cooldown
+          if (now - this.lastRefreshAttempt > this.REFRESH_COOLDOWN_MS) {
+            console.log('🔄 [ApiInterceptor] Proactive token refresh triggered');
+            this.lastRefreshAttempt = now;
+            await this.refreshAuthToken(refreshToken);
+          }
+        }
+      }
+
       const { accessToken } = await this.getStoredTokens();
       const url = `${API_BASE_URL}${endpoint}`;
 
-      console.log(`🔄 API Request: ${options.method || 'GET'} ${endpoint}`);
+      console.log(`📡 [ApiInterceptor] ${options.method || 'GET'} ${endpoint}`);
 
       const headers: any = { ...options.headers };
 
@@ -203,13 +207,13 @@ class ApiInterceptor {
     const refresh_token = response.refresh_token || '';
     const expires_in = response.expires_in || 900;
     const { user } = response;
-    
-    if (access_token && refresh_token) {
+
+    if (access_token) {
       await this.saveTokens(access_token, refresh_token, expires_in);
       await AsyncStorage.setItem('user', JSON.stringify(user));
       console.log('✅ Login response handled successfully');
     } else {
-      console.error('❌ Invalid login response - missing tokens');
+      console.error('❌ Invalid login response - missing access token');
     }
   }
 
@@ -237,13 +241,23 @@ class ApiInterceptor {
   // Logout
   async logout(): Promise<void> {
     try {
+      // Call backend logout endpoint to revoke Firebase refresh tokens
       await this.makeAuthenticatedRequest('/auth/logout', {
         method: 'POST',
       });
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Backend logout error:', error);
     } finally {
+      // Clear local tokens
       await this.clearTokens();
+
+      // Sign out from Firebase
+      try {
+        await firebaseTokenHelper.signOut();
+        console.log('✅ Signed out from Firebase');
+      } catch (error) {
+        console.error('❌ Firebase sign out error:', error);
+      }
     }
   }
 

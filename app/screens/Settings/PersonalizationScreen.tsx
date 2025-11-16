@@ -69,8 +69,15 @@ const PersonalizationScreen = () => {
   const navigation = useNavigation();
   const { user } = useSelector((state: RootState) => state.auth);
 
-  const [defaultLanding, setDefaultLanding] = useState(user?.preferences?.defaultLandingPage || 'Seeker');
-  const [defaultProviderTab, setDefaultProviderTab] = useState(user?.preferences?.defaultProviderTab || 'Active');
+  // Helper to capitalize first letter for display
+  const capitalize = (str: string) => str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
+
+  const [defaultLanding, setDefaultLanding] = useState(
+    capitalize(user?.preferences?.defaultLandingPage || 'seeker')
+  );
+  const [defaultProviderTab, setDefaultProviderTab] = useState(
+    capitalize(user?.preferences?.defaultProviderTab || 'active')
+  );
   const [language, setLanguage] = useState(user?.preferences?.preferredLanguage || 'English');
   const [theme, setTheme] = useState(user?.preferences?.theme || 'Light');
   const [notificationsEnabled, setNotificationsEnabled] = useState(user?.preferences?.notificationsEnabled ?? true);
@@ -145,12 +152,14 @@ const PersonalizationScreen = () => {
 
   const handleLandingChange = async (value) => {
     setDefaultLanding(value);
-    await persistPreferences({ defaultLandingPage: value });
+    // Convert to lowercase for backend
+    await persistPreferences({ defaultLandingPage: value.toLowerCase() });
   };
 
   const handleProviderTabChange = async (value) => {
     setDefaultProviderTab(value);
-    await persistPreferences({ defaultProviderTab: value });
+    // Convert to lowercase for backend
+    await persistPreferences({ defaultProviderTab: value.toLowerCase() });
   };
 
   const handleLanguageChange = async (value) => {

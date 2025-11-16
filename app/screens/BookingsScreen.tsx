@@ -651,13 +651,13 @@ const BookingsScreen = () => {
                   { backgroundColor: statusDisplay.chipBackground || 'rgba(148, 163, 184, 0.12)' },
                 ]}
               >
-                {statusDisplay.showAnimation ? (
+                {/* {statusDisplay.showAnimation ? (
                   <View style={styles.statusChipAnimation}>
                     <RippleAnimation color={statusDisplay.color} size={20} duration={1600} />
                   </View>
                 ) : (
                   <Ionicons name={statusDisplay.icon} size={14} color={statusDisplay.color} />
-                )}
+                )} */}
                 <Text style={[styles.statusChipText, { color: statusDisplay.color }]}>
                   {statusDisplay.label}
                 </Text>

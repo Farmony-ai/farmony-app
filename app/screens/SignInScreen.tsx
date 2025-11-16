@@ -188,26 +188,36 @@ const SignInScreen = () => {
 
   const handleVerifyOTP = async (otpString?: string) => {
     const otpCode = otpString || otp.join('');
-    
+
     if (otpCode.length !== 6) {
       setOTPError('Please enter all 6 digits');
       return;
     }
-    
+
     dispatch(clearError());
     setOTPError('');
-    
+
     try {
       if (!smsConfirmation) {
         setOTPError('Please request OTP first');
         return;
       }
-      
-      await firebaseSMSService.verifyOTP(smsConfirmation, otpCode);
-      
-      // OTP verified, now login
-      const result = await dispatch(otpLogin({ phone }));
-      
+
+      // Step 1: Verify OTP with Firebase and get UserCredential
+      const userCredential = await firebaseSMSService.verifyOTP(smsConfirmation, otpCode);
+
+      // Step 2: Get the Firebase ID token from the credential
+      const idToken = await userCredential.user.getIdToken();
+      console.log('✅ Got Firebase ID token');
+
+      // Step 3: Send ID token to backend for authentication
+      const phoneE164 = `+91${phone}`;
+      const result = await dispatch(otpLogin({
+        idToken,
+        phoneNumber: phoneE164,
+        name: 'User' // Default name, can be customized later
+      }));
+
       if (otpLogin.fulfilled.match(result)) {
         navigation.reset({
           index: 0,
@@ -217,6 +227,7 @@ const SignInScreen = () => {
         setOTPError('Login failed. Please try again.');
       }
     } catch (error: any) {
+      console.error('❌ OTP verification error:', error);
       setOTPError(error.message || 'Invalid OTP. Please try again.');
     }
   };

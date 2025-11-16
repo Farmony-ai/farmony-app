@@ -201,28 +201,48 @@ export default function HomeScreen() {
     if (user?.id) {
       try {
         const addresses = await AddressService.getUserAddresses(user.id);
+
+        // Handle case where user has no addresses yet
+        if (!addresses || addresses.length === 0) {
+          console.log('ℹ️ User has no saved addresses yet, using current location');
+          setCurrentAddress(null);
+          return;
+        }
+
         const defaultAddr = addresses.find(addr => addr.isDefault);
-        if (defaultAddr) {
+        if (defaultAddr && defaultAddr.coordinates && defaultAddr.coordinates.length === 2) {
           setCurrentAddress(defaultAddr);
           dispatch(setLocation({
             latitude: defaultAddr.coordinates[1],
             longitude: defaultAddr.coordinates[0],
-            city: defaultAddr.district || defaultAddr.state,
+            city: defaultAddr.district || defaultAddr.state || city || undefined,
           }));
         } else if (addresses.length > 0) {
-          // If no default address, use the first one
-          const firstAddr = addresses[0];
-          setCurrentAddress(firstAddr);
-          dispatch(setLocation({
-            latitude: firstAddr.coordinates[1],
-            longitude: firstAddr.coordinates[0],
-            city: firstAddr.district || firstAddr.state,
-          }));
+          // If no default address, use the first one with valid coordinates
+          const firstAddrWithCoords = addresses.find(addr =>
+            addr.coordinates &&
+            addr.coordinates.length === 2 &&
+            addr.coordinates[0] !== 0 &&
+            addr.coordinates[1] !== 0
+          );
+
+          if (firstAddrWithCoords) {
+            setCurrentAddress(firstAddrWithCoords);
+            dispatch(setLocation({
+              latitude: firstAddrWithCoords.coordinates[1],
+              longitude: firstAddrWithCoords.coordinates[0],
+              city: firstAddrWithCoords.district || firstAddrWithCoords.state || city || undefined,
+            }));
+          } else {
+            console.log('ℹ️ User addresses have no valid coordinates, using current location');
+            setCurrentAddress(null);
+          }
         }
       } catch (error: any) {
         console.error('Error fetching default address:', error);
         // Don't show alert here as it might be annoying on home screen
         // Just log the error and fall back to location-based detection
+        setCurrentAddress(null);
       }
     }
   };

@@ -319,11 +319,17 @@ const AddAddressScreen = () => {
   const handleSaveAddress = async () => {
     if (!validateForm()) return;
 
+    if (!user?.id) {
+      Alert.alert('Error', 'User not found. Please log in again.');
+      return;
+    }
+
     setLoading(true);
     try {
       const addressData: CreateAddressDto = {
-        userId: user?.id,
-        tag: addressTag,
+        userId: user.id,
+        addressType: addressTag.toLowerCase(),
+        customLabel: addressTag,
         addressLine1,
         addressLine2,
         village,
@@ -331,21 +337,24 @@ const AddAddressScreen = () => {
         district,
         state,
         pincode,
-        coordinates: [regionRef.current.longitude, regionRef.current.latitude],
+        location: {
+          type: 'Point',
+          coordinates: [regionRef.current.longitude, regionRef.current.latitude]
+        },
         isDefault: false,
       };
 
       if (isEditMode && editAddress) {
-        await AddressService.updateAddress(editAddress._id, addressData);
-        Alert.alert('Success', 'Location updated successfully');
+        await AddressService.updateAddress(user.id, editAddress._id, addressData);
+        Alert.alert('Success', 'Address updated successfully');
       } else {
         await AddressService.createAddress(addressData);
-        Alert.alert('Success', 'Location saved successfully');
+        Alert.alert('Success', 'Address saved successfully');
       }
       navigation.goBack();
     } catch (error: any) {
       console.error('Error saving address:', error);
-      Alert.alert('Error', 'Failed to save location. Please try again.');
+      Alert.alert('Error', 'Failed to save address. Please try again.');
     } finally {
       setLoading(false);
     }

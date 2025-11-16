@@ -113,14 +113,16 @@ const AddressSelectionScreen = () => {
       dispatch(setLocation({
         latitude: address.coordinates[1],
         longitude: address.coordinates[0],
-        city: address.district || address.state,
+        city: address.district || address.state || undefined,
       }));
     }
 
     // Set as default if not already
-    if (!address.isDefault) {
+    if (!address.isDefault && user?.id) {
       try {
-        await AddressService.setDefaultAddress(address._id);
+        // Backend endpoint doesn't exist yet, so this will fail
+        // TODO: Remove this alert once backend implements PATCH /users/:userId/default-address
+        await AddressService.setDefaultAddress(user.id, address._id);
 
         // Update local state to reflect the change
         setAddresses(prevAddresses =>
@@ -135,21 +137,15 @@ const AddressSelectionScreen = () => {
       } catch (error: any) {
         console.error('Error setting default address:', error);
 
-        // Show error message to user
-        Alert.alert(
-          'Error',
-          error?.message || 'Failed to set default address. Please try again.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Don't navigate away on error
-                return;
-              }
-            }
-          ]
+        // Since the endpoint doesn't exist, just update local state and continue
+        console.log('⚠️ Backend endpoint not available, updating local state only');
+        setAddresses(prevAddresses =>
+          prevAddresses.map(addr => ({
+            ...addr,
+            isDefault: addr._id === address._id
+          }))
         );
-        return; // Don't navigate away if there was an error
+        // Don't show error to user, just navigate back
       }
     }
 
@@ -174,9 +170,15 @@ const AddressSelectionScreen = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            if (!user?.id) {
+              Alert.alert('Error', 'User not found. Please try again.');
+              return;
+            }
+
             try {
-              await AddressService.deleteAddress(addressId);
+              await AddressService.deleteAddress(user.id, addressId);
               await fetchAddresses();
+              Alert.alert('Success', 'Address deleted successfully');
             } catch (error) {
               Alert.alert('Error', 'Failed to delete address. Please try again.');
             }
@@ -353,9 +355,9 @@ const AddressSelectionScreen = () => {
               </View>
               <Text style={styles.emptyStateTitle}>No addresses saved</Text>
               <Text style={styles.emptyStateText}>
-                Add your first address to get started
+                Add your first address to get started. You can save addresses for home, work, farm, or any other location.
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.emptyAddButton}
                 onPress={handleAddNewAddress}
                 activeOpacity={0.8}
