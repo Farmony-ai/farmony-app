@@ -1,10 +1,6 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
 import { Category, SubCategory } from './CatalogueService';
 import { ImagePickerResult } from './ImagePickerService';
 import apiInterceptor from './apiInterceptor';
-
-const BASE_URL = API_BASE_URL;
 
 export interface CreateListingPayload {
   providerId: string;
@@ -20,8 +16,8 @@ export interface CreateListingPayload {
   price: number;
   unitOfMeasure: string;
   minimumOrder: number;
-  availableFrom: string; 
-  availableTo: string; 
+  availableFrom: string;
+  availableTo: string;
   isActive: boolean;
   tags: string[];
   isVerified: boolean;
@@ -42,14 +38,6 @@ export interface PopulatedListing extends Omit<Listing, 'categoryId' | 'subCateg
 }
 
 class ListingService {
-  private getAuthHeaders(token?: string) {
-    return token ? {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    } : {};
-  }
-
   async createListing(payload: CreateListingPayload, token: string): Promise<Listing> {
     try {
       console.log('ListingService: Creating listing with payload:', payload);
@@ -68,7 +56,7 @@ class ListingService {
               type: photo.type || 'image/jpeg',
               name: photo.name || `photo_${index}.jpg`,
             } as any;
-            
+
             formData.append('photos', file);
           }
         });
@@ -104,14 +92,15 @@ class ListingService {
         firstPhotoUri: payload.photos?.[0]?.uri || 'none'
       });
 
-      const response = await axios.post(`${BASE_URL}/listings`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
+      const response = await apiInterceptor.makeAuthenticatedRequest<Listing>('/listings', {
+        method: 'POST',
+        body: formData,
       });
 
-      return response.data;
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.error || 'Failed to create listing');
     } catch (error: any) {
       console.error('ListingService: Error creating listing:', error);
       throw error;
@@ -120,11 +109,15 @@ class ListingService {
 
   async getProviderListings(providerId: string, token?: string): Promise<Listing[]> {
     try {
-      const response = await axios.get(
-        `${BASE_URL}/listings/provider/${providerId}`,
-        this.getAuthHeaders(token)
+      const response = await apiInterceptor.makeAuthenticatedRequest<Listing[]>(
+        `/listings/provider/${providerId}`,
+        { method: 'GET' }
       );
-      return response.data;
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.error || 'Failed to fetch provider listings');
     } catch (error: any) {
       console.error('Error fetching provider listings:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to fetch provider listings');
@@ -133,11 +126,15 @@ class ListingService {
 
   async getListingById(listingId: string, token?: string): Promise<PopulatedListing> {
     try {
-      const response = await axios.get(
-        `${BASE_URL}/listings/${listingId}`,
-        this.getAuthHeaders(token)
+      const response = await apiInterceptor.makeAuthenticatedRequest<PopulatedListing>(
+        `/listings/${listingId}`,
+        { method: 'GET' }
       );
-      return response.data;
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.error || 'Failed to fetch listing');
     } catch (error: any) {
       console.error('Error fetching listing:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to fetch listing');
@@ -146,11 +143,11 @@ class ListingService {
 
   async updateListing(listingId: string, payload: Partial<CreateListingPayload>, token: string): Promise<Listing> {
     try {
-      console.log('ListingService.updateListing - URL:', `${BASE_URL}/listings/${listingId}`);
-      
+      console.log('ListingService.updateListing - listingId:', listingId);
+
       // Create FormData for file upload (similar to createListing)
       const formData = new FormData();
-      
+
       // Add photos as files if they exist
       if (payload.photos && payload.photos.length > 0) {
         payload.photos.forEach((photo, index) => {
@@ -161,12 +158,12 @@ class ListingService {
               type: photo.type || 'image/jpeg',
               name: photo.name || `photo_${index}.jpg`,
             } as any;
-            
+
             formData.append('photos', file);
           }
         });
       }
-      
+
       // Create a copy of payload without photos for JSON data
       const { photos, ...rest } = payload;
 
@@ -175,30 +172,28 @@ class ListingService {
         ...(rest?.category ? { category: rest.category } : {}),
         ...(rest?.subcategory ? { subcategory: rest.subcategory } : {}),
       };
-      
+
       // Add other data as JSON string
       formData.append('data', JSON.stringify(listingData));
-      
+
       console.log('ListingService.updateListing - FormData structure:', {
         hasPhotos: (payload.photos?.length || 0) > 0,
         photoCount: payload.photos?.length || 0,
         firstPhotoUri: payload.photos?.[0]?.uri || 'none'
       });
-      
-      // Use FormData with multipart/form-data
-      const response = await axios.patch(
-        `${BASE_URL}/listings/${listingId}`,
-        formData,
+
+      const response = await apiInterceptor.makeAuthenticatedRequest<Listing>(
+        `/listings/${listingId}`,
         {
-          ...this.getAuthHeaders(token),
-          headers: {
-            ...this.getAuthHeaders(token).headers,
-            'Content-Type': 'multipart/form-data',
-          },
+          method: 'PATCH',
+          body: formData,
         }
       );
-      
-      return response.data;
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.error || 'Failed to update listing');
     } catch (error: any) {
       console.error('Error updating listing:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to update listing');
@@ -207,10 +202,14 @@ class ListingService {
 
   async deleteListing(listingId: string, token: string): Promise<void> {
     try {
-      await axios.delete(
-        `${BASE_URL}/listings/${listingId}`,
-        this.getAuthHeaders(token)
+      const response = await apiInterceptor.makeAuthenticatedRequest<void>(
+        `/listings/${listingId}`,
+        { method: 'DELETE' }
       );
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to delete listing');
+      }
     } catch (error: any) {
       console.error('Error deleting listing:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to delete listing');
@@ -219,12 +218,18 @@ class ListingService {
 
   async toggleListingStatus(listingId: string, isActive: boolean, token: string): Promise<Listing> {
     try {
-      const response = await axios.patch(
-        `${BASE_URL}/listings/${listingId}`,
-        { isActive },
-        this.getAuthHeaders(token)
+      const response = await apiInterceptor.makeAuthenticatedRequest<Listing>(
+        `/listings/${listingId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ isActive }),
+        }
       );
-      return response.data;
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.error || 'Failed to update listing status');
     } catch (error: any) {
       console.error('Error toggling listing status:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to update listing status');
@@ -247,7 +252,7 @@ class ListingService {
   }, _token?: string): Promise<Listing[]> {
     try {
       const queryParams = new URLSearchParams();
-      
+
       // Map parameters to API endpoint format
       if (params.text) queryParams.append('searchText', params.text);
       if (params.categoryId) queryParams.append('categoryId', params.categoryId);
@@ -258,7 +263,7 @@ class ListingService {
       if (params.priceMax) queryParams.append('priceMax', String(params.priceMax));
       if (params.providerId) queryParams.append('providerId', params.providerId);
       if (params.isActive !== undefined) queryParams.append('isActive', String(params.isActive));
-      
+
       // Handle coordinates for location-based search
       if (params.latitude && params.longitude) {
         queryParams.append('coordinates', `[${params.longitude},${params.latitude}]`);
@@ -266,13 +271,13 @@ class ListingService {
       }
 
       const endpoint = `/listings/search?${queryParams.toString()}`;
-      console.log('ListingService: Search Request URL:', `${BASE_URL}${endpoint}`);
+      console.log('ListingService: Search Request Endpoint:', endpoint);
       console.log('ListingService: Search Request Payload (params):', params);
-      
+
       const response = await apiInterceptor.makeAuthenticatedRequest<Listing[]>(endpoint, {
         method: 'GET',
       });
-      
+
       if (response.success && response.data) {
         console.log('ListingService: Search Response:', response.data);
         return response.data;
@@ -297,12 +302,18 @@ class ListingService {
       queryParams.append('lng', String(params.lng));
       queryParams.append('distance', String(params.distance));
 
-      const url = `${BASE_URL}/listings/nearby?${queryParams.toString()}`;
-      console.log('ListingService: Nearby Search Request URL:', url);
-      
-      const response = await axios.get(url, this.getAuthHeaders(token));
-      console.log('ListingService: Nearby Search Response:', response.data);
-      return response.data;
+      const endpoint = `/listings/nearby?${queryParams.toString()}`;
+      console.log('ListingService: Nearby Search Request Endpoint:', endpoint);
+
+      const response = await apiInterceptor.makeAuthenticatedRequest<Listing[]>(endpoint, {
+        method: 'GET',
+      });
+
+      if (response.success && response.data) {
+        console.log('ListingService: Nearby Search Response:', response.data);
+        return response.data;
+      }
+      throw new Error(response.error || 'Failed to fetch nearby listings');
     } catch (error: any) {
       console.error('Error fetching nearby listings:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to fetch nearby listings');
@@ -311,14 +322,20 @@ class ListingService {
 
   async getListingsByCategories(categoryId: string, subCategoryId: string, token?: string): Promise<Listing[]> {
     try {
-      const response = await axios.get(
-        `${BASE_URL}/listings`,
-        {
-          ...this.getAuthHeaders(token),
-          params: { categoryId, subCategoryId }
-        }
-      );
-      return response.data;
+      const queryParams = new URLSearchParams();
+      queryParams.append('categoryId', categoryId);
+      queryParams.append('subCategoryId', subCategoryId);
+
+      const endpoint = `/listings?${queryParams.toString()}`;
+
+      const response = await apiInterceptor.makeAuthenticatedRequest<Listing[]>(endpoint, {
+        method: 'GET',
+      });
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.error || 'Failed to fetch listings');
     } catch (error: any) {
       console.error('Error fetching listings by category:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to fetch listings');

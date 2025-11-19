@@ -1,7 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-
-const BASE_URL = API_BASE_URL;
+import apiInterceptor from './apiInterceptor';
 
 export interface ProviderDashboardSummary {
   totalBookings: number;
@@ -40,44 +37,47 @@ export interface ProviderPreferencesPayload {
 }
 
 class ProviderService {
-  private getAuthHeaders(token?: string) {
-    return token
-      ? {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      : {};
-  }
-
-  async getDashboard(providerId: string, token?: string): Promise<ProviderDashboardResponse> {
+  async getDashboard(providerId: string): Promise<ProviderDashboardResponse> {
     try {
-      console.log('getDashboard', providerId, token);
-      const response = await axios.get(
-        `${BASE_URL}/providers/${providerId}/dashboard`,
-        this.getAuthHeaders(token)
+      console.log('getDashboard', providerId);
+      const response = await apiInterceptor.makeAuthenticatedRequest<ProviderDashboardResponse>(
+        `/providers/${providerId}/dashboard`,
+        {
+          method: 'GET',
+        }
       );
-      return response.data as ProviderDashboardResponse;
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+
+      throw new Error(response.error || 'Failed to fetch provider dashboard');
     } catch (error: any) {
       console.error('ProviderService.getDashboard error:', error?.response?.data || error?.message);
-      throw new Error(error?.response?.data?.message || 'Failed to fetch provider dashboard');
+      throw new Error(error?.response?.data?.message || error?.message || 'Failed to fetch provider dashboard');
     }
   }
 
   async updatePreferences(
-    preferences: ProviderPreferencesPayload,
-    token?: string
+    preferences: ProviderPreferencesPayload
   ): Promise<ProviderPreferencesPayload> {
     try {
-      const response = await axios.patch(
-        `${BASE_URL}/providers/preferences`,
-        preferences,
-        this.getAuthHeaders(token)
+      const response = await apiInterceptor.makeAuthenticatedRequest<ProviderPreferencesPayload>(
+        `/providers/preferences`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(preferences),
+        }
       );
-      return response.data as ProviderPreferencesPayload;
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+
+      throw new Error(response.error || 'Failed to update provider preferences');
     } catch (error: any) {
       console.error('ProviderService.updatePreferences error:', error?.response?.data || error?.message);
-      throw new Error(error?.response?.data?.message || 'Failed to update provider preferences');
+      throw new Error(error?.response?.data?.message || error?.message || 'Failed to update provider preferences');
     }
   }
 }

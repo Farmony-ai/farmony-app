@@ -43,7 +43,7 @@ const ListingDetailScreen = () => {
   const fetchListingDetail = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await ListingService.getListingById(listingId, token || undefined);
+      const response = await ListingService.getListingById(listingId);
       setListing(response);
       
       if (user && response.providerId) {
@@ -106,8 +106,7 @@ const ListingDetailScreen = () => {
           onPress: async () => {
             try {
               setLoading(true);
-              if (!token) throw new Error('Authentication token not found');
-              await ListingService.deleteListing(listingId, token);
+              await ListingService.deleteListing(listingId);
               Alert.alert('Success', 'Listing deleted successfully', [
                 { text: 'OK', onPress: () => navigation.goBack() },
               ]);
@@ -136,7 +135,7 @@ const ListingDetailScreen = () => {
       setShowMenu(false);
       
       const newStatus = !listing.isActive;
-      await ListingService.toggleListingStatus(listing._id, newStatus, token);
+      await ListingService.toggleListingStatus(listing._id, newStatus);
       
       setListing(prevListing => 
         prevListing ? { ...prevListing, isActive: newStatus } : null

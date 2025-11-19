@@ -37,7 +37,7 @@ const ListingsScreen = () => {
       }
       
       setLoading(true);
-      const fetchedListings = await ListingService.getProviderListings(user.id, authToken);
+      const fetchedListings = await ListingService.getProviderListings(user.id);
       setListings(fetchedListings);
     } catch (error: any) {
       console.error('Error fetching listings:', error);

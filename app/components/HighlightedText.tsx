@@ -87,9 +87,7 @@ const HighlightedText: React.FC<HighlightedTextProps> = ({
 
 const styles = StyleSheet.create({
   highlight: {
-    backgroundColor: '#FFEB3B', // Yellow highlight
     fontWeight: '600',
-    color: '#000000',
   },
 });
 

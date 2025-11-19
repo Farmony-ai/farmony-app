@@ -26,7 +26,6 @@
     "babel-plugin-macros": "^3.1.0",
     "expo": "^53.0.19",
     "lodash.debounce": "^4.0.8",
-    "otpless-headless-rn": "^1.0.9",
     "pouchdb-browser": "^9.0.0",
     "pouchdb-react-native": "^6.4.1",
     "react": "19.1.0",

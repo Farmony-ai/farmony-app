@@ -205,6 +205,7 @@ const AccountSettingsScreen = () => {
       );
 
       if (result.success && result.data) {
+        console.log('[AccountSettingsScreen] Profile picture URL received:', result.data.profilePictureUrl);
         setAvatarUrl(result.data.profilePictureUrl);
         Alert.alert('Success', 'Profile picture updated successfully');
 
@@ -337,7 +338,12 @@ const AccountSettingsScreen = () => {
             ) : (
               <>
                 {avatarUrl ? (
-                  <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={styles.avatar}
+                    onError={(error) => console.log('[AccountSettingsScreen] Image load error:', error.nativeEvent, 'URL:', avatarUrl)}
+                    onLoad={() => console.log('[AccountSettingsScreen] Image loaded successfully:', avatarUrl)}
+                  />
                 ) : (
                   <View style={[styles.avatar, styles.avatarPlaceholder]}>
                     <Ionicons name="person-outline" size={40} color={COLORS_MINIMAL.text.muted} />

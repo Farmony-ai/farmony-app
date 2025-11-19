@@ -1,6 +1,5 @@
 // 🌾 Firebase SMS Service - Clean and Simple SMS-only OTP Authentication
-// This file complements `otpless.ts`. We keep WhatsApp with OTPLess,
-// and use Firebase Authentication when the user prefers SMS.
+// This service uses Firebase Authentication for SMS-based OTP.
 //
 // Prerequisites:
 // 1. Install native deps: `@react-native-firebase/app` & `@react-native-firebase/auth`

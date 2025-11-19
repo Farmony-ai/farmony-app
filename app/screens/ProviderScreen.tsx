@@ -39,7 +39,7 @@ const MAX_VISIBLE_CARDS = 3;
 
 const ProviderScreen = () => {
   const navigation = useNavigation<any>();
-  const { user, token } = useSelector((state: RootState) => state.auth);
+  const { user } = useSelector((state: RootState) => state.auth);
   const [dashboard, setDashboard] = useState<ProviderDashboardResponse | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
@@ -148,7 +148,7 @@ const ProviderScreen = () => {
     }
     try {
       if (isRefresh) setRefreshing(true);
-      const data = await ProviderService.getDashboard(user.id, token || undefined);
+      const data = await ProviderService.getDashboard(user.id);
       console.log('Provider Dashboard Data:', data);
       setDashboard(data);
     } finally {
@@ -158,14 +158,14 @@ const ProviderScreen = () => {
 
   useEffect(() => {
     fetchDashboard();
-  }, [user?.id, token]);
+  }, [user?.id]);
 
   const onRefresh = () => fetchDashboard(true);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => fetchDashboard());
     return unsubscribe;
-  }, [navigation, user?.id, token]);
+  }, [navigation, user?.id]);
 
   const pendingBookings = dashboard?.pendingBookings || [];
 
@@ -222,8 +222,10 @@ const ProviderScreen = () => {
   };
 
   return (
-    <SafeAreaWrapper backgroundColor="#FAFAFA" style={styles.flex}>
-      <Image source={backgroundImg} style={styles.backgroundImage} resizeMode="cover" />
+    <SafeAreaWrapper backgroundColor="#FFFFFF" style={styles.flex}>
+      <View style={styles.backgroundImageContainer}>
+        <Image source={backgroundImg} style={styles.backgroundImage} resizeMode="cover" />
+      </View>
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
@@ -323,14 +325,20 @@ const ProviderScreen = () => {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flexGrow: 1, backgroundColor: 'transparent' },
-  backgroundImage: {
+  backgroundImageContainer: {
     position: 'absolute',
     bottom: 75,
     left: 0,
     right: 0,
     width: '100%',
     height: 400,
-    opacity: 0.5,
+// Lightest green background
+    opacity: 0.7,
+  },
+  backgroundImage: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.4,
   },
   header: {
     flexDirection: 'row',
@@ -339,7 +347,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 10 : 25,
     paddingBottom: 16,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FFFFFF',
   },
   greeting: {
     fontSize: 12,
@@ -458,11 +466,10 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', gap: 10 },
   summaryCard: {
     flex: 1,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    backgroundColor: '#F5F5F5', // Grey background like HomeScreen popular services
     borderRadius: 10,
     padding: 12,
     alignItems: 'center',
-    ...SHADOWS.SM,
   },
   summaryIconBox: {
     width: 64,

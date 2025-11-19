@@ -1,7 +1,4 @@
-import axios from 'axios';
-import { API_CONFIG, BASE_URL, } from '../config/api';
-
-const BASE_URL1 = BASE_URL + '/api' // Replace with actual base URL
+import apiInterceptor from './apiInterceptor';
 
 export interface Category {
   _id: string;
@@ -31,9 +28,16 @@ class CatalogueService {
   // Get all categories
   async getCategories(): Promise<Category[]> {
     try {
-      const response = await axios.get(`${BASE_URL1}/catalogue/categories`);
-      // Backend returns { message, count, categories }
-      return response.data.categories || response.data;
+      const response = await apiInterceptor.makeAuthenticatedRequest<{ categories: Category[] }>(
+        `/catalogue/categories`,
+        { method: 'GET' }
+      );
+
+      if (response.success && response.data?.categories) {
+        return response.data.categories;
+      }
+
+      throw new Error(response.error || 'Failed to fetch categories');
     } catch (error) {
       console.error('Error fetching categories:', error);
       throw error;
@@ -58,10 +62,16 @@ class CatalogueService {
   // Get categories by type
   async getCategoriesByType(type: string): Promise<Category[]> {
     try {
-      const response = await axios.get(`${BASE_URL1}/catalogue/categories`, {
-        params: { category: type }
-      });
-      return response.data;
+      const response = await apiInterceptor.makeAuthenticatedRequest<{ categories: Category[] }>(
+        `/catalogue/categories?category=${type}`,
+        { method: 'GET' }
+      );
+
+      if (response.success && response.data?.categories) {
+        return response.data.categories;
+      }
+
+      throw new Error(response.error || 'Failed to fetch categories by type');
     } catch (error) {
       console.error('Error fetching categories by type:', error);
       throw error;
@@ -71,10 +81,16 @@ class CatalogueService {
   // Get subcategories for a category
   async getSubCategories(categoryId: string): Promise<SubCategory[]> {
     try {
-      const response = await axios.get(
-        `${BASE_URL1}/catalogue/${categoryId}/subcategories`
+      const response = await apiInterceptor.makeAuthenticatedRequest<{ subcategories: SubCategory[] }>(
+        `/catalogue/categories/${categoryId}/children`,
+        { method: 'GET' }
       );
-      return response.data;
+
+      if (response.success && response.data?.subcategories) {
+        return response.data.subcategories;
+      }
+
+      throw new Error(response.error || 'Failed to fetch subcategories');
     } catch (error) {
       console.error('Error fetching subcategories:', error);
       throw error;
@@ -84,15 +100,17 @@ class CatalogueService {
   // Get a single sub-category by its ID
   async getSubCategoryById(subCategoryId: string): Promise<SubCategory> {
     try {
-      // Since there is no direct endpoint, we need to fetch all and then filter
-      // This is not ideal, but it's the only way with the current API
-      const response = await axios.get(`${BASE_URL1}/catalogue/subcategories`);
-      const subCategory = response.data.find((sc: SubCategory) => sc._id === subCategoryId);
+      // Use the category details endpoint to get a specific category
+      const response = await apiInterceptor.makeAuthenticatedRequest<{ category: SubCategory }>(
+        `/catalogue/categories/${subCategoryId}`,
+        { method: 'GET' }
+      );
 
-      if (!subCategory) {
-        throw new Error(`Sub-category with ID ${subCategoryId} not found`);
+      if (response.success && response.data?.category) {
+        return response.data.category;
       }
-      return subCategory;
+
+      throw new Error(response.error || `Sub-category with ID ${subCategoryId} not found`);
     } catch (error) {
       console.error('Error fetching sub-category by ID:', error);
       throw error;
@@ -103,7 +121,14 @@ class CatalogueService {
   async getCategoryHierarchy(): Promise<CategoryHierarchy[]> {
     try {
       // Use the tree endpoint with 'all' to get the complete hierarchy
-      const response = await axios.get(`${BASE_URL1}/catalogue/categories/all/tree`);
+      const response = await apiInterceptor.makeAuthenticatedRequest<{ tree: any[] }>(
+        `/catalogue/categories/all/tree`,
+        { method: 'GET' }
+      );
+
+      if (!response.success || !response.data?.tree) {
+        throw new Error(response.error || 'Failed to fetch category hierarchy');
+      }
 
       // The backend returns { message, rootId, tree }
       // tree is an array of categories with nested children

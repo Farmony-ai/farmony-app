@@ -139,7 +139,7 @@ const ListingCard = ({ listing, onPress, onEdit, onActivate, onDeactivate, onSta
         } else if (action === 'deactivate' && onDeactivate) {
           onDeactivate(listing._id);
         } else {
-          await ListingService.toggleListingStatus(listing._id, newStatus, token);
+          await ListingService.toggleListingStatus(listing._id, newStatus);
           
           if (onStatusChange) {
             onStatusChange(listing._id, newStatus);
