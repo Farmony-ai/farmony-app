@@ -14,6 +14,7 @@ import {
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { COLORS, SHADOWS, FONTS } from '../utils';
+import { scaleFontSize, scaleSize } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
@@ -248,7 +249,7 @@ const ProviderScreen = () => {
             onPress={() => navigation.navigate('CreateListing')}
             activeOpacity={0.7}
           >
-            <Ionicons name="add" size={20} color={COLORS.TEXT.PRIMARY} />
+            <Ionicons name="add" size={scaleSize(20)} color={COLORS.TEXT.PRIMARY} />
           </TouchableOpacity>
         </View>
 
@@ -269,8 +270,8 @@ const ProviderScreen = () => {
             {pendingBookings.length > 1 && (
               <View style={styles.swipeHintContainer}>
                 <Text style={styles.swipeHint}>
-                  <Ionicons name="arrow-back" size={12} color="#9CA3AF" /> Swipe to browse{' '}
-                  <Ionicons name="arrow-forward" size={12} color="#9CA3AF" />
+                  <Ionicons name="arrow-back" size={scaleFontSize(12)} color="#9CA3AF" /> Swipe to browse{' '}
+                  <Ionicons name="arrow-forward" size={scaleFontSize(12)} color="#9CA3AF" />
                 </Text>
               </View>
             )}
@@ -282,7 +283,7 @@ const ProviderScreen = () => {
           <View style={styles.emptyRequestsContainer}>
             <View style={styles.emptyRequestsCard}>
               <View style={styles.emptyIconContainer}>
-                <Ionicons name="time-outline" size={32} color="#9CA3AF" />
+                <Ionicons name="time-outline" size={scaleSize(32)} color="#9CA3AF" />
               </View>
               <Text style={styles.emptyTitle}>No pending requests</Text>
               <Text style={styles.emptySubtitle}>
@@ -327,12 +328,11 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: 'transparent' },
   backgroundImageContainer: {
     position: 'absolute',
-    bottom: 75,
+    bottom: scaleSize(75),
     left: 0,
     right: 0,
     width: '100%',
-    height: 400,
-// Lightest green background
+    height: scaleSize(400),
     opacity: 0.7,
   },
   backgroundImage: {
@@ -344,109 +344,109 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 10 : 25,
-    paddingBottom: 16,
+    paddingHorizontal: scaleSize(20),
+    paddingTop: Platform.OS === 'ios' ? scaleSize(10) : scaleSize(25),
+    paddingBottom: scaleSize(16),
     backgroundColor: '#FFFFFF',
   },
   greeting: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
-    marginBottom: 1,
+    marginBottom: scaleSize(1),
   },
   userName: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.PRIMARY,
   },
   addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: scaleSize(36),
+    height: scaleSize(36),
+    borderRadius: scaleSize(18),
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
   },
   stackedCardsSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24, // INCREASED from 10 to 24
+    paddingHorizontal: scaleSize(20),
+    marginBottom: scaleSize(24),
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
   },
   cardCounterContainer: {
     backgroundColor: '#EBF4FF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: scaleSize(10),
+    paddingVertical: scaleSize(4),
+    borderRadius: scaleSize(12),
   },
   cardCounter: {
-    fontSize: 11,
+    fontSize: scaleFontSize(11),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: '#3B82F6',
   },
   stackedCardsContainer: {
-    height: 300, // REDUCED from 340 to 300
+    height: scaleSize(300),
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginBottom: 8, // REDUCED from 10 to 8
+    marginBottom: scaleSize(8),
   },
   stackedCard: {
     position: 'absolute',
     width: '100%',
     ...SHADOWS.MD,
   },
-  swipeHintContainer: { 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    marginTop: 20, // REDUCED from 50 to 20
-    marginBottom: 10, // ADDED bottom margin
+  swipeHintContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: scaleSize(20),
+    marginBottom: scaleSize(10),
   },
-  swipeHint: { 
-    fontSize: 11, 
-    color: '#9CA3AF', 
-    textAlign: 'center' 
+  swipeHint: {
+    fontSize: scaleFontSize(11),
+    color: '#9CA3AF',
+    textAlign: 'center'
   },
   // Empty state styles
   emptyRequestsContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 32, // INCREASED from 20 to 32
+    paddingHorizontal: scaleSize(20),
+    marginBottom: scaleSize(32),
   },
   emptyRequestsCard: {
     backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 32,
+    borderRadius: scaleSize(12),
+    padding: scaleSize(32),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderStyle: 'dashed',
   },
   emptyIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: scaleSize(64),
+    height: scaleSize(64),
+    borderRadius: scaleSize(32),
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    marginBottom: 8,
+    marginBottom: scaleSize(8),
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#6B7280',
     textAlign: 'center',
@@ -454,46 +454,46 @@ const styles = StyleSheet.create({
   sectionDivider: {
     height: 1,
     backgroundColor: '#E5E7EB',
-    marginHorizontal: 20,
-    marginVertical: 20, // INCREASED from 15 to 20
+    marginHorizontal: scaleSize(20),
+    marginVertical: scaleSize(20),
   },
-  summarySection: { 
-    paddingHorizontal: 20, 
-    paddingTop: 8, // INCREASED from 4 to 8
-    paddingBottom: 16, // INCREASED from 12 to 16
-    marginTop: 45
+  summarySection: {
+    paddingHorizontal: scaleSize(20),
+    paddingTop: scaleSize(8),
+    paddingBottom: scaleSize(16),
+    marginTop: scaleSize(45)
   },
-  summaryRow: { flexDirection: 'row', gap: 10 },
+  summaryRow: { flexDirection: 'row', gap: scaleSize(10) },
   summaryCard: {
     flex: 1,
-    backgroundColor: '#F5F5F5', // Grey background like HomeScreen popular services
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: '#F5F5F5',
+    borderRadius: scaleSize(10),
+    padding: scaleSize(12),
     alignItems: 'center',
   },
   summaryIconBox: {
-    width: 64,
-    height: 64,
+    width: scaleSize(64),
+    height: scaleSize(64),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: scaleSize(2),
   },
   summaryIcon: {
-    width: 54,
-    height: 54,
+    width: scaleSize(54),
+    height: scaleSize(54),
   },
   summaryValue: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    marginBottom: 1,
+    marginBottom: scaleSize(1),
   },
   summaryLabel: {
-    fontSize: 10,
+    fontSize: scaleFontSize(10),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: '#9CA3AF',
   },
-  bottomPadding: { height: 80 },
+  bottomPadding: { height: scaleSize(80) },
 });
 
 export default ProviderScreen;
