@@ -84,8 +84,6 @@ const PaymentSelectionScreen = () => {
         specialInstructions: params.notes || params.orderDetails.specialInstructions,
       };
 
-      console.log('Creating order with data:', orderData); // Debug log
-
       const response = await ordersAPI.create(orderData);
 
       if (response.success) {
@@ -120,7 +118,6 @@ const PaymentSelectionScreen = () => {
         throw new Error(response.error || 'Failed to create order');
       }
     } catch (error: any) {
-      console.error('Error placing order:', error);
       Alert.alert(
         'Order Failed',
         error.message || 'Failed to place order. Please try again.',

@@ -176,7 +176,6 @@ const SignUpScreen = () => {
       await startFirebaseSMSAuth();
       setCurrentStep('otp');
     } catch (error) {
-      console.error('Failed to send OTP:', error);
       setFormErrors({ general: 'Failed to send OTP. Please try again.' });
     }
   };
@@ -188,7 +187,6 @@ const SignUpScreen = () => {
       setSMSConfirmation(confirmation);
       dispatch(setOtpChannel('sms'));
     } catch (error) {
-      console.error('Failed to send SMS OTP:', error);
       throw error;
     }
   };
@@ -246,8 +244,6 @@ const SignUpScreen = () => {
       const idToken = await userCredential.user.getIdToken();
       setFirebaseIdToken(idToken);
 
-      console.log('✅ [SignUpScreen] OTP verified, got Firebase ID token');
-
       // OTP verified, proceed to profile picture
       setCurrentStep('profile');
     } catch (error: any) {
@@ -272,7 +268,7 @@ const SignUpScreen = () => {
     ImagePickerService.showImagePickerOptions(
       () => handleCameraPress(),
       () => handleGalleryPress(),
-      () => console.log('Image picker cancelled')
+      () => {}
     );
   };
 
@@ -332,7 +328,6 @@ const SignUpScreen = () => {
 
       // Get fresh ID token (force refresh to ensure it's not expired)
       const freshIdToken = await currentUser.getIdToken(true);
-      console.log('✅ [SignUpScreen] Got fresh Firebase ID token');
 
       // Register user with all collected data
       const userData = {
@@ -351,8 +346,6 @@ const SignUpScreen = () => {
         // If profile image was selected, upload it
         if (profileImageData && user?.id) {
           try {
-            console.log('[SignUpScreen] Uploading profile picture for user:', user.id);
-
             const uploadResult = await ProfilePictureService.uploadProfilePicture(
               user.id,
               profileImageData,
@@ -362,10 +355,8 @@ const SignUpScreen = () => {
             );
 
             if (uploadResult.success) {
-              console.log('[SignUpScreen] ✅ Profile picture uploaded successfully');
               // Could update user state with new profile picture URL here if needed
             } else {
-              console.error('[SignUpScreen] ❌ Profile picture upload failed:', uploadResult.error);
               // Don't block registration for profile picture upload failure
               Alert.alert(
                 'Upload Warning',
@@ -374,7 +365,6 @@ const SignUpScreen = () => {
               );
             }
           } catch (uploadError) {
-            console.error('[SignUpScreen] Profile picture upload error:', uploadError);
             Alert.alert(
               'Upload Warning',
               'Registration successful, but profile picture upload failed. You can update it later in settings.',
@@ -392,7 +382,6 @@ const SignUpScreen = () => {
         Alert.alert('Registration Failed', 'Please try again');
       }
     } catch (error) {
-      console.error('[SignUpScreen] Registration error:', error);
       Alert.alert('Error', 'Failed to complete registration');
     } finally {
       setUploadingImage(false);

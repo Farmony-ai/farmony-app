@@ -71,14 +71,14 @@ const CheckoutScreen = () => {
       setLoadingAddresses(true);
       const userAddresses = await AddressService.getUserAddresses(user.id);
       setAddresses(userAddresses);
-      
+
       // Set default address or first address as selected
       if (!selectedAddress && !selectedAddressId) {
         const defaultAddress = userAddresses.find(addr => addr.isDefault);
         setSelectedAddress(defaultAddress || userAddresses[0] || null);
       }
     } catch (error) {
-      console.error('Error fetching addresses:', error);
+
     } finally {
       setLoadingAddresses(false);
     }

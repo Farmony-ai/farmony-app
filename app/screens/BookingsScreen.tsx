@@ -19,7 +19,6 @@ import { RootState } from '../store';
 import SeekerService, { UnifiedBooking } from '../services/SeekerService';
 import RippleAnimation from '../components/RippleAnimation';
 import categoryIcons from '../utils/icons';
-import UnifiedBookingSocketHandler from '../services/UnifiedBookingSocketHandler';
 
 // Ultra-minimal color scheme
 const COLORS_MINIMAL = {
@@ -126,20 +125,16 @@ const BookingsScreen = () => {
 
   const fetchBookings = async (isRefresh = false) => {
     if (!user?.id) {
-      console.log('BookingsScreen: No user ID found');
       setLoading(false);
       return;
     }
 
     try {
       if (!isRefresh) setLoading(true);
-      console.log('BookingsScreen: Fetching unified bookings for user:', user.id);
       const data = await SeekerService.getUnifiedBookings(user.id);
-      console.log('BookingsScreen: Received bookings:', data.length, 'items');
-      console.log('BookingsScreen: Bookings data:', JSON.stringify(data, null, 2));
       setBookings(data);
     } catch (error) {
-      console.error('BookingsScreen: Error fetching bookings:', error);
+      // Silently handle errors
     } finally {
       setLoading(false);
       if (isRefresh) setRefreshing(false);
@@ -151,43 +146,6 @@ const BookingsScreen = () => {
       fetchBookings();
     }, [user?.id, token])
   );
-
-  // Socket connection for real-time updates
-  useEffect(() => {
-    if (!user?.id) return;
-
-    // Connect socket for real-time updates
-    UnifiedBookingSocketHandler.connect(user.id, (updatedBooking) => {
-      console.log('Real-time booking update:', updatedBooking);
-
-      setBookings(prevBookings => {
-        // Find and update existing booking
-        const index = prevBookings.findIndex(b => b.id === updatedBooking.id);
-
-        if (index >= 0) {
-          // Update existing booking
-          const updated = [...prevBookings];
-          updated[index] = {
-            ...updated[index],
-            ...updatedBooking,
-          } as UnifiedBooking;
-          return updated;
-        } else if (updatedBooking.type && updatedBooking.title) {
-          // Add new booking if it's complete enough
-          return [...prevBookings, updatedBooking as UnifiedBooking].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        }
-
-        return prevBookings;
-      });
-    });
-
-    // Cleanup on unmount
-    return () => {
-      UnifiedBookingSocketHandler.disconnect();
-    };
-  }, [user?.id]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -532,22 +490,11 @@ const BookingsScreen = () => {
     const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
     const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    console.log(`BookingsScreen: Filtering booking ${booking.id}:`, {
-      title: booking.title,
-      displayStatus: booking.displayStatus,
-      serviceStartDate: booking.serviceStartDate,
-      bookingDateOnly: bookingDateOnly.toISOString(),
-      todayOnly: todayOnly.toISOString(),
-      activeTab,
-    });
-
     if (activeTab === 'upcoming') {
       // Upcoming: future/today bookings with active statuses OR no_accept with future dates
       const isFutureOrToday = bookingDateOnly >= todayOnly;
       const isActiveStatus = ['searching', 'matched', 'in_progress', 'pending'].includes(booking.displayStatus);
       const isFailedButFuture = booking.displayStatus === 'no_accept' && isFutureOrToday;
-
-      console.log(`  → Upcoming check: isFutureOrToday=${isFutureOrToday}, isActiveStatus=${isActiveStatus}, isFailedButFuture=${isFailedButFuture}`);
 
       // Show in upcoming if:
       // 1. Active status with future/today date, OR
@@ -558,15 +505,11 @@ const BookingsScreen = () => {
       const isPastDate = bookingDateOnly < todayOnly;
       const isCompletedStatus = ['completed', 'cancelled', 'no_accept'].includes(booking.displayStatus);
 
-      console.log(`  → Past check: isPastDate=${isPastDate}, isCompletedStatus=${isCompletedStatus}`);
-
       // Show in past if:
       // 1. Completed/cancelled/no_accept status with past date
       return isCompletedStatus && isPastDate;
     }
   });
-
-  console.log(`BookingsScreen: Filtered ${filteredBookings.length} bookings for ${activeTab} tab`);
 
   const renderBookingCard = (booking: UnifiedBooking) => {
     const bookingDate = booking.serviceStartDate || booking.createdAt;

@@ -140,7 +140,6 @@ const SignInScreen = () => {
       await startFirebaseSMSAuth();
       setCurrentStep('otp');
     } catch (error) {
-      console.error('Failed to send OTP:', error);
       setPhoneError('Failed to send OTP. Please try again.');
     }
   };
@@ -152,7 +151,6 @@ const SignInScreen = () => {
       setSMSConfirmation(confirmation);
       dispatch(setOtpChannel('sms'));
     } catch (error) {
-      console.error('Failed to send SMS OTP:', error);
       throw error;
     }
   };
@@ -208,7 +206,6 @@ const SignInScreen = () => {
 
       // Step 2: Get the Firebase ID token from the credential
       const idToken = await userCredential.user.getIdToken();
-      console.log('✅ Got Firebase ID token');
 
       // Step 3: Send ID token to backend for authentication
       const phoneE164 = `+91${phone}`;
@@ -227,7 +224,6 @@ const SignInScreen = () => {
         setOTPError('Login failed. Please try again.');
       }
     } catch (error: any) {
-      console.error('❌ OTP verification error:', error);
       setOTPError(error.message || 'Invalid OTP. Please try again.');
     }
   };

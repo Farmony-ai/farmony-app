@@ -140,7 +140,7 @@ const OTPLoginScreen = () => {
       startFirebaseSMSAuth();
       setCurrentStep('otp');
     } catch (error) {
-      console.error('OTP login error:', error);
+
     }
   };
 
@@ -162,7 +162,6 @@ const OTPLoginScreen = () => {
       setAuthStatus('OTP sent via SMS');
       dispatch(setOtpChannel('sms'));
     } catch (error) {
-      console.error('Failed to send SMS OTP:', error);
       setOTPError('Unable to send SMS OTP. Please try again.');
       setAuthStatus('');
       triggerShakeAnimation();
@@ -183,7 +182,6 @@ const OTPLoginScreen = () => {
 
       // Get fresh ID token (force refresh to ensure it's not expired)
       const idToken = await currentUser.getIdToken(true);
-      console.log('✅ [OTPLoginScreen] Got fresh Firebase ID token');
 
       // For OTP login, directly log the user in with ID token
       const result = await dispatch(otpLogin({
@@ -202,7 +200,6 @@ const OTPLoginScreen = () => {
         triggerShakeAnimation();
       }
     } catch (error) {
-      console.error('❌ [OTPLoginScreen] Authentication error:', error);
       setOTPError('Failed to complete authentication. Please try again.');
       triggerShakeAnimation();
     }

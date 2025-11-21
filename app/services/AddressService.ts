@@ -124,24 +124,26 @@ class AddressService {
         updatedAt: address.updatedAt,
       };
     } catch (error: any) {
-      console.error('Error creating address:', error);
       throw error;
     }
   }
 
   async getUserAddresses(userId: string): Promise<Address[]> {
     try {
-      // Backend stores addresses as embedded documents in the User model
-      // We need to fetch the user profile to get addresses
-      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/users/${userId}`, {
+      // Fetch addresses from the correct endpoint
+      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/users/${userId}/addresses`, {
         method: 'GET',
       });
 
       if (!result.success || !result.data) {
-        throw new Error(result.error || 'Failed to fetch user profile');
+        // If no addresses found, return empty array
+        if (result.error && result.error.includes('404')) {
+          return [];
+        }
+        throw new Error(result.error || 'Failed to fetch addresses');
       }
 
-      // Extract addresses from user object
+      // Extract addresses from response
       const addresses: Address[] = result.data.addresses || [];
 
       // Transform backend address format to frontend format
@@ -171,7 +173,10 @@ class AddressService {
         updatedAt: addr.updatedAt,
       }));
     } catch (error: any) {
-      console.error('Error fetching user addresses:', error);
+      // Return empty array instead of throwing for 404 errors
+      if (error?.message?.includes('404') || error?.message?.includes('Not Found')) {
+        return [];
+      }
       throw error;
     }
   }
@@ -215,7 +220,6 @@ class AddressService {
         updatedAt: addr.updatedAt,
       };
     } catch (error: any) {
-      console.error('Error fetching address:', error);
       throw error;
     }
   }
@@ -260,7 +264,6 @@ class AddressService {
         updatedAt: addr.updatedAt,
       };
     } catch (error: any) {
-      console.error('Error updating address:', error);
       throw error;
     }
   }
@@ -275,9 +278,7 @@ class AddressService {
         throw new Error(result.error || 'Failed to delete address');
       }
 
-      console.log('✅ Address deleted successfully');
     } catch (error: any) {
-      console.error('Error deleting address:', error);
       throw error;
     }
   }
@@ -295,10 +296,8 @@ class AddressService {
         throw new Error(result.error || 'Failed to set default address');
       }
 
-      console.log('✅ Default address set successfully:', result.data);
       return result.data;
     } catch (error: any) {
-      console.error('Error setting default address:', error);
       throw error;
     }
   }
@@ -314,25 +313,6 @@ class AddressService {
       );
       return response.data;
     } catch (error: any) {
-      console.error('--- DETAILED REVERSE GEOCODING ERROR ---');
-      if (error.isAxiosError) {
-        console.error('Axios Error:', {
-          message: error.message,
-          code: error.code,
-          config: {
-            url: error.config?.url,
-            method: error.config?.method,
-          },
-          request: error.request ? 'Request object exists' : 'No request object',
-          response: error.response ? {
-            data: error.response.data,
-            status: error.response.status,
-          } : 'No response object',
-        });
-      } else {
-        console.error('Non-Axios Error:', error);
-      }
-      console.error('-----------------------------------------');
       throw error;
     }
   }
@@ -345,25 +325,6 @@ class AddressService {
       );
       return response.data;
     } catch (error: any) {
-      console.error('--- DETAILED SEARCH PLACES ERROR ---');
-       if (error.isAxiosError) {
-        console.error('Axios Error:', {
-          message: error.message,
-          code: error.code,
-          config: {
-            url: error.config?.url,
-            method: error.config?.method,
-          },
-          request: error.request ? 'Request object exists' : 'No request object',
-          response: error.response ? {
-            data: error.response.data,
-            status: error.response.status,
-          } : 'No response object',
-        });
-      } else {
-        console.error('Non-Axios Error:', error);
-      }
-      console.error('------------------------------------');
       throw error;
     }
   }

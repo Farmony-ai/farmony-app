@@ -145,7 +145,7 @@ export default function HomeScreen() {
         const data = await ClimateService.getWeatherData(latitude, longitude);
         setWeatherData(data);
       } catch (error) {
-        console.error('Error fetching weather data:', error);
+        // Silently handle weather fetch errors
       } finally {
         setWeatherLoading(false);
       }
@@ -180,14 +180,13 @@ export default function HomeScreen() {
       try {
         fetchedHierarchy = await CatalogueService.getCategoryHierarchy();
       } catch (hierarchyError) {
-        console.warn('Failed to fetch category hierarchy, proceeding with categories only.', hierarchyError);
+        // Silently handle hierarchy fetch errors
       }
 
       setCategories(fetchedCategories);
       setCategoryHierarchy(fetchedHierarchy);
       setCatalogueLoaded(fetchedCategories.length > 0);
     } catch (error) {
-      console.error('Error fetching categories or hierarchy:', error);
       setCatalogueLoaded(false);
     }
   };
@@ -204,7 +203,6 @@ export default function HomeScreen() {
 
         // Handle case where user has no addresses yet
         if (!addresses || addresses.length === 0) {
-          console.log('ℹ️ User has no saved addresses yet, using current location');
           setCurrentAddress(null);
           return;
         }
@@ -234,14 +232,11 @@ export default function HomeScreen() {
               city: firstAddrWithCoords.district || firstAddrWithCoords.state || city || undefined,
             }));
           } else {
-            console.log('ℹ️ User addresses have no valid coordinates, using current location');
             setCurrentAddress(null);
           }
         }
       } catch (error: any) {
-        console.error('Error fetching default address:', error);
-        // Don't show alert here as it might be annoying on home screen
-        // Just log the error and fall back to location-based detection
+        // Silently fall back to location-based detection
         setCurrentAddress(null);
       }
     }
@@ -271,7 +266,7 @@ export default function HomeScreen() {
         fetchDefaultAddress()
       ]);
     } catch (error) {
-      console.error('Error refreshing data:', error);
+      // Silently handle refresh errors
     } finally {
       setRefreshing(false);
     }

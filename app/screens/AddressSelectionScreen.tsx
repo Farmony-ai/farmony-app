@@ -43,6 +43,7 @@ const AddressSelectionScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -50,16 +51,18 @@ const AddressSelectionScreen = () => {
     }, [user])
   );
 
-  const fetchAddresses = async () => {
+  const fetchAddresses = async (showAlert = true) => {
     if (!user?.id) {
       setAddresses([]);
       setSelectedAddressId(null);
       setLoading(false);
+      setHasError(false);
       return;
     }
 
     try {
       setLoading(true);
+      setHasError(false);
       const userAddresses = await AddressService.getUserAddresses(user.id);
       setAddresses(userAddresses);
 
@@ -77,23 +80,26 @@ const AddressSelectionScreen = () => {
         }
       }
     } catch (error: any) {
-      console.error('Error fetching addresses:', error);
+      setHasError(true);
+      setAddresses([]);
 
-      // Show error message to user
-      Alert.alert(
-        'Error',
-        error?.message || 'Failed to load addresses. Please check your connection and try again.',
-        [
-          {
-            text: 'Retry',
-            onPress: () => fetchAddresses()
-          },
-          {
-            text: 'OK',
-            style: 'cancel'
-          }
-        ]
-      );
+      // Only show alert if requested (not during refresh)
+      if (showAlert) {
+        Alert.alert(
+          'Unable to Load Addresses',
+          'We couldn\'t load your saved addresses. Please check your internet connection and try again.',
+          [
+            {
+              text: 'Retry',
+              onPress: () => fetchAddresses(true)
+            },
+            {
+              text: 'OK',
+              style: 'cancel'
+            }
+          ]
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -101,7 +107,7 @@ const AddressSelectionScreen = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchAddresses();
+    await fetchAddresses(false); // Don't show alert during refresh
     setRefreshing(false);
   };
 
@@ -135,10 +141,7 @@ const AddressSelectionScreen = () => {
         // Show success feedback
         Alert.alert('Success', 'Default address updated successfully');
       } catch (error: any) {
-        console.error('Error setting default address:', error);
-
         // Since the endpoint doesn't exist, just update local state and continue
-        console.log('⚠️ Backend endpoint not available, updating local state only');
         setAddresses(prevAddresses =>
           prevAddresses.map(addr => ({
             ...addr,
@@ -347,23 +350,41 @@ const AddressSelectionScreen = () => {
             </>
           )}
 
-          {/* Empty State */}
+          {/* Empty State or Error State */}
           {!loading && addresses.length === 0 && (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconContainer}>
-                <Ionicons name="location-outline" size={48} color={COLORS_MINIMAL.text.muted} />
+                <Ionicons
+                  name={hasError ? "alert-circle-outline" : "location-outline"}
+                  size={48}
+                  color={COLORS_MINIMAL.text.muted}
+                />
               </View>
-              <Text style={styles.emptyStateTitle}>No addresses saved</Text>
-              <Text style={styles.emptyStateText}>
-                Add your first address to get started. You can save addresses for home, work, farm, or any other location.
+              <Text style={styles.emptyStateTitle}>
+                {hasError ? 'Unable to Load Addresses' : 'No addresses saved'}
               </Text>
-              <TouchableOpacity
-                style={styles.emptyAddButton}
-                onPress={handleAddNewAddress}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.emptyAddButtonText}>Add Address</Text>
-              </TouchableOpacity>
+              <Text style={styles.emptyStateText}>
+                {hasError
+                  ? 'We couldn\'t load your addresses. Please check your internet connection and try again.'
+                  : 'Add your first address to get started. You can save addresses for home, work, farm, or any other location.'}
+              </Text>
+              {hasError ? (
+                <TouchableOpacity
+                  style={styles.emptyAddButton}
+                  onPress={() => fetchAddresses(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.emptyAddButtonText}>Retry</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.emptyAddButton}
+                  onPress={handleAddNewAddress}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.emptyAddButtonText}>Add Address</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </ScrollView>
