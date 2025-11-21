@@ -50,7 +50,7 @@ interface UserUpdateRequest {
 export const authAPI = {
   // 📝 Register new user
   register: async (userData: RegisterRequest) => {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    const response = await fetch(`${API_BASE_URL}/identity/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
@@ -73,7 +73,7 @@ export const authAPI = {
   
   // 🔐 Login user
   login: async (credentials: LoginRequest) => {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    const response = await fetch(`${API_BASE_URL}/identity/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
@@ -91,7 +91,7 @@ export const authAPI = {
   
   // 📱 OTP Login
   otpLogin: async (phone: string) => {
-    const response = await fetch(`${API_BASE_URL}/auth/otp-login`, {
+    const response = await fetch(`${API_BASE_URL}/identity/auth/otp-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone }),
@@ -109,7 +109,7 @@ export const authAPI = {
   
   // 🔄 Refresh token
   refreshToken: async (refreshToken: string) => {
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    const response = await fetch(`${API_BASE_URL}/identity/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
@@ -139,7 +139,7 @@ export const usersAPI = {
 
   // Update user
   updateUser: async (userId: string, updates: UserUpdateRequest) => {
-    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}`, {
+    return apiInterceptor.makeAuthenticatedRequest(`/identity/users/${userId}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
@@ -147,21 +147,21 @@ export const usersAPI = {
 
   // Verify user
   verifyUser: async (userId: string) => {
-    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/verify`, {
+    return apiInterceptor.makeAuthenticatedRequest(`/identity/users/${userId}/verify`, {
       method: 'PATCH',
     });
   },
 
   // Unverify user
   unverifyUser: async (userId: string) => {
-    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/unverify`, {
+    return apiInterceptor.makeAuthenticatedRequest(`/identity/users/${userId}/unverify`, {
       method: 'PATCH',
     });
   },
 
   // Upload profile picture
   uploadProfilePicture: async (userId: string, formData: FormData) => {
-    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/profile-picture`, {
+    return apiInterceptor.makeAuthenticatedRequest(`/identity/users/${userId}/profile-picture`, {
       method: 'POST',
       body: formData,
       // Don't set Content-Type header - FormData sets it automatically with boundary
@@ -170,14 +170,14 @@ export const usersAPI = {
 
   // Delete profile picture
   deleteProfilePicture: async (userId: string) => {
-    return apiInterceptor.makeAuthenticatedRequest(`/users/${userId}/profile-picture`, {
+    return apiInterceptor.makeAuthenticatedRequest(`/identity/users/${userId}/profile-picture`, {
       method: 'DELETE',
     });
   },
 
   // Check if phone exists
   checkPhone: async (phone: string) => {
-    const url = `${API_BASE_URL}/users/check-phone/${phone}`;
+    const url = `${API_BASE_URL}/identity/users/check-phone/${phone}`;
     console.log('[usersAPI.checkPhone] ➜ GET', url);
     const startedAt = Date.now();
     const response = await fetch(url, {
@@ -204,15 +204,15 @@ export const usersAPI = {
 };
 
 export const checkPhoneExists = async (phone: string) => {
-  const response = await fetch(`${API_BASE_URL}/users/check-phone/${phone}`, {
+  const response = await fetch(`${API_BASE_URL}/identity/users/check-phone/${phone}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
   });
-  
+
   if (!response.ok) {
     throw new Error(`Phone check failed: ${response.status}`);
   }
-  
+
   return response.json();
 };
 

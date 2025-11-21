@@ -4,12 +4,13 @@ import React_RCTAppDelegate
 import ReactAppDependencyProvider
 import FirebaseCore
 import FirebaseAuth
+import FirebaseMessaging
 import GoogleMaps
 import GooglePlaces
 import UserNotifications
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
   var window: UIWindow?
 
   var reactNativeDelegate: ReactNativeDelegate?
@@ -37,6 +38,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     print("⚠️ [Auth] App verification disabled for Simulator testing. Use test phone numbers in Firebase Console.")
     #endif
 
+    // 3) FCM setup
+    UNUserNotificationCenter.current().delegate = self
+    Messaging.messaging().delegate = self
+
     UIApplication.shared.registerForRemoteNotifications()
     self.verifyFirebaseURLScheme()
 
@@ -63,6 +68,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     #else
     Auth.auth().setAPNSToken(deviceToken, type: .prod)
     #endif
+
+    // Register device token with FCM
+    Messaging.messaging().apnsToken = deviceToken
 
     #if DEBUG
     let hex = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
@@ -132,6 +140,33 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
          (Target → Info → URL Types)
       """)
     }
+  }
+
+  // MARK: - UNUserNotificationCenterDelegate
+
+  func userNotificationCenter(_ center: UNUserNotificationCenter,
+                              willPresent notification: UNNotification,
+                              withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    // Show notification even when app is in foreground
+    completionHandler([.banner, .sound, .badge])
+  }
+
+  func userNotificationCenter(_ center: UNUserNotificationCenter,
+                              didReceive response: UNNotificationResponse,
+                              withCompletionHandler completionHandler: @escaping () -> Void) {
+    // Handle notification tap
+    completionHandler()
+  }
+
+  // MARK: - MessagingDelegate
+
+  func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+    #if DEBUG
+    if let token = fcmToken {
+      print("✅ FCM registration token: \(token)")
+    }
+    #endif
+    // Token refresh is handled in React Native FCMService
   }
 }
 

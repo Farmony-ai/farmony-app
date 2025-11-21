@@ -56,6 +56,7 @@ const SignUpScreen = () => {
   const [otpError, setOTPError] = useState('');
   const [smsConfirmation, setSMSConfirmation] = useState<any>(null);
   const [resendTimer, setResendTimer] = useState(0);
+  const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
   const inputRefs = useRef<Array<TextInput | null>>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -223,24 +224,30 @@ const SignUpScreen = () => {
 
   const handleVerifyOTP = async (otpString?: string) => {
     const otpCode = otpString || otp.join('');
-    
+
     if (otpCode.length !== 6) {
       setOTPError('Please enter all 6 digits');
       return;
     }
-    
+
     dispatch(clearError());
     setOTPError('');
-    
+
     try {
       if (!smsConfirmation) {
         setOTPError('Please request OTP first');
         return;
       }
-      
+
       // Verify OTP with Firebase
-      await firebaseSMSService.verifyOTP(smsConfirmation, otpCode);
-      
+      const userCredential = await firebaseSMSService.verifyOTP(smsConfirmation, otpCode);
+
+      // Get Firebase ID token
+      const idToken = await userCredential.user.getIdToken();
+      setFirebaseIdToken(idToken);
+
+      console.log('✅ [SignUpScreen] OTP verified, got Firebase ID token');
+
       // OTP verified, proceed to profile picture
       setCurrentStep('profile');
     } catch (error: any) {
@@ -312,14 +319,28 @@ const SignUpScreen = () => {
     setUploadProgress(0);
 
     try {
+      // Get a fresh Firebase ID token to avoid expiration issues
+      // Firebase ID tokens can expire, so we get a new one before registration
+      const auth = require('@react-native-firebase/auth').default;
+      const currentUser = auth().currentUser;
+
+      if (!currentUser) {
+        Alert.alert('Error', 'Please verify OTP first');
+        setUploadingImage(false);
+        return;
+      }
+
+      // Get fresh ID token (force refresh to ensure it's not expired)
+      const freshIdToken = await currentUser.getIdToken(true);
+      console.log('✅ [SignUpScreen] Got fresh Firebase ID token');
+
       // Register user with all collected data
       const userData = {
         name,
         email,
         phone,
+        idToken: freshIdToken, // Fresh Firebase ID token
         role: 'individual' as const,
-        isVerified: true, // Already verified OTP
-        referralCode: referralCode || undefined,
       };
 
       const result = await dispatch(registerUser(userData));

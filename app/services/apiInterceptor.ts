@@ -263,7 +263,7 @@ class ApiInterceptor {
 
   // Get user profile
   async getProfile(userId: string): Promise<{ success: boolean; data?: any; error?: string }> {
-    return this.makeAuthenticatedRequest(`/users/${userId}`, {
+    return this.makeAuthenticatedRequest(`/identity/users/${userId}`, {
       method: 'GET',
     });
   }
