@@ -40,7 +40,7 @@ const getBaseURL = () => {
     if (Platform.OS === 'android') {
       return API_CONFIG.development.android; // Android emulator
     } else if (Platform.OS === 'ios') {
-      return API_CONFIG.development.ios; // iOS simulator
+      return API_CONFIG.production.api; // iOS simulator
     }
     return API_CONFIG.development.device; // Fallback
   }
