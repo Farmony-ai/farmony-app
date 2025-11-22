@@ -629,7 +629,7 @@ const SignUpScreen = () => {
       </View>
 
       <TouchableOpacity
-        style={[styles.proceedButton, styles.proceedButtonGray]}
+        style={[styles.proceedButton, !profileImage && styles.proceedButtonGray]}
         onPress={handleCompleteSignup}
         disabled={uploadingImage}
         activeOpacity={0.8}

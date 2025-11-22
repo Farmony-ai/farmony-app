@@ -204,7 +204,11 @@ export const usersAPI = {
 };
 
 export const checkPhoneExists = async (phone: string) => {
-  const response = await fetch(`${API_BASE_URL}/identity/users/check-phone/${phone}`, {
+  // Normalize phone number to include country code for consistent database lookup
+  // DB stores phone with country code (e.g., +919876543210)
+  const normalizedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+
+  const response = await fetch(`${API_BASE_URL}/identity/users/check-phone/${encodeURIComponent(normalizedPhone)}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
   });
