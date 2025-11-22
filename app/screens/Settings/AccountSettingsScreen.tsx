@@ -3,6 +3,7 @@ import { View, StyleSheet, TextInput, ScrollView, TouchableOpacity, Image, Statu
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import Text from '../../components/Text';
 import { SPACING, FONTS, FONT_SIZES } from '../../utils';
+import { scaleFontSize, scaleSize } from '../../utils/fonts';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { setUser } from '../../store/slices/authSlice';
@@ -28,15 +29,15 @@ const COLORS_MINIMAL = {
 };
 
 const IconFormInput = ({ icon, label, value, onChangeText, placeholder, editable = true, onPress, ...props }) => (
-  <TouchableOpacity 
-    style={styles.inputContainer} 
-    onPress={onPress} 
+  <TouchableOpacity
+    style={styles.inputContainer}
+    onPress={onPress}
     activeOpacity={onPress ? 0.7 : 1}
     disabled={!onPress && editable}
   >
     <Text style={styles.label}>{label}</Text>
     <View style={[styles.inputWrapper, !editable && styles.inputDisabled]}>
-      <Ionicons name={icon} size={18} color={COLORS_MINIMAL.text.muted} style={styles.inputIcon} />
+      <Ionicons name={icon} size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} style={styles.inputIcon} />
       <TextInput
         style={styles.input}
         value={value}
@@ -47,7 +48,7 @@ const IconFormInput = ({ icon, label, value, onChangeText, placeholder, editable
         {...props}
       />
       {onPress && (
-        <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
+        <Ionicons name="chevron-forward" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
       )}
     </View>
   </TouchableOpacity>
@@ -312,7 +313,7 @@ const AccountSettingsScreen = () => {
       
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color={COLORS_MINIMAL.text.primary} />
+          <Ionicons name="arrow-back" size={scaleSize(24)} color={COLORS_MINIMAL.text.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
         <TouchableOpacity onPress={handleSaveChanges} activeOpacity={0.7} disabled={isSaving}>
@@ -346,7 +347,7 @@ const AccountSettingsScreen = () => {
                   />
                 ) : (
                   <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                    <Ionicons name="person-outline" size={40} color={COLORS_MINIMAL.text.muted} />
+                    <Ionicons name="person-outline" size={scaleSize(40)} color={COLORS_MINIMAL.text.muted} />
                   </View>
                 )}
               </>
@@ -365,7 +366,7 @@ const AccountSettingsScreen = () => {
               onPress={handleCameraButtonPress}
               disabled={uploadingProfilePicture || isLoadingProfile}
             >
-              <Ionicons name="camera" size={18} color={COLORS_MINIMAL.background} />
+              <Ionicons name="camera" size={scaleSize(18)} color={COLORS_MINIMAL.background} />
             </TouchableOpacity>
           </View>
           <Text style={styles.changePhotoText}>
@@ -472,37 +473,37 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_MINIMAL.background,
   },
   contentContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: scaleSize(20),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(16),
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     color: COLORS_MINIMAL.text.primary,
   },
   saveText: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: COLORS_MINIMAL.accent,
   },
   avatarSection: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: scaleSize(32),
   },
   avatarContainer: {
     position: 'relative',
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: scaleSize(96),
+    height: scaleSize(96),
+    borderRadius: scaleSize(48),
     backgroundColor: COLORS_MINIMAL.surface,
   },
   avatarLoading: {
@@ -521,68 +522,68 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 48,
+    borderRadius: scaleSize(48),
     justifyContent: 'center',
     alignItems: 'center',
   },
   uploadProgressText: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: '#FFFFFF',
-    marginTop: 4,
+    marginTop: scaleSize(4),
   },
   cameraButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
     backgroundColor: COLORS_MINIMAL.accent,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: scaleSize(32),
+    height: scaleSize(32),
+    borderRadius: scaleSize(16),
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
+    borderWidth: scaleSize(3),
     borderColor: COLORS_MINIMAL.background,
   },
   changePhotoText: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.accent,
-    marginTop: 12,
+    marginTop: scaleSize(12),
   },
   formSection: {
-    marginBottom: 32,
+    marginBottom: scaleSize(32),
   },
   sectionTitle: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.muted,
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: scaleSize(20),
   },
   label: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     color: COLORS_MINIMAL.text.secondary,
-    marginBottom: 8,
+    marginBottom: scaleSize(8),
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
-    borderRadius: 12,
-    height: 48,
-    paddingHorizontal: 14,
+    borderRadius: scaleSize(12),
+    height: scaleSize(48),
+    paddingHorizontal: scaleSize(14),
   },
   inputIcon: {
-    marginRight: 10,
+    marginRight: scaleSize(10),
   },
   input: {
     flex: 1,
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     color: COLORS_MINIMAL.text.primary,
     height: '100%',
   },
@@ -592,35 +593,35 @@ const styles = StyleSheet.create({
   },
   textAreaWrapper: {
     backgroundColor: COLORS_MINIMAL.surface,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: scaleSize(12),
+    paddingHorizontal: scaleSize(14),
+    paddingVertical: scaleSize(12),
   },
   textArea: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     color: COLORS_MINIMAL.text.primary,
-    minHeight: 80,
+    minHeight: scaleSize(80),
   },
   genderContainer: {
     flexDirection: 'row',
     backgroundColor: COLORS_MINIMAL.surface,
-    borderRadius: 12,
-    padding: 4,
+    borderRadius: scaleSize(12),
+    padding: scaleSize(4),
   },
   genderTab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: scaleSize(10),
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: scaleSize(8),
   },
   genderTabSelected: {
     backgroundColor: COLORS_MINIMAL.background,
   },
   genderText: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.secondary,
   },
   genderTextSelected: {
