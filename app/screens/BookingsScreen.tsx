@@ -12,6 +12,7 @@ import {
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { SPACING, FONTS } from '../utils';
+import { scaleFontSize, scaleSize } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
@@ -678,10 +679,10 @@ const BookingsScreen = () => {
         ) : (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconContainer}>
-              <Ionicons 
-                name={activeTab === 'upcoming' ? 'calendar-outline' : 'time-outline'} 
-                size={48} 
-                color={COLORS_MINIMAL.text.muted} 
+              <Ionicons
+                name={activeTab === 'upcoming' ? 'calendar-outline' : 'time-outline'}
+                size={scaleSize(48)}
+                color={COLORS_MINIMAL.text.muted}
               />
             </View>
             <Text style={styles.emptyTitle}>
@@ -713,41 +714,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(16),
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
   headerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: scaleSize(36),
+    height: scaleSize(36),
+    borderRadius: scaleSize(10),
     backgroundColor: COLORS_MINIMAL.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-    gap: 12,
+    paddingHorizontal: scaleSize(20),
+    marginBottom: scaleSize(16),
+    gap: scaleSize(12),
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: scaleSize(10),
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
-    borderRadius: 10,
+    borderRadius: scaleSize(10),
   },
   activeTab: {
     backgroundColor: COLORS_MINIMAL.text.primary,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.secondary,
   },
@@ -755,46 +756,46 @@ const styles = StyleSheet.create({
     color: COLORS_MINIMAL.background,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
+    paddingHorizontal: scaleSize(20),
+    paddingBottom: scaleSize(100),
   },
   loadingContainer: {
-    paddingVertical: 60,
+    paddingVertical: scaleSize(60),
     alignItems: 'center',
   },
   bookingItem: {
-    paddingVertical: 12,
+    paddingVertical: scaleSize(12),
   },
   bookingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: scaleSize(16),
   },
   serviceIcon: {
-    width: 64,
-    height: 64,
+    width: scaleSize(64),
+    height: scaleSize(64),
   },
   bookingContent: {
     flex: 1,
   },
   bookingTitle: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
   bookingTitleStack: {
     flex: 1,
-    marginRight: 12,
+    marginRight: scaleSize(12),
   },
   bookingIdText: {
-    marginTop: 2,
-    fontSize: 13,
+    marginTop: scaleSize(2),
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
   },
   bookingSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
+    marginTop: scaleSize(4),
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.secondary,
   },
@@ -804,9 +805,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   priceBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+    paddingHorizontal: scaleSize(12),
+    paddingVertical: scaleSize(6),
+    borderRadius: scaleSize(999),
     borderWidth: 1,
   },
   priceBadgeEstimate: {
@@ -818,7 +819,7 @@ const styles = StyleSheet.create({
     borderColor: '#34D399',
   },
   priceBadgeText: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     fontFamily: FONTS.POPPINS.MEDIUM,
   },
   priceBadgeTextEstimate: {
@@ -830,79 +831,79 @@ const styles = StyleSheet.create({
   statusLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    gap: 10,
+    marginTop: scaleSize(12),
+    gap: scaleSize(10),
   },
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    gap: 6,
+    paddingHorizontal: scaleSize(10),
+    paddingVertical: scaleSize(5),
+    borderRadius: scaleSize(8),
+    gap: scaleSize(6),
   },
   statusChipAnimation: {
-    width: 18,
-    height: 18,
+    width: scaleSize(18),
+    height: scaleSize(18),
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusChipText: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     fontFamily: FONTS.POPPINS.MEDIUM,
   },
   statusLineText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.secondary,
   },
   metaLine: {
-    marginTop: 12,
-    fontSize: 13,
+    marginTop: scaleSize(12),
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.secondary,
   },
   listDivider: {
-    marginTop: 18,
+    marginTop: scaleSize(18),
     height: 1,
     backgroundColor: COLORS_MINIMAL.divider,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 40,
+    paddingVertical: scaleSize(80),
+    paddingHorizontal: scaleSize(40),
   },
   emptyIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: scaleSize(80),
+    height: scaleSize(80),
+    borderRadius: scaleSize(40),
     backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: scaleSize(20),
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
-    marginBottom: 8,
+    marginBottom: scaleSize(8),
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   exploreButton: {
     backgroundColor: COLORS_MINIMAL.accent,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: scaleSize(24),
+    paddingVertical: scaleSize(12),
+    borderRadius: scaleSize(10),
   },
   exploreButtonText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.background,
   },
