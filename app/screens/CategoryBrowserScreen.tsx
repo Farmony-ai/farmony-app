@@ -381,7 +381,6 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
             ...(isSelected ? [styles.categoryTextActive] : []),
           ]}
           highlightStyle={{
-            backgroundColor: '#FFEB3B',
             fontWeight: '700',
           }}
           numberOfLines={2}
@@ -421,7 +420,6 @@ const CategoryBrowserScreen = ({ route }: { route: any }) => {
             ...(isSelected ? [styles.subCategoryTextActive] : []),
           ]}
           highlightStyle={{
-            backgroundColor: '#FFEB3B',
             fontWeight: '600',
           }}
           numberOfLines={2}

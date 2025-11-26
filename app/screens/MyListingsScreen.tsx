@@ -48,13 +48,12 @@ const MyListingsScreen = () => {
     try {
       setLoading(true);
       const providerId = user?.id;
-      const authToken = token || undefined;
 
       if (!providerId) {
         throw new Error('User ID not found');
       }
 
-      const response = await ListingService.getProviderListings(providerId, authToken);
+      const response = await ListingService.getProviderListings(providerId);
       setListings(response);
     } catch (error) {
       console.error('Error fetching listings:', error);

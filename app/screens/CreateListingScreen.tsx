@@ -117,8 +117,8 @@ const CreateListingScreen = () => {
         const categories = await CatalogueService.getCategories();
         setAvailableCategories(categories);
 
-        if (isEditMode && token) {
-          const listingData = await ListingService.getListingById(listingId, token);
+        if (isEditMode) {
+          const listingData = await ListingService.getListingById(listingId);
           const resolvedProviderId = (listingData as any)?.providerId?._id ?? (listingData as any)?.providerId ?? '';
           const resolvedCategoryId = (listingData as any)?.categoryId?._id ?? (listingData as any)?.categoryId ?? '';
           const resolvedSubCategoryId = (listingData as any)?.subCategoryId?._id ?? (listingData as any)?.subCategoryId ?? '';
@@ -279,12 +279,12 @@ const CreateListingScreen = () => {
       };
 
       if (isEditMode) {
-        await ListingService.updateListing(listingId, payload, token);
+        await ListingService.updateListing(listingId, payload);
         Alert.alert('Success', 'Listing updated successfully!', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       } else {
-        await ListingService.createListing(payload, token);
+        await ListingService.createListing(payload);
         Alert.alert('Success', 'Listing created successfully!', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);

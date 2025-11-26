@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS, scaleFontSize, scaleSize } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 
@@ -43,11 +43,8 @@ const NotificationsScreen = () => {
     <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
       {/* Header */}
       <View style={styles.header}>
-
-        <Text variant="h4" weight="semibold" style={styles.headerTitle}>
-          Notifications
-        </Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Notifications</Text>
+        
       </View>
 
       {/* List */}
@@ -82,30 +79,42 @@ const NotificationsScreen = () => {
     </SafeAreaWrapper>
   );
 };
+const COLORS_MINIMAL = {
+  background: '#FFFFFF',
+  surface: '#F8F9FA',
+  text: {
+    primary: '#000000',
+    secondary: '#4A5568',
+    muted: '#A0AEC0',
+  },
+  accent: '#10B981',
+  border: '#E2E8F0',
+  divider: '#F1F5F9',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  info: '#3B82F6',
+};
+
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
-  },
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: scaleSize(20),
+      paddingVertical: scaleSize(16),
+      backgroundColor: COLORS_MINIMAL.background,
+    },
+    headerTitle: {
+      fontSize: scaleFontSize(18),
+      fontFamily: FONTS.POPPINS.SEMIBOLD,
+      color: COLORS_MINIMAL.text.primary,
+    },
   backButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.TEXT.PRIMARY,
   },
   emptyContainer: {
     flex: 1,

@@ -54,7 +54,7 @@ class ProfilePictureService {
 
       // Use standard API interceptor for simple upload
       const result = await apiInterceptor.makeAuthenticatedRequest<{profilePictureUrl: string}>(
-        `/users/${userId}/profile-picture`,
+        `/identity/users/${userId}/profile-picture`,
         {
           method: 'POST',
           body: formData,
@@ -108,7 +108,7 @@ class ProfilePictureService {
         }
 
         const xhr = new XMLHttpRequest();
-        const url = `${await this.getApiBaseUrl()}/users/${userId}/profile-picture`;
+        const url = `${await this.getApiBaseUrl()}/identity/users/${userId}/profile-picture`;
 
         // Track upload progress
         xhr.upload.addEventListener('progress', (event) => {
@@ -188,7 +188,7 @@ class ProfilePictureService {
       console.log(`[ProfilePictureService] Deleting profile picture for user ${userId}`);
 
       const result = await apiInterceptor.makeAuthenticatedRequest(
-        `/users/${userId}/profile-picture`,
+        `/identity/users/${userId}/profile-picture`,
         {
           method: 'DELETE',
         }

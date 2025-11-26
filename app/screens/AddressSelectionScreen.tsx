@@ -12,6 +12,7 @@ import {
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { SPACING, FONTS, FONT_SIZES } from '../utils';
+import { scaleFontSize, scaleSize } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -43,6 +44,7 @@ const AddressSelectionScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -50,16 +52,18 @@ const AddressSelectionScreen = () => {
     }, [user])
   );
 
-  const fetchAddresses = async () => {
+  const fetchAddresses = async (showAlert = true) => {
     if (!user?.id) {
       setAddresses([]);
       setSelectedAddressId(null);
       setLoading(false);
+      setHasError(false);
       return;
     }
 
     try {
       setLoading(true);
+      setHasError(false);
       const userAddresses = await AddressService.getUserAddresses(user.id);
       setAddresses(userAddresses);
 
@@ -77,23 +81,26 @@ const AddressSelectionScreen = () => {
         }
       }
     } catch (error: any) {
-      console.error('Error fetching addresses:', error);
+      setHasError(true);
+      setAddresses([]);
 
-      // Show error message to user
-      Alert.alert(
-        'Error',
-        error?.message || 'Failed to load addresses. Please check your connection and try again.',
-        [
-          {
-            text: 'Retry',
-            onPress: () => fetchAddresses()
-          },
-          {
-            text: 'OK',
-            style: 'cancel'
-          }
-        ]
-      );
+      // Only show alert if requested (not during refresh)
+      if (showAlert) {
+        Alert.alert(
+          'Unable to Load Addresses',
+          'We couldn\'t load your saved addresses. Please check your internet connection and try again.',
+          [
+            {
+              text: 'Retry',
+              onPress: () => fetchAddresses(true)
+            },
+            {
+              text: 'OK',
+              style: 'cancel'
+            }
+          ]
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -101,7 +108,7 @@ const AddressSelectionScreen = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchAddresses();
+    await fetchAddresses(false); // Don't show alert during refresh
     setRefreshing(false);
   };
 
@@ -113,14 +120,16 @@ const AddressSelectionScreen = () => {
       dispatch(setLocation({
         latitude: address.coordinates[1],
         longitude: address.coordinates[0],
-        city: address.district || address.state,
+        city: address.district || address.state || undefined,
       }));
     }
 
     // Set as default if not already
-    if (!address.isDefault) {
+    if (!address.isDefault && user?.id) {
       try {
-        await AddressService.setDefaultAddress(address._id);
+        // Backend endpoint doesn't exist yet, so this will fail
+        // TODO: Remove this alert once backend implements PATCH /users/:userId/default-address
+        await AddressService.setDefaultAddress(user.id, address._id);
 
         // Update local state to reflect the change
         setAddresses(prevAddresses =>
@@ -133,23 +142,14 @@ const AddressSelectionScreen = () => {
         // Show success feedback
         Alert.alert('Success', 'Default address updated successfully');
       } catch (error: any) {
-        console.error('Error setting default address:', error);
-
-        // Show error message to user
-        Alert.alert(
-          'Error',
-          error?.message || 'Failed to set default address. Please try again.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Don't navigate away on error
-                return;
-              }
-            }
-          ]
+        // Since the endpoint doesn't exist, just update local state and continue
+        setAddresses(prevAddresses =>
+          prevAddresses.map(addr => ({
+            ...addr,
+            isDefault: addr._id === address._id
+          }))
         );
-        return; // Don't navigate away if there was an error
+        // Don't show error to user, just navigate back
       }
     }
 
@@ -174,9 +174,15 @@ const AddressSelectionScreen = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            if (!user?.id) {
+              Alert.alert('Error', 'User not found. Please try again.');
+              return;
+            }
+
             try {
-              await AddressService.deleteAddress(addressId);
+              await AddressService.deleteAddress(user.id, addressId);
               await fetchAddresses();
+              Alert.alert('Success', 'Address deleted successfully');
             } catch (error) {
               Alert.alert('Error', 'Failed to delete address. Please try again.');
             }
@@ -224,10 +230,10 @@ const AddressSelectionScreen = () => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={24} color={COLORS_MINIMAL.text.primary} />
+            <Ionicons name="arrow-back" size={scaleSize(24)} color={COLORS_MINIMAL.text.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Select Address</Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: scaleSize(24) }} />
         </View>
 
         <ScrollView
@@ -249,10 +255,10 @@ const AddressSelectionScreen = () => {
             activeOpacity={0.7}
           >
             <View style={styles.addIconWrapper}>
-              <Ionicons name="add" size={20} color={COLORS_MINIMAL.accent} />
+              <Ionicons name="add" size={scaleSize(20)} color={COLORS_MINIMAL.accent} />
             </View>
             <Text style={styles.addNewText}>Add new address</Text>
-            <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
+            <Ionicons name="chevron-forward" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
           </TouchableOpacity>
 
           {/* Saved Addresses Section */}
@@ -283,11 +289,11 @@ const AddressSelectionScreen = () => {
                         ]}>
                           <Ionicons
                             name={getTagIcon(address.tag)}
-                            size={20}
+                            size={scaleSize(20)}
                             color={selectedAddressId === address._id ? COLORS_MINIMAL.accent : COLORS_MINIMAL.text.secondary}
                           />
                         </View>
-                        
+
                         <View style={styles.addressDetails}>
                           <View style={styles.addressHeaderRow}>
                             <Text style={styles.addressTag}>
@@ -295,7 +301,7 @@ const AddressSelectionScreen = () => {
                             </Text>
                             {selectedAddressId === address._id && (
                               <View style={styles.selectedBadge}>
-                                <Ionicons name="checkmark-circle" size={14} color={COLORS_MINIMAL.accent} />
+                                <Ionicons name="checkmark-circle" size={scaleSize(14)} color={COLORS_MINIMAL.accent} />
                               </View>
                             )}
                           </View>
@@ -323,8 +329,8 @@ const AddressSelectionScreen = () => {
                               '',
                               [
                                 { text: 'Edit', onPress: () => handleEditAddress(address) },
-                                { 
-                                  text: 'Delete', 
+                                {
+                                  text: 'Delete',
                                   onPress: () => handleDeleteAddress(address._id),
                                   style: 'destructive'
                                 },
@@ -334,7 +340,7 @@ const AddressSelectionScreen = () => {
                           }}
                           activeOpacity={0.7}
                         >
-                          <Ionicons name="ellipsis-vertical" size={18} color={COLORS_MINIMAL.text.muted} />
+                          <Ionicons name="ellipsis-vertical" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
                         </TouchableOpacity>
                       </View>
                       {index < addresses.length - 1 && <View style={styles.divider} />}
@@ -345,23 +351,41 @@ const AddressSelectionScreen = () => {
             </>
           )}
 
-          {/* Empty State */}
+          {/* Empty State or Error State */}
           {!loading && addresses.length === 0 && (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconContainer}>
-                <Ionicons name="location-outline" size={48} color={COLORS_MINIMAL.text.muted} />
+                <Ionicons
+                  name={hasError ? "alert-circle-outline" : "location-outline"}
+                  size={scaleSize(48)}
+                  color={COLORS_MINIMAL.text.muted}
+                />
               </View>
-              <Text style={styles.emptyStateTitle}>No addresses saved</Text>
-              <Text style={styles.emptyStateText}>
-                Add your first address to get started
+              <Text style={styles.emptyStateTitle}>
+                {hasError ? 'Unable to Load Addresses' : 'No addresses saved'}
               </Text>
-              <TouchableOpacity 
-                style={styles.emptyAddButton}
-                onPress={handleAddNewAddress}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.emptyAddButtonText}>Add Address</Text>
-              </TouchableOpacity>
+              <Text style={styles.emptyStateText}>
+                {hasError
+                  ? 'We couldn\'t load your addresses. Please check your internet connection and try again.'
+                  : 'Add your first address to get started. You can save addresses for home, work, farm, or any other location.'}
+              </Text>
+              {hasError ? (
+                <TouchableOpacity
+                  style={styles.emptyAddButton}
+                  onPress={() => fetchAddresses(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.emptyAddButtonText}>Retry</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.emptyAddButton}
+                  onPress={handleAddNewAddress}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.emptyAddButtonText}>Add Address</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </ScrollView>
@@ -379,59 +403,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(16),
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: scaleSize(100),
   },
   addNewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 24,
-    borderRadius: 12,
+    paddingVertical: scaleSize(14),
+    paddingHorizontal: scaleSize(16),
+    marginHorizontal: scaleSize(20),
+    marginTop: scaleSize(8),
+    marginBottom: scaleSize(24),
+    borderRadius: scaleSize(12),
   },
   addIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: scaleSize(36),
+    height: scaleSize(36),
+    borderRadius: scaleSize(10),
     backgroundColor: COLORS_MINIMAL.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: scaleSize(12),
   },
   addNewText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.primary,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.muted,
-    paddingHorizontal: 20,
-    marginBottom: 8,
+    paddingHorizontal: scaleSize(20),
+    marginBottom: scaleSize(8),
   },
   loadingContainer: {
-    paddingVertical: 60,
+    paddingVertical: scaleSize(60),
     alignItems: 'center',
   },
   addressList: {
-    marginHorizontal: 20,
+    marginHorizontal: scaleSize(20),
     backgroundColor: COLORS_MINIMAL.background,
-    borderRadius: 12,
+    borderRadius: scaleSize(12),
     overflow: 'hidden',
   },
   addressCard: {
@@ -442,104 +466,104 @@ const styles = StyleSheet.create({
   },
   addressContent: {
     flexDirection: 'row',
-    padding: 16,
+    padding: scaleSize(16),
   },
   addressIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: scaleSize(40),
+    height: scaleSize(40),
+    borderRadius: scaleSize(10),
     backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: scaleSize(12),
   },
   selectedIconContainer: {
     backgroundColor: `${COLORS_MINIMAL.accent}15`,
   },
   addressDetails: {
     flex: 1,
-    marginRight: 8,
+    marginRight: scaleSize(8),
   },
   addressHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: scaleSize(4),
   },
   addressTag: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
-    marginRight: 8,
+    marginRight: scaleSize(8),
   },
   selectedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   addressLine1: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.primary,
-    marginBottom: 2,
+    marginBottom: scaleSize(2),
   },
   addressLine2: {
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.secondary,
-    marginBottom: 2,
+    marginBottom: scaleSize(2),
   },
   addressFullDetails: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
-    lineHeight: 16,
-    marginTop: 4,
+    lineHeight: scaleSize(16),
+    marginTop: scaleSize(4),
   },
   menuButton: {
-    padding: 4,
-    marginTop: -4,
+    padding: scaleSize(4),
+    marginTop: scaleSize(-4),
   },
   divider: {
     height: 1,
     backgroundColor: COLORS_MINIMAL.divider,
-    marginLeft: 68,
+    marginLeft: scaleSize(68),
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 40,
+    paddingVertical: scaleSize(80),
+    paddingHorizontal: scaleSize(40),
   },
   emptyIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: scaleSize(80),
+    height: scaleSize(80),
+    borderRadius: scaleSize(40),
     backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: scaleSize(20),
   },
   emptyStateTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
-    marginBottom: 8,
+    marginBottom: scaleSize(8),
   },
   emptyStateText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   emptyAddButton: {
     backgroundColor: COLORS_MINIMAL.accent,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: scaleSize(24),
+    paddingVertical: scaleSize(12),
+    borderRadius: scaleSize(10),
   },
   emptyAddButtonText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.background,
   },

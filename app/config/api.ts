@@ -11,7 +11,7 @@ export const API_CONFIG = {
     // android: 'http:// 192.168.1.101:3000', 
     
     // For iOS Simulator (replace with your actual IP)F
-    ios: 'http://192.168.1.101:3000',
+    ios: 'http://192.168.31.250:3000',
     
     // For Physical Device (replace with your actual IP)
     device: 'http://192.168.1.101:3000', // Replace with your computer's IP
@@ -19,7 +19,7 @@ export const API_CONFIG = {
   
   // 🚀 Production Settings
   production: {
-    api: 'https://your-production-api.com',
+    api: 'https://farmony-api-lh4oj.ondigitalocean.app',
   },
 };
 
@@ -30,9 +30,22 @@ export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyA_d
 
 // 🎯 Auto-detect Platform and Environment
 const getBaseURL = () => {
-  // For now, we'll use Android emulator settings
-  // You can make this more dynamic based on Platform.OS or __DEV__
-  return API_CONFIG.development.ios;
+  // Use development backend for local development
+  // Change this to production.api when deploying to production
+  const isDevelopment = __DEV__; // React Native provides __DEV__ flag
+
+  if (isDevelopment) {
+    // Detect platform and return appropriate dev URL
+    const Platform = require('react-native').Platform;
+    if (Platform.OS === 'android') {
+      return API_CONFIG.development.android; // Android emulator
+    } else if (Platform.OS === 'ios') {
+      return API_CONFIG.production.api; // iOS simulator
+    }
+    return API_CONFIG.development.device; // Fallback
+  }
+
+  return API_CONFIG.production.api;
 };
 
 // 📡 Export the current base URL

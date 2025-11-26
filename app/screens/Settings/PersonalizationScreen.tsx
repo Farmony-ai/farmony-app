@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, StatusBar } fro
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import Text from '../../components/Text';
 import { SPACING, FONTS, FONT_SIZES } from '../../utils';
+import { scaleFontSize, scaleSize } from '../../utils/fonts';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { setUser, STORAGE_KEYS } from '../../store/slices/authSlice';
@@ -30,13 +31,13 @@ const SelectionRow = ({ icon, label, value, onPress, isLast = false }) => (
     <TouchableOpacity style={styles.settingRow} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.rowLeft}>
         <View style={styles.iconContainer}>
-          <Ionicons name={icon} size={20} color={COLORS_MINIMAL.text.secondary} />
+          <Ionicons name={icon} size={scaleSize(20)} color={COLORS_MINIMAL.text.secondary} />
         </View>
         <Text style={styles.label}>{label}</Text>
       </View>
       <View style={styles.rowRight}>
         <Text style={styles.value}>{value}</Text>
-        <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
+        <Ionicons name="chevron-forward" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
       </View>
     </TouchableOpacity>
     {!isLast && <View style={styles.separator} />}
@@ -48,7 +49,7 @@ const ToggleRow = ({ icon, label, value, onValueChange, isLast = false }) => (
     <View style={styles.settingRow}>
       <View style={styles.rowLeft}>
         <View style={styles.iconContainer}>
-          <Ionicons name={icon} size={20} color={COLORS_MINIMAL.text.secondary} />
+          <Ionicons name={icon} size={scaleSize(20)} color={COLORS_MINIMAL.text.secondary} />
         </View>
         <Text style={styles.label}>{label}</Text>
       </View>
@@ -69,8 +70,15 @@ const PersonalizationScreen = () => {
   const navigation = useNavigation();
   const { user } = useSelector((state: RootState) => state.auth);
 
-  const [defaultLanding, setDefaultLanding] = useState(user?.preferences?.defaultLandingPage || 'Seeker');
-  const [defaultProviderTab, setDefaultProviderTab] = useState(user?.preferences?.defaultProviderTab || 'Active');
+  // Helper to capitalize first letter for display
+  const capitalize = (str: string) => str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
+
+  const [defaultLanding, setDefaultLanding] = useState(
+    capitalize(user?.preferences?.defaultLandingPage || 'seeker')
+  );
+  const [defaultProviderTab, setDefaultProviderTab] = useState(
+    capitalize(user?.preferences?.defaultProviderTab || 'active')
+  );
   const [language, setLanguage] = useState(user?.preferences?.preferredLanguage || 'English');
   const [theme, setTheme] = useState(user?.preferences?.theme || 'Light');
   const [notificationsEnabled, setNotificationsEnabled] = useState(user?.preferences?.notificationsEnabled ?? true);
@@ -145,12 +153,14 @@ const PersonalizationScreen = () => {
 
   const handleLandingChange = async (value) => {
     setDefaultLanding(value);
-    await persistPreferences({ defaultLandingPage: value });
+    // Convert to lowercase for backend
+    await persistPreferences({ defaultLandingPage: value.toLowerCase() });
   };
 
   const handleProviderTabChange = async (value) => {
     setDefaultProviderTab(value);
-    await persistPreferences({ defaultProviderTab: value });
+    // Convert to lowercase for backend
+    await persistPreferences({ defaultProviderTab: value.toLowerCase() });
   };
 
   const handleLanguageChange = async (value) => {
@@ -174,10 +184,10 @@ const PersonalizationScreen = () => {
       
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color={COLORS_MINIMAL.text.primary} />
+          <Ionicons name="arrow-back" size={scaleSize(24)} color={COLORS_MINIMAL.text.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Personalization</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: scaleSize(24) }} />
       </View>
 
       <ScrollView 
@@ -187,7 +197,7 @@ const PersonalizationScreen = () => {
       >
         <View style={styles.heroSection}>
           <View style={styles.heroIcon}>
-            <Ionicons name="color-palette-outline" size={32} color={COLORS_MINIMAL.accent} />
+            <Ionicons name="color-palette-outline" size={scaleSize(32)} color={COLORS_MINIMAL.accent} />
           </View>
           <Text style={styles.heroTitle}>Customize your experience</Text>
           <Text style={styles.heroSubtitle}>Adjust settings to make the app work better for you</Text>
@@ -248,7 +258,7 @@ const PersonalizationScreen = () => {
 
         <View style={styles.tipSection}>
           <View style={styles.tipIcon}>
-            <Ionicons name="bulb-outline" size={20} color={COLORS_MINIMAL.accent} />
+            <Ionicons name="bulb-outline" size={scaleSize(20)} color={COLORS_MINIMAL.accent} />
           </View>
           <View style={styles.tipContent}>
             <Text style={styles.tipTitle}>Pro tip</Text>
@@ -268,69 +278,69 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_MINIMAL.background,
   },
   contentContainer: {
-    paddingBottom: 100,
+    paddingBottom: scaleSize(100),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(16),
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     color: COLORS_MINIMAL.text.primary,
   },
   heroSection: {
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 20,
+    paddingVertical: scaleSize(32),
+    paddingHorizontal: scaleSize(20),
   },
   heroIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: scaleSize(64),
+    height: scaleSize(64),
+    borderRadius: scaleSize(32),
     backgroundColor: `${COLORS_MINIMAL.accent}15`,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
   },
   heroTitle: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     color: COLORS_MINIMAL.text.primary,
-    marginBottom: 8,
+    marginBottom: scaleSize(8),
   },
   heroSubtitle: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
   },
   section: {
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   sectionTitle: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.muted,
-    marginBottom: 8,
-    paddingHorizontal: 20,
+    marginBottom: scaleSize(8),
+    paddingHorizontal: scaleSize(20),
   },
   card: {
     backgroundColor: COLORS_MINIMAL.background,
-    marginHorizontal: 20,
-    borderRadius: 12,
+    marginHorizontal: scaleSize(20),
+    borderRadius: scaleSize(12),
     overflow: 'hidden',
   },
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 4,
+    paddingVertical: scaleSize(14),
+    paddingHorizontal: scaleSize(4),
   },
   rowLeft: {
     flexDirection: 'row',
@@ -340,31 +350,31 @@ const styles = StyleSheet.create({
   rowRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: scaleSize(8),
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: scaleSize(36),
+    height: scaleSize(36),
+    borderRadius: scaleSize(10),
     backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: scaleSize(12),
   },
   label: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     color: COLORS_MINIMAL.text.primary,
   },
   value: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.secondary,
   },
   separator: {
     height: 1,
     backgroundColor: COLORS_MINIMAL.divider,
-    marginLeft: 52,
+    marginLeft: scaleSize(52),
   },
   switch: {
     transform: [{ scale: 0.9 }],
@@ -372,30 +382,30 @@ const styles = StyleSheet.create({
   tipSection: {
     flexDirection: 'row',
     backgroundColor: `${COLORS_MINIMAL.accent}10`,
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 12,
+    marginHorizontal: scaleSize(20),
+    marginTop: scaleSize(8),
+    marginBottom: scaleSize(24),
+    padding: scaleSize(16),
+    borderRadius: scaleSize(12),
   },
   tipIcon: {
-    marginRight: 12,
-    marginTop: 2,
+    marginRight: scaleSize(12),
+    marginTop: scaleSize(2),
   },
   tipContent: {
     flex: 1,
   },
   tipTitle: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.primary,
-    marginBottom: 4,
+    marginBottom: scaleSize(4),
   },
   tipText: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     color: COLORS_MINIMAL.text.secondary,
-    lineHeight: 18,
+    lineHeight: scaleSize(18),
   },
 });
 

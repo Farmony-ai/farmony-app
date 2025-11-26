@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image, 
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import Text from '../../components/Text';
 import { SPACING, FONTS, FONT_SIZES } from '../../utils';
+import { scaleFontSize, scaleSize } from '../../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
@@ -39,14 +40,14 @@ const SettingRow: React.FC<SettingRowProps> = ({ icon, label, subtitle, onPress,
     <TouchableOpacity style={styles.settingItem} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.settingLeft}>
         <View style={styles.iconContainer}>
-          <Ionicons name={icon} size={20} color={COLORS_MINIMAL.text.secondary} />
+          <Ionicons name={icon} size={scaleSize(20)} color={COLORS_MINIMAL.text.secondary} />
         </View>
         <View style={styles.settingTextContainer}>
           <Text style={styles.settingLabel}>{label}</Text>
           {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
+      <Ionicons name="chevron-forward" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
     </TouchableOpacity>
     {!isLast && <View style={styles.separator} />}
   </>
@@ -100,16 +101,12 @@ const SettingsScreen = () => {
   };
 
   const renderHeader = () => (
-    <TouchableOpacity
-      style={styles.headerContainer}
-      onPress={() => navigation.navigate('AccountSettings')}
-      activeOpacity={0.7}
-    >
+    <View style={styles.headerContainer}>
       {currentUser.avatarUrl ? (
         <Image source={{ uri: currentUser.avatarUrl }} style={styles.avatar} />
       ) : (
         <View style={[styles.avatar, styles.avatarPlaceholder]}>
-          <Ionicons name="person-outline" size={28} color={COLORS_MINIMAL.text.muted} />
+          <Ionicons name="person-outline" size={scaleSize(28)} color={COLORS_MINIMAL.text.muted} />
         </View>
       )}
       <View style={styles.headerTextContainer}>
@@ -117,14 +114,13 @@ const SettingsScreen = () => {
           <Text style={styles.headerName}>{currentUser.name}</Text>
           {currentUser.isVerified && (
             <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color={COLORS_MINIMAL.accent} />
+              <Ionicons name="checkmark-circle" size={scaleSize(14)} color={COLORS_MINIMAL.accent} />
             </View>
           )}
         </View>
-        <Text style={styles.headerSubtitle}>View and edit profile</Text>
+        <Text style={styles.headerSubtitle}>{currentUser.phone}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={COLORS_MINIMAL.text.muted} />
-    </TouchableOpacity>
+    </View>
   );
 
   const sections = [
@@ -133,8 +129,9 @@ const SettingsScreen = () => {
       items: [
         { icon: 'person-outline', label: 'Edit Profile', onPress: () => navigation.navigate('AccountSettings') },
         { icon: 'location-outline', label: 'Addresses', onPress: () => navigation.navigate('AddressSelection') },
-        { icon: 'shield-checkmark-outline', label: 'Security', onPress: () => {} },
-        { icon: 'card-outline', label: 'Payment Methods', onPress: () => navigation.navigate('PaymentSettings') },
+        // Temporarily hidden: Security and Payment Methods
+        // { icon: 'shield-checkmark-outline', label: 'Security', onPress: () => {} },
+        // { icon: 'card-outline', label: 'Payment Methods', onPress: () => navigation.navigate('PaymentSettings') },
       ],
     },
     {
@@ -193,7 +190,7 @@ const SettingsScreen = () => {
         ))}
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-          <Ionicons name="log-out-outline" size={20} color={COLORS_MINIMAL.danger} />
+          <Ionicons name="log-out-outline" size={scaleSize(20)} color={COLORS_MINIMAL.danger} />
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
 
@@ -209,16 +206,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_MINIMAL.background,
   },
   contentContainer: {
-    paddingBottom: 100,
+    paddingBottom: scaleSize(100),
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 16,
+    paddingHorizontal: scaleSize(20),
+    paddingTop: scaleSize(10),
+    paddingBottom: scaleSize(16),
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: scaleFontSize(20),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
@@ -226,15 +223,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
-    marginHorizontal: 20,
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 24,
+    marginHorizontal: scaleSize(20),
+    padding: scaleSize(16),
+    borderRadius: scaleSize(16),
+    marginBottom: scaleSize(24),
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: scaleSize(56),
+    height: scaleSize(56),
+    borderRadius: scaleSize(28),
     backgroundColor: COLORS_MINIMAL.border,
   },
   avatarPlaceholder: {
@@ -244,51 +241,57 @@ const styles = StyleSheet.create({
   },
   headerTextContainer: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: scaleSize(14),
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: scaleSize(6),
   },
   headerName: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: COLORS_MINIMAL.text.primary,
   },
   headerSubtitle: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     color: COLORS_MINIMAL.text.muted,
-    marginTop: 2,
+    marginTop: scaleSize(2),
+  },
+  headerEmail: {
+    fontFamily: FONTS.POPPINS.REGULAR,
+    fontSize: scaleFontSize(12),
+    color: COLORS_MINIMAL.text.muted,
+    marginTop: scaleSize(1),
   },
   verifiedBadge: {
     backgroundColor: COLORS_MINIMAL.surface,
-    borderRadius: 12,
-    padding: 2,
+    borderRadius: scaleSize(12),
+    padding: scaleSize(2),
   },
   section: {
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   sectionTitle: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.muted,
-    marginHorizontal: 20,
-    marginBottom: 8,
+    marginHorizontal: scaleSize(20),
+    marginBottom: scaleSize(8),
   },
   sectionCard: {
     backgroundColor: COLORS_MINIMAL.background,
-    marginHorizontal: 20,
-    borderRadius: 12,
+    marginHorizontal: scaleSize(20),
+    borderRadius: scaleSize(12),
     overflow: 'hidden',
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 4,
+    paddingVertical: scaleSize(14),
+    paddingHorizontal: scaleSize(4),
   },
   settingLeft: {
     flexDirection: 'row',
@@ -296,56 +299,56 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: scaleSize(36),
+    height: scaleSize(36),
+    borderRadius: scaleSize(10),
     backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: scaleSize(12),
   },
   settingTextContainer: {
     flex: 1,
   },
   settingLabel: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     color: COLORS_MINIMAL.text.primary,
   },
   settingSubtitle: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     color: COLORS_MINIMAL.text.muted,
-    marginTop: 1,
+    marginTop: scaleSize(1),
   },
   separator: {
     height: 1,
     backgroundColor: COLORS_MINIMAL.divider,
-    marginLeft: 52,
+    marginLeft: scaleSize(52),
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS_MINIMAL.dangerLight,
-    marginHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 32,
-    gap: 8,
+    marginHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(14),
+    borderRadius: scaleSize(12),
+    marginTop: scaleSize(32),
+    gap: scaleSize(8),
   },
   logoutText: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     color: COLORS_MINIMAL.danger,
   },
   versionText: {
     textAlign: 'center',
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     color: COLORS_MINIMAL.text.muted,
-    marginTop: 20,
-    marginBottom: 10,
+    marginTop: scaleSize(20),
+    marginBottom: scaleSize(10),
   }
 });
 

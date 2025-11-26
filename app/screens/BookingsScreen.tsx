@@ -12,6 +12,7 @@ import {
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { SPACING, FONTS } from '../utils';
+import { scaleFontSize, scaleSize } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
@@ -19,7 +20,6 @@ import { RootState } from '../store';
 import SeekerService, { UnifiedBooking } from '../services/SeekerService';
 import RippleAnimation from '../components/RippleAnimation';
 import categoryIcons from '../utils/icons';
-import UnifiedBookingSocketHandler from '../services/UnifiedBookingSocketHandler';
 
 // Ultra-minimal color scheme
 const COLORS_MINIMAL = {
@@ -126,20 +126,16 @@ const BookingsScreen = () => {
 
   const fetchBookings = async (isRefresh = false) => {
     if (!user?.id) {
-      console.log('BookingsScreen: No user ID found');
       setLoading(false);
       return;
     }
 
     try {
       if (!isRefresh) setLoading(true);
-      console.log('BookingsScreen: Fetching unified bookings for user:', user.id);
       const data = await SeekerService.getUnifiedBookings(user.id);
-      console.log('BookingsScreen: Received bookings:', data.length, 'items');
-      console.log('BookingsScreen: Bookings data:', JSON.stringify(data, null, 2));
       setBookings(data);
     } catch (error) {
-      console.error('BookingsScreen: Error fetching bookings:', error);
+      // Silently handle errors
     } finally {
       setLoading(false);
       if (isRefresh) setRefreshing(false);
@@ -151,43 +147,6 @@ const BookingsScreen = () => {
       fetchBookings();
     }, [user?.id, token])
   );
-
-  // Socket connection for real-time updates
-  useEffect(() => {
-    if (!user?.id) return;
-
-    // Connect socket for real-time updates
-    UnifiedBookingSocketHandler.connect(user.id, (updatedBooking) => {
-      console.log('Real-time booking update:', updatedBooking);
-
-      setBookings(prevBookings => {
-        // Find and update existing booking
-        const index = prevBookings.findIndex(b => b.id === updatedBooking.id);
-
-        if (index >= 0) {
-          // Update existing booking
-          const updated = [...prevBookings];
-          updated[index] = {
-            ...updated[index],
-            ...updatedBooking,
-          } as UnifiedBooking;
-          return updated;
-        } else if (updatedBooking.type && updatedBooking.title) {
-          // Add new booking if it's complete enough
-          return [...prevBookings, updatedBooking as UnifiedBooking].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        }
-
-        return prevBookings;
-      });
-    });
-
-    // Cleanup on unmount
-    return () => {
-      UnifiedBookingSocketHandler.disconnect();
-    };
-  }, [user?.id]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -532,22 +491,11 @@ const BookingsScreen = () => {
     const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
     const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    console.log(`BookingsScreen: Filtering booking ${booking.id}:`, {
-      title: booking.title,
-      displayStatus: booking.displayStatus,
-      serviceStartDate: booking.serviceStartDate,
-      bookingDateOnly: bookingDateOnly.toISOString(),
-      todayOnly: todayOnly.toISOString(),
-      activeTab,
-    });
-
     if (activeTab === 'upcoming') {
       // Upcoming: future/today bookings with active statuses OR no_accept with future dates
       const isFutureOrToday = bookingDateOnly >= todayOnly;
       const isActiveStatus = ['searching', 'matched', 'in_progress', 'pending'].includes(booking.displayStatus);
       const isFailedButFuture = booking.displayStatus === 'no_accept' && isFutureOrToday;
-
-      console.log(`  → Upcoming check: isFutureOrToday=${isFutureOrToday}, isActiveStatus=${isActiveStatus}, isFailedButFuture=${isFailedButFuture}`);
 
       // Show in upcoming if:
       // 1. Active status with future/today date, OR
@@ -558,15 +506,11 @@ const BookingsScreen = () => {
       const isPastDate = bookingDateOnly < todayOnly;
       const isCompletedStatus = ['completed', 'cancelled', 'no_accept'].includes(booking.displayStatus);
 
-      console.log(`  → Past check: isPastDate=${isPastDate}, isCompletedStatus=${isCompletedStatus}`);
-
       // Show in past if:
       // 1. Completed/cancelled/no_accept status with past date
       return isCompletedStatus && isPastDate;
     }
   });
-
-  console.log(`BookingsScreen: Filtered ${filteredBookings.length} bookings for ${activeTab} tab`);
 
   const renderBookingCard = (booking: UnifiedBooking) => {
     const bookingDate = booking.serviceStartDate || booking.createdAt;
@@ -651,13 +595,13 @@ const BookingsScreen = () => {
                   { backgroundColor: statusDisplay.chipBackground || 'rgba(148, 163, 184, 0.12)' },
                 ]}
               >
-                {statusDisplay.showAnimation ? (
+                {/* {statusDisplay.showAnimation ? (
                   <View style={styles.statusChipAnimation}>
                     <RippleAnimation color={statusDisplay.color} size={20} duration={1600} />
                   </View>
                 ) : (
                   <Ionicons name={statusDisplay.icon} size={14} color={statusDisplay.color} />
-                )}
+                )} */}
                 <Text style={[styles.statusChipText, { color: statusDisplay.color }]}>
                   {statusDisplay.label}
                 </Text>
@@ -735,10 +679,10 @@ const BookingsScreen = () => {
         ) : (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconContainer}>
-              <Ionicons 
-                name={activeTab === 'upcoming' ? 'calendar-outline' : 'time-outline'} 
-                size={48} 
-                color={COLORS_MINIMAL.text.muted} 
+              <Ionicons
+                name={activeTab === 'upcoming' ? 'calendar-outline' : 'time-outline'}
+                size={scaleSize(48)}
+                color={COLORS_MINIMAL.text.muted}
               />
             </View>
             <Text style={styles.emptyTitle}>
@@ -770,41 +714,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(16),
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
   headerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: scaleSize(36),
+    height: scaleSize(36),
+    borderRadius: scaleSize(10),
     backgroundColor: COLORS_MINIMAL.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-    gap: 12,
+    paddingHorizontal: scaleSize(20),
+    marginBottom: scaleSize(16),
+    gap: scaleSize(12),
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: scaleSize(10),
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
-    borderRadius: 10,
+    borderRadius: scaleSize(10),
   },
   activeTab: {
     backgroundColor: COLORS_MINIMAL.text.primary,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.secondary,
   },
@@ -812,46 +756,46 @@ const styles = StyleSheet.create({
     color: COLORS_MINIMAL.background,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
+    paddingHorizontal: scaleSize(20),
+    paddingBottom: scaleSize(100),
   },
   loadingContainer: {
-    paddingVertical: 60,
+    paddingVertical: scaleSize(60),
     alignItems: 'center',
   },
   bookingItem: {
-    paddingVertical: 12,
+    paddingVertical: scaleSize(12),
   },
   bookingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: scaleSize(16),
   },
   serviceIcon: {
-    width: 64,
-    height: 64,
+    width: scaleSize(64),
+    height: scaleSize(64),
   },
   bookingContent: {
     flex: 1,
   },
   bookingTitle: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
   },
   bookingTitleStack: {
     flex: 1,
-    marginRight: 12,
+    marginRight: scaleSize(12),
   },
   bookingIdText: {
-    marginTop: 2,
-    fontSize: 13,
+    marginTop: scaleSize(2),
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
   },
   bookingSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
+    marginTop: scaleSize(4),
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.secondary,
   },
@@ -861,9 +805,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   priceBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+    paddingHorizontal: scaleSize(12),
+    paddingVertical: scaleSize(6),
+    borderRadius: scaleSize(999),
     borderWidth: 1,
   },
   priceBadgeEstimate: {
@@ -875,7 +819,7 @@ const styles = StyleSheet.create({
     borderColor: '#34D399',
   },
   priceBadgeText: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     fontFamily: FONTS.POPPINS.MEDIUM,
   },
   priceBadgeTextEstimate: {
@@ -887,79 +831,79 @@ const styles = StyleSheet.create({
   statusLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    gap: 10,
+    marginTop: scaleSize(12),
+    gap: scaleSize(10),
   },
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    gap: 6,
+    paddingHorizontal: scaleSize(10),
+    paddingVertical: scaleSize(5),
+    borderRadius: scaleSize(8),
+    gap: scaleSize(6),
   },
   statusChipAnimation: {
-    width: 18,
-    height: 18,
+    width: scaleSize(18),
+    height: scaleSize(18),
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusChipText: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     fontFamily: FONTS.POPPINS.MEDIUM,
   },
   statusLineText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.secondary,
   },
   metaLine: {
-    marginTop: 12,
-    fontSize: 13,
+    marginTop: scaleSize(12),
+    fontSize: scaleFontSize(13),
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS_MINIMAL.text.secondary,
   },
   listDivider: {
-    marginTop: 18,
+    marginTop: scaleSize(18),
     height: 1,
     backgroundColor: COLORS_MINIMAL.divider,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 40,
+    paddingVertical: scaleSize(80),
+    paddingHorizontal: scaleSize(40),
   },
   emptyIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: scaleSize(80),
+    height: scaleSize(80),
+    borderRadius: scaleSize(40),
     backgroundColor: COLORS_MINIMAL.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: scaleSize(20),
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.text.primary,
-    marginBottom: 8,
+    marginBottom: scaleSize(8),
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS_MINIMAL.text.muted,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   exploreButton: {
     backgroundColor: COLORS_MINIMAL.accent,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: scaleSize(24),
+    paddingVertical: scaleSize(12),
+    borderRadius: scaleSize(10),
   },
   exploreButtonText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS_MINIMAL.background,
   },

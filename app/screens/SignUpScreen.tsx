@@ -56,6 +56,7 @@ const SignUpScreen = () => {
   const [otpError, setOTPError] = useState('');
   const [smsConfirmation, setSMSConfirmation] = useState<any>(null);
   const [resendTimer, setResendTimer] = useState(0);
+  const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
   const inputRefs = useRef<Array<TextInput | null>>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -175,7 +176,6 @@ const SignUpScreen = () => {
       await startFirebaseSMSAuth();
       setCurrentStep('otp');
     } catch (error) {
-      console.error('Failed to send OTP:', error);
       setFormErrors({ general: 'Failed to send OTP. Please try again.' });
     }
   };
@@ -187,7 +187,6 @@ const SignUpScreen = () => {
       setSMSConfirmation(confirmation);
       dispatch(setOtpChannel('sms'));
     } catch (error) {
-      console.error('Failed to send SMS OTP:', error);
       throw error;
     }
   };
@@ -223,24 +222,28 @@ const SignUpScreen = () => {
 
   const handleVerifyOTP = async (otpString?: string) => {
     const otpCode = otpString || otp.join('');
-    
+
     if (otpCode.length !== 6) {
       setOTPError('Please enter all 6 digits');
       return;
     }
-    
+
     dispatch(clearError());
     setOTPError('');
-    
+
     try {
       if (!smsConfirmation) {
         setOTPError('Please request OTP first');
         return;
       }
-      
+
       // Verify OTP with Firebase
-      await firebaseSMSService.verifyOTP(smsConfirmation, otpCode);
-      
+      const userCredential = await firebaseSMSService.verifyOTP(smsConfirmation, otpCode);
+
+      // Get Firebase ID token
+      const idToken = await userCredential.user.getIdToken();
+      setFirebaseIdToken(idToken);
+
       // OTP verified, proceed to profile picture
       setCurrentStep('profile');
     } catch (error: any) {
@@ -265,7 +268,7 @@ const SignUpScreen = () => {
     ImagePickerService.showImagePickerOptions(
       () => handleCameraPress(),
       () => handleGalleryPress(),
-      () => console.log('Image picker cancelled')
+      () => {}
     );
   };
 
@@ -312,14 +315,27 @@ const SignUpScreen = () => {
     setUploadProgress(0);
 
     try {
+      // Get a fresh Firebase ID token to avoid expiration issues
+      // Firebase ID tokens can expire, so we get a new one before registration
+      const auth = require('@react-native-firebase/auth').default;
+      const currentUser = auth().currentUser;
+
+      if (!currentUser) {
+        Alert.alert('Error', 'Please verify OTP first');
+        setUploadingImage(false);
+        return;
+      }
+
+      // Get fresh ID token (force refresh to ensure it's not expired)
+      const freshIdToken = await currentUser.getIdToken(true);
+
       // Register user with all collected data
       const userData = {
         name,
         email,
         phone,
+        idToken: freshIdToken, // Fresh Firebase ID token
         role: 'individual' as const,
-        isVerified: true, // Already verified OTP
-        referralCode: referralCode || undefined,
       };
 
       const result = await dispatch(registerUser(userData));
@@ -330,8 +346,6 @@ const SignUpScreen = () => {
         // If profile image was selected, upload it
         if (profileImageData && user?.id) {
           try {
-            console.log('[SignUpScreen] Uploading profile picture for user:', user.id);
-
             const uploadResult = await ProfilePictureService.uploadProfilePicture(
               user.id,
               profileImageData,
@@ -341,10 +355,8 @@ const SignUpScreen = () => {
             );
 
             if (uploadResult.success) {
-              console.log('[SignUpScreen] ✅ Profile picture uploaded successfully');
               // Could update user state with new profile picture URL here if needed
             } else {
-              console.error('[SignUpScreen] ❌ Profile picture upload failed:', uploadResult.error);
               // Don't block registration for profile picture upload failure
               Alert.alert(
                 'Upload Warning',
@@ -353,7 +365,6 @@ const SignUpScreen = () => {
               );
             }
           } catch (uploadError) {
-            console.error('[SignUpScreen] Profile picture upload error:', uploadError);
             Alert.alert(
               'Upload Warning',
               'Registration successful, but profile picture upload failed. You can update it later in settings.',
@@ -371,7 +382,6 @@ const SignUpScreen = () => {
         Alert.alert('Registration Failed', 'Please try again');
       }
     } catch (error) {
-      console.error('[SignUpScreen] Registration error:', error);
       Alert.alert('Error', 'Failed to complete registration');
     } finally {
       setUploadingImage(false);
@@ -619,7 +629,7 @@ const SignUpScreen = () => {
       </View>
 
       <TouchableOpacity
-        style={[styles.proceedButton, styles.proceedButtonGray]}
+        style={[styles.proceedButton, !profileImage && styles.proceedButtonGray]}
         onPress={handleCompleteSignup}
         disabled={uploadingImage}
         activeOpacity={0.8}

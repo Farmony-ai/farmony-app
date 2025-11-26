@@ -31,12 +31,6 @@ import debounce from 'lodash.debounce';
 const { height: screenHeight } = Dimensions.get('window');
 const GOOGLE_API_KEY = (GOOGLE_MAPS_API_KEY || '') as string;
 
-// Log for debugging
-console.log('Google Maps API Key configured:', !!GOOGLE_API_KEY);
-
-if (!GOOGLE_API_KEY) {
-  console.warn('Google Maps API key is not configured. Map features will not work.');
-}
 
 interface RouteParams {
   editAddress?: Address;
@@ -117,14 +111,13 @@ const AddAddressScreen = () => {
       lat = 17.385044;
       lng = 78.486671;
     }
-    
+
     const initialRegion = {
       latitude: lat,
       longitude: lng,
       latitudeDelta: 0.005,
       longitudeDelta: 0.005,
     };
-    console.log('Initial map coordinates - lat:', lat, 'lng:', lng);
     return initialRegion;
   });
 
@@ -190,7 +183,6 @@ const AddAddressScreen = () => {
         await reverseGeocodeLocation(location.latitude, location.longitude);
       }
     } catch (error) {
-      console.error('Error getting current location:', error);
       Alert.alert('Error', 'Could not fetch current location. Please try again.');
     } finally {
       setFetchingLocation(false);
@@ -249,7 +241,7 @@ const AddAddressScreen = () => {
         applyAddressComponentsFromPlace(best.address_components, best.formatted_address);
       }
     } catch (error) {
-      console.error('Error reverse geocoding:', error);
+
     } finally {
       setReverseGeocoding(false);
     }
@@ -268,7 +260,6 @@ const AddAddressScreen = () => {
   const handleRegionChangeComplete = (region: Region) => {
     // Only handle region changes if sheet is not expanded
     if (!isSheetExpanded) {
-      console.log('Region changed to:', region);
       regionRef.current = region; // Update ref instead of state
       debouncedReverseGeocode(region);
       bouncePin();
@@ -276,8 +267,6 @@ const AddAddressScreen = () => {
   };
 
   const handlePlaceSelected = (data: any, details: any) => {
-    console.log('Place selected:', data, details);
-    
     if (!details || !details.geometry || !details.geometry.location) {
       Alert.alert('Error', 'Could not fetch location details. Please try again.');
       return;
@@ -285,9 +274,7 @@ const AddAddressScreen = () => {
     
     const lat = details.geometry.location.lat;
     const lng = details.geometry.location.lng;
-    
-    console.log('Coordinates:', lat, lng);
-    
+
     if (typeof lat !== 'number' || typeof lng !== 'number') {
       Alert.alert('Location not available', 'Could not fetch location details for the selected place.');
       return;
@@ -319,11 +306,17 @@ const AddAddressScreen = () => {
   const handleSaveAddress = async () => {
     if (!validateForm()) return;
 
+    if (!user?.id) {
+      Alert.alert('Error', 'User not found. Please log in again.');
+      return;
+    }
+
     setLoading(true);
     try {
       const addressData: CreateAddressDto = {
-        userId: user?.id,
-        tag: addressTag,
+        userId: user.id,
+        addressType: addressTag.toLowerCase(),
+        customLabel: addressTag,
         addressLine1,
         addressLine2,
         village,
@@ -331,21 +324,23 @@ const AddAddressScreen = () => {
         district,
         state,
         pincode,
-        coordinates: [regionRef.current.longitude, regionRef.current.latitude],
+        location: {
+          type: 'Point',
+          coordinates: [regionRef.current.longitude, regionRef.current.latitude]
+        },
         isDefault: false,
       };
 
       if (isEditMode && editAddress) {
-        await AddressService.updateAddress(editAddress._id, addressData);
-        Alert.alert('Success', 'Location updated successfully');
+        await AddressService.updateAddress(user.id, editAddress._id, addressData);
+        Alert.alert('Success', 'Address updated successfully');
       } else {
         await AddressService.createAddress(addressData);
-        Alert.alert('Success', 'Location saved successfully');
+        Alert.alert('Success', 'Address saved successfully');
       }
       navigation.goBack();
     } catch (error: any) {
-      console.error('Error saving address:', error);
-      Alert.alert('Error', 'Failed to save location. Please try again.');
+      Alert.alert('Error', 'Failed to save address. Please try again.');
     } finally {
       setLoading(false);
     }

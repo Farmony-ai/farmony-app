@@ -145,7 +145,7 @@ export default function HomeScreen() {
         const data = await ClimateService.getWeatherData(latitude, longitude);
         setWeatherData(data);
       } catch (error) {
-        console.error('Error fetching weather data:', error);
+        // Silently handle weather fetch errors
       } finally {
         setWeatherLoading(false);
       }
@@ -180,14 +180,13 @@ export default function HomeScreen() {
       try {
         fetchedHierarchy = await CatalogueService.getCategoryHierarchy();
       } catch (hierarchyError) {
-        console.warn('Failed to fetch category hierarchy, proceeding with categories only.', hierarchyError);
+        // Silently handle hierarchy fetch errors
       }
 
       setCategories(fetchedCategories);
       setCategoryHierarchy(fetchedHierarchy);
       setCatalogueLoaded(fetchedCategories.length > 0);
     } catch (error) {
-      console.error('Error fetching categories or hierarchy:', error);
       setCatalogueLoaded(false);
     }
   };
@@ -201,28 +200,44 @@ export default function HomeScreen() {
     if (user?.id) {
       try {
         const addresses = await AddressService.getUserAddresses(user.id);
+
+        // Handle case where user has no addresses yet
+        if (!addresses || addresses.length === 0) {
+          setCurrentAddress(null);
+          return;
+        }
+
         const defaultAddr = addresses.find(addr => addr.isDefault);
-        if (defaultAddr) {
+        if (defaultAddr && defaultAddr.coordinates && defaultAddr.coordinates.length === 2) {
           setCurrentAddress(defaultAddr);
           dispatch(setLocation({
             latitude: defaultAddr.coordinates[1],
             longitude: defaultAddr.coordinates[0],
-            city: defaultAddr.district || defaultAddr.state,
+            city: defaultAddr.district || defaultAddr.state || city || undefined,
           }));
         } else if (addresses.length > 0) {
-          // If no default address, use the first one
-          const firstAddr = addresses[0];
-          setCurrentAddress(firstAddr);
-          dispatch(setLocation({
-            latitude: firstAddr.coordinates[1],
-            longitude: firstAddr.coordinates[0],
-            city: firstAddr.district || firstAddr.state,
-          }));
+          // If no default address, use the first one with valid coordinates
+          const firstAddrWithCoords = addresses.find(addr =>
+            addr.coordinates &&
+            addr.coordinates.length === 2 &&
+            addr.coordinates[0] !== 0 &&
+            addr.coordinates[1] !== 0
+          );
+
+          if (firstAddrWithCoords) {
+            setCurrentAddress(firstAddrWithCoords);
+            dispatch(setLocation({
+              latitude: firstAddrWithCoords.coordinates[1],
+              longitude: firstAddrWithCoords.coordinates[0],
+              city: firstAddrWithCoords.district || firstAddrWithCoords.state || city || undefined,
+            }));
+          } else {
+            setCurrentAddress(null);
+          }
         }
       } catch (error: any) {
-        console.error('Error fetching default address:', error);
-        // Don't show alert here as it might be annoying on home screen
-        // Just log the error and fall back to location-based detection
+        // Silently fall back to location-based detection
+        setCurrentAddress(null);
       }
     }
   };
@@ -251,7 +266,7 @@ export default function HomeScreen() {
         fetchDefaultAddress()
       ]);
     } catch (error) {
-      console.error('Error refreshing data:', error);
+      // Silently handle refresh errors
     } finally {
       setRefreshing(false);
     }
@@ -456,7 +471,7 @@ export default function HomeScreen() {
           <Ionicons name="search-outline" size={scaleSize(20)} color={COLORS_NEW.text.muted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search categories or subcategories"
+            placeholder="Search"
             placeholderTextColor={COLORS_NEW.text.muted}
             value={searchText}
             onChangeText={setSearchText}
@@ -479,6 +494,21 @@ export default function HomeScreen() {
           <Text style={styles.dateLabel}>When do you need it ?</Text>
           <View style={styles.dateButtons}>
             {customDate && (() => {
+              // Check if customDate is NOT today or tomorrow
+              const today = new Date();
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              const customDateObj = new Date(customDate);
+
+              const isTodayOrTomorrow =
+                customDateObj.toDateString() === today.toDateString() ||
+                customDateObj.toDateString() === tomorrow.toDateString();
+
+              // Only show custom date pill if it's not today or tomorrow
+              if (isTodayOrTomorrow) {
+                return null;
+              }
+
               const isSelected = selectedDate.toISOString().split('T')[0] === customDate;
               return (
                 <TouchableOpacity
@@ -498,8 +528,8 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               );
             })()}
-            <TouchableOpacity 
-              style={[styles.dateButton, 
+            <TouchableOpacity
+              style={[styles.dateButton,
                 selectedDate.toDateString() === new Date().toDateString() && styles.dateButtonActive]}
               onPress={() => {
                 const today = new Date();
@@ -509,13 +539,13 @@ export default function HomeScreen() {
                 setCustomDate(null);
               }}
             >
-              <Text style={[styles.dateButtonText, 
+              <Text style={[styles.dateButtonText,
                 selectedDate.toDateString() === new Date().toDateString() && styles.dateButtonTextActive]}>
                 Today
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.dateButton, 
+            <TouchableOpacity
+              style={[styles.dateButton,
                 (() => {
                   const tomorrow = new Date();
                   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -530,7 +560,7 @@ export default function HomeScreen() {
                 setCustomDate(null);
               }}
             >
-              <Text style={[styles.dateButtonText, 
+              <Text style={[styles.dateButtonText,
                 (() => {
                   const tomorrow = new Date();
                   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -539,7 +569,7 @@ export default function HomeScreen() {
                 Tomorrow
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.datePickerButton}
               onPress={() => setShowDatePicker(true)}
             >
@@ -687,11 +717,13 @@ const styles = StyleSheet.create({
   dateSection: {
     paddingHorizontal: spacing.md,
     marginBottom: spacing.lg,
+    marginTop: scaleSize(8),
   },
   dateLabel: {
     ...typography.ctaTitle,
+    fontSize: scaleFontSize(14),
     color: COLORS_NEW.text.primary,
-    marginBottom: scaleSize(12),
+    marginBottom: scaleSize(10),
   },
   dateButtons: {
     flexDirection: 'row',

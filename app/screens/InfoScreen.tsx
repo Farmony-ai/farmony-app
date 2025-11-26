@@ -13,13 +13,13 @@ import {
   StatusBar,
   FlatList,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { COLORS, SPACING } from '../utils';
-import { FONTS, FONT_SIZES, scaleSize, getFontFamily } from '../utils/fonts';
+import { COLORS } from '../utils';
+import { FONT_SIZES, scaleSize, getFontFamily } from '../utils/fonts';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -40,17 +40,17 @@ const languages: Language[] = [
 
 const carouselData = [
   {
-    image: require('../assets/info1.png'),
+    image: require('../assets/slide1.png'),
     title: 'Welcome to Farmony!',
     subtitle: 'Rent machines, hire trusted workers, and pay safely with UPI escrow.',
   },
   {
-    image: require('../assets/info2.png'),
+    image: require('../assets/slide2.png'),
     title: 'Book the help you need',
     subtitle: 'Tractor with driver, spraying crew, or water pump—nearby and ready when you are.',
   },
   {
-    image: require('../assets/info3.png'),
+    image: require('../assets/slide3.png'),
     title: 'Fair price. Trusted work.',
     subtitle: 'See ratings and clear rates, start on time, and pay easily after the job is done—no surprises.',
   },
@@ -67,6 +67,9 @@ const InfoScreen = () => {
   // Animations
   const modalAnimation = useRef(new Animated.Value(0)).current;
   const overlayAnimation = useRef(new Animated.Value(0)).current;
+  const textSlideAnim = useRef(new Animated.Value(0)).current;
+  const textOpacityAnim = useRef(new Animated.Value(1)).current;
+  const prevIndexRef = useRef(currentIndex);
 
   useEffect(() => {
     // Load saved language preference
@@ -86,6 +89,30 @@ const InfoScreen = () => {
     // Restart auto-scroll when index changes
     startAutoScroll();
   }, [currentIndex]);
+
+  // Animate text when currentIndex changes
+  useEffect(() => {
+    if (prevIndexRef.current !== currentIndex) {
+      // Reset animation values and animate in from right
+      textSlideAnim.setValue(50);
+      textOpacityAnim.setValue(0);
+
+      Animated.parallel([
+        Animated.timing(textSlideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(textOpacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      prevIndexRef.current = currentIndex;
+    }
+  }, [currentIndex, textSlideAnim, textOpacityAnim]);
 
   const startAutoScroll = () => {
     // Clear existing timer
@@ -122,11 +149,6 @@ const InfoScreen = () => {
     setCurrentIndex(index);
   };
 
-  const handleManualScroll = (index: number) => {
-    scrollToIndex(index);
-    // Reset auto-scroll timer when user manually scrolls
-    startAutoScroll();
-  };
 
   const openLanguageModal = () => {
     setIsLanguageModalVisible(true);
@@ -264,38 +286,45 @@ const InfoScreen = () => {
           >
             {carouselData.map((item, index) => (
               <View key={index} style={styles.carouselItem}>
+                {/* Full-bleed image */}
                 <Image
                   source={item.image}
                   style={styles.carouselImage}
-                  resizeMode="contain"
+                  resizeMode="cover"
                 />
-                <Text style={styles.carouselTitle}>{item.title}</Text>
-                <Text style={styles.carouselSubtitle}>{item.subtitle}</Text>
+                {/* Gradient overlay - fade to white at top */}
+                <LinearGradient
+                  colors={['rgba(255, 255, 255, 1)', 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0)']}
+                  locations={[0, 0.15, 0.5]}
+                  style={styles.topGradient}
+                />
+                {/* Gradient overlay - fade to white at bottom */}
+                <LinearGradient
+                  colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 1)']}
+                  locations={[0, 0.4, 0.75, 1]}
+                  style={styles.bottomGradient}
+                />
               </View>
             ))}
           </ScrollView>
-
-          {/* Dots Indicator */}
-          <View style={styles.dotsContainer}>
-            {carouselData.map((_, index) => (
-              <TouchableOpacity
-                key={index}
-                onPress={() => handleManualScroll(index)}
-                activeOpacity={0.8}
-              >
-                <View
-                  style={[
-                    styles.dot,
-                    index === currentIndex && styles.activeDot,
-                  ]}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
 
         {/* Bottom Actions */}
         <View style={styles.bottomContainer}>
+          {/* Text content - animated slide from right */}
+          <Animated.View
+            style={[
+              styles.textContainer,
+              {
+                transform: [{ translateX: textSlideAnim }],
+                opacity: textOpacityAnim,
+              },
+            ]}
+          >
+            <Text style={styles.carouselTitle}>{carouselData[currentIndex].title}</Text>
+            <Text style={styles.carouselSubtitle}>{carouselData[currentIndex].subtitle}</Text>
+          </Animated.View>
+
           <TouchableOpacity
             style={styles.loginButton}
             onPress={() => handleNavigate('SignIn')}
@@ -423,53 +452,58 @@ const styles = StyleSheet.create({
   carouselContainer: {
     flex: 1,
     justifyContent: 'center',
-    paddingTop: scaleSize(20), // Added space from top bar
   },
   carouselItem: {
     width: screenWidth,
-    alignItems: 'center',
-    paddingHorizontal: scaleSize(24),
+    height: '100%',
+    position: 'relative',
   },
   carouselImage: {
-    width: screenWidth * 0.85, // Increased width
-    height: screenHeight * 0.35,
-    marginBottom: scaleSize(8), // Significantly reduced gap
+    width: screenWidth,
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  topGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+    zIndex: 1,
+  },
+  bottomGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    zIndex: 1,
   },
   carouselTitle: {
-    fontSize: FONT_SIZES['2XL'], // Reduced from 24
+    fontSize: FONT_SIZES['2XL'],
     fontFamily: getFontFamily('SEMIBOLD'),
-    color: '#000000',
+    color: '#1A1A1A',
     textAlign: 'center',
-    marginBottom: scaleSize(12),
+    marginBottom: scaleSize(8),
   },
   carouselSubtitle: {
     fontSize: FONT_SIZES.BASE,
     fontFamily: getFontFamily('REGULAR'),
-    color: '#666666',
+    color: '#4A5568',
     textAlign: 'center',
-    lineHeight: scaleSize(20),
-    paddingHorizontal: scaleSize(10),
-  },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: scaleSize(20),
-    gap: scaleSize(8),
-  },
-  dot: {
-    width: scaleSize(8),
-    height: scaleSize(8),
-    borderRadius: scaleSize(4),
-    backgroundColor: '#D0D0D0',
-  },
-  activeDot: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    width: scaleSize(24),
+    lineHeight: scaleSize(22),
   },
   bottomContainer: {
     paddingHorizontal: scaleSize(20),
-    paddingBottom: scaleSize(30),
+    paddingTop: scaleSize(24),
+    paddingBottom: scaleSize(8),
+    marginTop: 'auto',
+  },
+  textContainer: {
+    alignItems: 'center',
+    marginBottom: scaleSize(20),
   },
   loginButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,

@@ -4,7 +4,6 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { checkAuth } from '../store/slices/authSlice';
-import useServiceRequestSocket from '../hooks/useServiceRequestSocket';
 
 // Screens
 import SplashScreen from '../screens/SplashScreen';
@@ -50,9 +49,6 @@ const RootNavigator = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [hasSeenInfo, setHasSeenInfo] = useState<boolean | null>(null);
 
-  // Initialize socket handler for service requests
-  useServiceRequestSocket();
-
   useEffect(() => {
     // Check auth and info screen status while splash is showing
     const initialize = async () => {
@@ -63,7 +59,6 @@ const RootNavigator = () => {
         const seenInfo = await AsyncStorage.getItem('hasSeenInfoScreen');
         setHasSeenInfo(seenInfo === 'true');
       } catch (error) {
-        console.log('Error checking info screen status:', error);
         setHasSeenInfo(false);
       }
     };

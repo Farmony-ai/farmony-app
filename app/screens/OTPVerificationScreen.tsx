@@ -118,7 +118,6 @@ const OTPVerificationScreen = () => {
       setAuthStatus('OTP sent via SMS');
       dispatch(setOtpChannel('sms'));
     } catch (error) {
-      console.error('❌ Failed to send SMS OTP:', error);
       setOTPError('Unable to send SMS OTP. Please try again.');
       setAuthStatus('');
       triggerShakeAnimation();
@@ -226,7 +225,6 @@ const OTPVerificationScreen = () => {
           verificationSuccessful = true;
           setAuthStatus('OTP verified via SMS.');
         } catch (smsError: any) {
-          console.log('Firebase SMS verification failed:', smsError);
           lastError = smsError.message || 'Firebase SMS verification failed.';
         }
       } else {

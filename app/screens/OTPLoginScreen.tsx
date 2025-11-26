@@ -140,7 +140,7 @@ const OTPLoginScreen = () => {
       startFirebaseSMSAuth();
       setCurrentStep('otp');
     } catch (error) {
-      console.error('OTP login error:', error);
+
     }
   };
 
@@ -162,7 +162,6 @@ const OTPLoginScreen = () => {
       setAuthStatus('OTP sent via SMS');
       dispatch(setOtpChannel('sms'));
     } catch (error) {
-      console.error('Failed to send SMS OTP:', error);
       setOTPError('Unable to send SMS OTP. Please try again.');
       setAuthStatus('');
       triggerShakeAnimation();
@@ -171,9 +170,25 @@ const OTPLoginScreen = () => {
 
   const handleSuccessfulOTPVerification = async (token?: string) => {
     try {
-      // For OTP login, directly log the user in
-      const result = await dispatch(otpLogin({ phone }));
-      
+      // Get fresh Firebase ID token after OTP verification
+      const auth = require('@react-native-firebase/auth').default;
+      const currentUser = auth().currentUser;
+
+      if (!currentUser) {
+        setOTPError('Authentication failed. Please try again.');
+        triggerShakeAnimation();
+        return;
+      }
+
+      // Get fresh ID token (force refresh to ensure it's not expired)
+      const idToken = await currentUser.getIdToken(true);
+
+      // For OTP login, directly log the user in with ID token
+      const result = await dispatch(otpLogin({
+        idToken,
+        phoneNumber: phone
+      }));
+
       if (otpLogin.fulfilled.match(result)) {
         // Navigate to home on successful login
         navigation.reset({

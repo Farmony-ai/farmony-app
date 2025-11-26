@@ -7,6 +7,8 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -23,7 +25,7 @@ import {
   acceptServiceRequest,
 } from '../store/slices/serviceRequestsSlice';
 import ServiceRequestService from '../services/ServiceRequestService';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, Circle } from 'react-native-maps';
 import RippleAnimation from '../components/RippleAnimation';
 
 const UBER_MAP_STYLE = [
@@ -124,6 +126,8 @@ const UBER_MAP_STYLE = [
     stylers: [{ color: '#9e9e9e' }],
   },
 ];
+
+const MARKER_ICON_SIZE = 34;
 const ServiceRequestDetailsScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -289,9 +293,9 @@ const ServiceRequestDetailsScreen = () => {
     isProvider &&
     isSearching &&
     !isExpired;
-  const canCancel =
-    isSeeker &&
-    isSearching;
+  const canCancelRequest = isSeeker && !isExpired;
+  const showSearchMenu = canCancelRequest && isSearching;
+  const showFooterCancelButton = canCancelRequest && !isSearching;
 
   // Calculate elapsed time for searching status
   const getElapsedTime = () => {
@@ -309,9 +313,42 @@ const ServiceRequestDetailsScreen = () => {
     if (!currentRequest.nextWaveAt || !isSearching) return null;
     const nextWave = new Date(currentRequest.nextWaveAt).getTime();
     const now = Date.now();
+    if (nextWave <= now) {
+      return 'Processing...';
+    }
     const minutesLeft = Math.ceil((nextWave - now) / 60000);
     if (minutesLeft <= 0) return 'Processing...';
     return `${minutesLeft} min`;
+  };
+
+  const handleOpenSearchMenu = () => {
+    if (!canCancelRequest) {
+      return;
+    }
+
+    const executeCancel = () => {
+      handleCancelRequest();
+    };
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel request', 'Dismiss'],
+          cancelButtonIndex: 1,
+          destructiveButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            executeCancel();
+          }
+        },
+      );
+    } else {
+      Alert.alert('Manage request', undefined, [
+        { text: 'Dismiss', style: 'cancel' },
+        { text: 'Cancel request', style: 'destructive', onPress: executeCancel },
+      ]);
+    }
   };
 
   // Format header subtitle: "Kukatpally • 19 Jun • 2 hrs"
@@ -443,17 +480,41 @@ const ServiceRequestDetailsScreen = () => {
 
   const waveRadiusLabel = useMemo(() => {
     if (!waveRadiusValue || Number.isNaN(waveRadiusValue)) {
-      return 'Searching nearby providers';
+      return null;
     }
 
     if (waveRadiusValue >= 1000) {
       const km = waveRadiusValue / 1000;
       const formattedKm = km >= 10 ? Math.round(km) : Number(km.toFixed(1));
-      return `Searching within ${formattedKm} km`;
+      return `Current search radius: ${formattedKm} km`;
     }
 
-    return `Searching within ${Math.round(waveRadiusValue)} m`;
+    return `Current search radius: ${Math.round(waveRadiusValue)} m`;
   }, [waveRadiusValue]);
+
+  const rippleSize = useMemo(() => {
+    if (!waveRadiusValue || Number.isNaN(waveRadiusValue)) {
+      return 150;
+    }
+    const radiusKm = waveRadiusValue / 1000;
+    const scaled = 150 + radiusKm * 18;
+    return Math.max(140, Math.min(360, scaled));
+  }, [waveRadiusValue]);
+
+  const markerIconTop = useMemo(
+    () => Math.max(rippleSize / 2 - MARKER_ICON_SIZE, 0),
+    [rippleSize],
+  );
+
+  const rippleDimensionsStyle = useMemo(
+    () => ({ width: rippleSize, height: rippleSize }),
+    [rippleSize],
+  );
+
+  const markerIconWrapperStyle = useMemo(
+    () => ({ top: markerIconTop, width: rippleSize }),
+    [markerIconTop, rippleSize],
+  );
 
   const elapsedTime = getElapsedTime();
   const nextWaveCopy = getTimeToNextWave();
@@ -477,6 +538,8 @@ const ServiceRequestDetailsScreen = () => {
     (currentRequest.metadata?.durationHours
       ? `${currentRequest.metadata.durationHours} hrs`
       : null);
+  const powerLabel = currentRequest.metadata?.powerLabel;
+  const operatorIncluded = currentRequest.metadata?.operatorIncluded;
 
   const summaryMeta = [preferredTime, durationLabel].filter(Boolean).join(' • ');
   const summaryLine = [serviceDateDisplay, summaryMeta].filter(Boolean).join(' • ');
@@ -522,6 +585,134 @@ const ServiceRequestDetailsScreen = () => {
         .map((part) => part.trim())
         .filter(Boolean)
     : [];
+  const description = currentRequest.description?.trim();
+
+  const { detailItems, remainingDescription } = useMemo(() => {
+    type DetailCard = {
+      key: string;
+      label: string;
+      value: string;
+      icon: string;
+      accent: string;
+      iconColor: string;
+    };
+
+    const iconConfig: Record<
+      string,
+      { key: string; label: string; icon: string; accent: string; iconColor: string; value?: string }
+    > = {
+      duration: {
+        key: 'duration',
+        label: 'Duration',
+        icon: 'time-outline',
+        accent: 'rgba(15, 118, 110, 0.18)',
+        iconColor: '#0F766E',
+      },
+      'power phase': {
+        key: 'power',
+        label: 'Power phase',
+        icon: 'flash-outline',
+        accent: 'rgba(15, 118, 110, 0.18)',
+        iconColor: '#0F766E',
+      },
+      power: {
+        key: 'power',
+        label: 'Power phase',
+        icon: 'flash-outline',
+        accent: 'rgba(15, 118, 110, 0.18)',
+        iconColor: '#0F766E',
+      },
+      operator: {
+        key: 'operator',
+        label: 'Operator',
+        icon: 'people-outline',
+        accent: 'rgba(15, 118, 110, 0.18)',
+        iconColor: '#0F766E',
+      },
+      'operator included': {
+        key: 'operator',
+        label: 'Operator',
+        icon: 'people-outline',
+        accent: 'rgba(15, 118, 110, 0.18)',
+        iconColor: '#0F766E',
+      },
+      'preferred time': {
+        key: 'preferred-time',
+        label: 'Preferred time',
+        icon: 'alarm-outline',
+        accent: 'rgba(15, 118, 110, 0.18)',
+        iconColor: '#0F766E',
+      },
+      time: {
+        key: 'preferred-time',
+        label: 'Preferred time',
+        icon: 'alarm-outline',
+        accent: 'rgba(15, 118, 110, 0.18)',
+        iconColor: '#0F766E',
+      },
+    };
+
+    const cards: Record<string, DetailCard> = {};
+
+    const addCard = (configKey: string, value: string | null | undefined) => {
+      if (!value) return;
+      const normalizedKey = configKey.toLowerCase();
+      const config = iconConfig[normalizedKey];
+      if (!config) return;
+      cards[config.key] = {
+        key: config.key,
+        label: config.label,
+        value: value,
+        icon: config.icon,
+        accent: config.accent,
+        iconColor: config.iconColor,
+      };
+    };
+
+    addCard('duration', durationLabel);
+    addCard('power phase', powerLabel);
+    addCard('operator', operatorIncluded !== undefined ? (operatorIncluded ? 'Included' : 'Not included') : null);
+    addCard('preferred time', preferredTime);
+
+    const remainingLines: string[] = [];
+
+    if (description) {
+      const lines = description.split('\n').map((line) => line.trim()).filter(Boolean);
+      lines.forEach((line) => {
+        const match = line.match(/^([^:]+):\s*(.+)$/);
+        if (!match) {
+          remainingLines.push(line);
+          return;
+        }
+        const rawKey = match[1].trim();
+        const rawValue = match[2].trim();
+        const normalizedKey = rawKey.toLowerCase();
+        const config =
+          iconConfig[normalizedKey] ??
+          iconConfig[normalizedKey.replace(/\s+included$/, '')] ??
+          iconConfig[normalizedKey.replace(/\s+phase$/, '')];
+
+        if (config) {
+          cards[config.key] = {
+            key: config.key,
+            label: config.label,
+            value: rawValue,
+            icon: config.icon,
+            accent: config.accent,
+            iconColor: config.iconColor,
+          };
+        } else {
+          remainingLines.push(`${rawKey}: ${rawValue}`);
+        }
+      });
+    }
+
+    const detailCards = Object.values(cards);
+    return {
+      detailItems: detailCards,
+      remainingDescription: remainingLines.join('\n').trim(),
+    };
+  }, [description, durationLabel, operatorIncluded, powerLabel, preferredTime]);
 
   return (
     <SafeAreaWrapper>
@@ -541,10 +732,21 @@ const ServiceRequestDetailsScreen = () => {
               </Text>
               <Text style={styles.headerSubtitle}>{formatHeaderSubtitle()}</Text>
             </View>
-            <View style={[styles.statusBadgeNew, { backgroundColor: statusBadge.backgroundColor }]}>
-              <Text style={[styles.statusTextNew, { color: statusBadge.textColor }]}>
-                {statusBadge.text}
-              </Text>
+            <View style={styles.appBarRight}>
+              {showSearchMenu && (
+                <TouchableOpacity
+                  onPress={handleOpenSearchMenu}
+                  style={styles.menuButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="ellipsis-vertical" size={20} color="#0F172A" />
+                </TouchableOpacity>
+              )}
+              <View style={[styles.statusBadgeNew, { backgroundColor: statusBadge.backgroundColor }]}>
+                <Text style={[styles.statusTextNew, { color: statusBadge.textColor }]}>
+                  {statusBadge.text}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -569,37 +771,37 @@ const ServiceRequestDetailsScreen = () => {
                   pitchEnabled={false}
                   customMapStyle={UBER_MAP_STYLE}
                 >
-                  <Marker coordinate={mapCenter} anchor={{ x: 0.5, y: 1 }}>
-                    <View style={styles.rippleMarker}>
+                  {isSearching && mapCenter && waveRadiusValue && !Number.isNaN(waveRadiusValue) && (
+                    <Circle
+                      center={mapCenter}
+                      radius={waveRadiusValue}
+                      strokeColor="rgba(79, 70, 229, 0.35)"
+                      fillColor="rgba(79, 70, 229, 0.12)"
+                      strokeWidth={2}
+                    />
+                  )}
+                  <Marker coordinate={mapCenter} anchor={{ x: 0.5, y: 0.5 }}>
+                    <View style={[styles.rippleMarker, rippleDimensionsStyle]}>
                       {isSearching && (
-                        <RippleAnimation
-                          size={150}
-                          duration={2400}
-                          color="rgba(79, 70, 229, 0.28)"
-                        />
+                        <View style={[styles.rippleAnimationWrapper, rippleDimensionsStyle]}>
+                          <RippleAnimation
+                            size={rippleSize}
+                            duration={2400}
+                            color="rgba(79, 70, 229, 0.28)"
+                          />
+                        </View>
                       )}
-                      <Ionicons name="location-sharp" size={34} color="#0F172A" />
+                      <View style={[styles.mapMarkerIconWrapper, markerIconWrapperStyle]}>
+                        <Ionicons
+                          name="location-sharp"
+                          size={MARKER_ICON_SIZE}
+                          color="#0F172A"
+                          style={styles.mapMarkerIcon}
+                        />
+                      </View>
                     </View>
                   </Marker>
                 </MapView>
-                {isSearching && (
-                  <View style={styles.mapOverlayContainer} pointerEvents="none">
-                    <View style={styles.mapOverlayPill}>
-                      <MaterialIcons name="wifi-tethering" size={18} color="#1E3A8A" />
-                      <Text style={styles.mapOverlayText}>{waveRadiusLabel}</Text>
-                    </View>
-                    {nextWaveCopy && (
-                      <View style={styles.mapOverlayChip}>
-                        <MaterialIcons name="schedule" size={16} color="#1E3A8A" />
-                        <Text style={styles.mapOverlayChipText}>
-                          {nextWaveCopy === 'Processing...'
-                            ? 'Next wave processing'
-                            : `Next wave in ${nextWaveCopy}`}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
               </View>
 
               {/* Finding Provider Section - Figma Design */}
@@ -608,13 +810,29 @@ const ServiceRequestDetailsScreen = () => {
                   <Text style={styles.findingProviderTitle}>
                     {requestStatus === 'no_providers_available' ? 'No Providers Found' : 'Finding Provider'}
                   </Text>
-                  <Text style={styles.findingProviderTime}>
+                  <Text
+                    style={[
+                      styles.findingProviderTime,
+                      !(isSearching && (nextWaveCopy || waveRadiusLabel)) &&
+                        styles.findingProviderTimeSpaced,
+                    ]}
+                  >
                     {requestStatus === 'no_providers_available'
                       ? 'Search completed with no matches'
                       : elapsedTime
                       ? `${elapsedTime} min elapsed`
                       : 'Tracking search...'}
                   </Text>
+                  {isSearching && nextWaveCopy && (
+                    <Text style={styles.nextWaveText}>
+                      {nextWaveCopy === 'Processing...'
+                        ? 'Next wave processing'
+                        : `Next wave in ${nextWaveCopy}`}
+                    </Text>
+                  )}
+                  {isSearching && waveRadiusLabel && (
+                    <Text style={styles.waveRadiusText}>{waveRadiusLabel}</Text>
+                  )}
 
                   {/* Progress Timeline */}
                   <View style={styles.progressTimeline}>
@@ -700,12 +918,39 @@ const ServiceRequestDetailsScreen = () => {
                       </>
                     ) : null}
 
-                    {currentRequest.description ? (
+                    {(remainingDescription || detailItems.length > 0) ? (
                       <>
                         <View style={styles.orderDetailsDivider} />
-                        <View style={styles.orderBlock}>
+                        <View style={styles.detailSection}>
                           <Text style={styles.orderBlockLabel}>Details</Text>
-                          <Text style={styles.orderBlockValue}>{currentRequest.description}</Text>
+                          {remainingDescription ? (
+                            <Text style={styles.orderBlockValue}>{remainingDescription}</Text>
+                          ) : null}
+                          {detailItems.length > 0 ? (
+                            <View
+                              style={[
+                                styles.detailCardGrid,
+                                remainingDescription ? styles.detailGridSpacing : null,
+                              ]}
+                            >
+                              {detailItems.map((item) => (
+                                <View key={item.key} style={styles.detailCard}>
+                                  <View
+                                    style={[
+                                      styles.detailIconWrap,
+                                      { backgroundColor: item.accent },
+                                    ]}
+                                  >
+                                    <Ionicons name={item.icon} size={18} color={item.iconColor} />
+                                  </View>
+                                  <Text style={styles.detailCardLabel}>{item.label}</Text>
+                                  <Text style={styles.detailCardValue} numberOfLines={2}>
+                                    {item.value}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          ) : null}
                         </View>
                       </>
                     ) : null}
@@ -721,28 +966,6 @@ const ServiceRequestDetailsScreen = () => {
                         </View>
                       </>
                     )}
-
-                    {currentRequest.metadata?.powerLabel ? (
-                      <>
-                        <View style={styles.orderDetailsDivider} />
-                        <View style={styles.orderBlock}>
-                          <Text style={styles.orderBlockLabel}>Power phase</Text>
-                          <Text style={styles.orderBlockValue}>{currentRequest.metadata.powerLabel}</Text>
-                        </View>
-                      </>
-                    ) : null}
-
-                    {currentRequest.metadata?.operatorIncluded !== undefined ? (
-                      <>
-                        <View style={styles.orderDetailsDivider} />
-                        <View style={styles.orderBlock}>
-                          <Text style={styles.orderBlockLabel}>Operator included</Text>
-                          <Text style={styles.orderBlockValue}>
-                            {currentRequest.metadata.operatorIncluded ? 'Yes' : 'No'}
-                          </Text>
-                        </View>
-                      </>
-                    ) : null}
 
                     {currentRequest.budget?.min || currentRequest.budget?.max ? (
                       <>
@@ -811,7 +1034,7 @@ const ServiceRequestDetailsScreen = () => {
                   style={styles.acceptButton}
                 />
               )}
-              {canCancel && (
+              {showFooterCancelButton && (
                 <Button
                   title="Cancel Request"
                   variant="danger"
@@ -820,7 +1043,7 @@ const ServiceRequestDetailsScreen = () => {
                   style={styles.cancelButton}
                 />
               )}
-              {!canAccept && !canCancel && !currentRequest.orderId && (
+              {!canAccept && !showFooterCancelButton && !showSearchMenu && !currentRequest.orderId && (
                 <>
                   <Text style={styles.footerInfo}>
                     {isExpired
@@ -984,10 +1207,17 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT.SECONDARY,
   },
   nextWaveText: {
-    fontSize: 12,
-    color: '#10B981',
+    fontSize: 13,
+    color: '#1E3A8A',
     fontWeight: '500',
-    marginTop: SPACING.SM,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  waveRadiusText: {
+    fontSize: 13,
+    color: '#1E3A8A',
+    fontWeight: '500',
+    marginBottom: 16,
   },
   infoRow: {
     flexDirection: 'row',
@@ -1043,6 +1273,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  appBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    marginRight: 8,
+  },
   headerTextGroup: {
     flex: 1,
     marginHorizontal: 12,
@@ -1097,47 +1336,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mapOverlayContainer: {
+  rippleAnimationWrapper: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 24,
-  },
-  mapOverlayPill: {
-    flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 6,
+    justifyContent: 'center',
   },
-  mapOverlayText: {
-    marginLeft: 10,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E3A8A',
-  },
-  mapOverlayChip: {
-    flexDirection: 'row',
+  mapMarkerIconWrapper: {
+    position: 'absolute',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(30, 58, 138, 0.12)',
-    marginTop: 12,
   },
-  mapOverlayChipText: {
-    marginLeft: 6,
-    fontSize: 13,
-    color: '#1E3A8A',
-    fontWeight: '500',
+  mapMarkerIcon: {
+    shadowColor: '#00000055',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
   findingProviderSection: {
     paddingHorizontal: 24,
@@ -1158,8 +1371,11 @@ const styles = StyleSheet.create({
   findingProviderTime: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 24,
+    marginBottom: 4,
     fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  findingProviderTimeSpaced: {
+    marginBottom: 20,
   },
   progressTimeline: {
     flexDirection: 'row',
@@ -1286,6 +1502,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0F172A',
     lineHeight: 20,
+  },
+  detailSection: {
+    paddingBottom: 4,
+  },
+  detailCardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  detailGridSpacing: {
+    marginTop: 14,
+  },
+  detailCard: {
+    flexBasis: '48%',
+    minWidth: '48%',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+    shadowColor: 'rgba(15, 23, 42, 0.12)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  detailIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  detailCardLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    color: '#475569',
+    marginBottom: 6,
+  },
+  detailCardValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+    lineHeight: 21,
   },
   orderBlockBanner: {
     flexDirection: 'row',

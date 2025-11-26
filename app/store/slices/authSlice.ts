@@ -2,6 +2,8 @@ import {createSlice, createAsyncThunk, PayloadAction} from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
 import apiInterceptor from '../../services/apiInterceptor';
+import TokenStorage from '../../utils/TokenStorage';
+import firebaseTokenHelper from '../../services/firebaseTokenHelper';
 
 // Storage keys constants - matching apiInterceptor
 export const STORAGE_KEYS = {
@@ -26,38 +28,43 @@ const decodeJwt = (token: string) => {
   }
 };
 
-// Helper functions for auth data persistence
+// Helper functions for auth data persistence using TokenStorage
 const saveAuthData = async (accessToken: string, refreshToken: string, user: any, expiresIn: number = 900) => {
   try {
-    const expiryTime = new Date().getTime() + (expiresIn * 1000);
+    // Use TokenStorage for token management
+    await TokenStorage.saveTokens({
+      accessToken,
+      refreshToken,
+      expiresIn,
+      tokenType: 'Bearer',
+    });
+
+    // Save user data separately
     await AsyncStorage.multiSet([
-      [STORAGE_KEYS.ACCESS_TOKEN, accessToken],
-      [STORAGE_KEYS.REFRESH_TOKEN, refreshToken],
       [STORAGE_KEYS.USER, JSON.stringify(user)],
-      [STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString()],
-      ['token', accessToken], // Legacy key for backward compatibility
       ['user', JSON.stringify(user)], // Legacy key
     ]);
-    
-    console.log('✅ Auth data saved successfully');
+
+    console.log('✅ [AuthSlice] Auth data saved successfully');
   } catch (error) {
-    console.error('❌ Error saving auth data:', error);
+    console.error('❌ [AuthSlice] Error saving auth data:', error);
   }
 };
 
 const clearAuthData = async () => {
   try {
+    // Use TokenStorage to clear tokens
+    await TokenStorage.clearTokens();
+
+    // Clear user data
     await AsyncStorage.multiRemove([
-      STORAGE_KEYS.ACCESS_TOKEN,
-      STORAGE_KEYS.REFRESH_TOKEN,
       STORAGE_KEYS.USER,
-      STORAGE_KEYS.TOKEN_EXPIRY,
-      'token', // Legacy key
-      'user',  // Legacy key
+      'user', // Legacy key
     ]);
-    console.log('✅ Auth data cleared');
+
+    console.log('✅ [AuthSlice] Auth data cleared');
   } catch (error) {
-    console.error('❌ Error clearing auth data:', error);
+    console.error('❌ [AuthSlice] Error clearing auth data:', error);
   }
 };
 
@@ -191,22 +198,34 @@ export const registerUser = createAsyncThunk(
   async (
     userData: {
       name: string;
-      email: string;
+      email?: string;
       phone: string;
-      password: string;
-      role: 'individual' | 'SHG' | 'FPO';
+      idToken: string; // Firebase ID token from OTP verification
+      role?: 'individual' | 'SHG' | 'FPO';
     },
     {rejectWithValue},
   ) => {
     try {
-      console.log('🔄 registerUser: Attempting to register user...', userData.phone);
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      console.log('🔄 registerUser: Attempting firebase-login with user...', userData.phone);
+
+      // Format phone number with country code for backend validation
+      // If phone is 10 digits, add +91 prefix (Indian number)
+      const phoneWithCountryCode = userData.phone.startsWith('+')
+        ? userData.phone
+        : `+91${userData.phone}`;
+
+      const response = await fetch(`${API_BASE_URL}/identity/auth/firebase-login`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(userData),
+        body: JSON.stringify({
+          idToken: userData.idToken,
+          name: userData.name,
+          phoneNumber: phoneWithCountryCode,
+          email: userData.email || undefined, // Send email if provided
+        }),
       });
 
-      console.log('📡 registerUser: Registration response status:', response.status);
+      console.log('📡 registerUser: firebase-login response status:', response.status);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -215,43 +234,49 @@ export const registerUser = createAsyncThunk(
       }
 
       const result = await response.json();
-      console.log('✅ registerUser: Registration successful, response:', result);
-      
-      // Handle new registration response format with tokens
-      if (result.access_token && result.refresh_token && result.user) {
-        // Use apiInterceptor to handle token storage
-        await apiInterceptor.handleLoginResponse({
-          access_token: result.access_token,
-          refresh_token: result.refresh_token,
-          expires_in: result.expires_in || 900,
-          token_type: result.token_type || 'Bearer',
-          user: result.user
-        });
-        
-        // Also save token expiry
-        const expiryTime = new Date().getTime() + ((result.expires_in || 900) * 1000);
-        await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
-        
-        // Save legacy token
-        await AsyncStorage.setItem('token', result.access_token);
-        
-        return { 
-          userId: result.user.id || result.user._id,
-          phone: userData.phone,
-          token: result.access_token,
-          refreshToken: result.refresh_token,
-          user: result.user,
-          autoLoggedIn: true
-        };
+      console.log('✅ registerUser: firebase-login successful, response:', result);
+
+      // Backend returns: { success, customToken, user, message }
+      if (!result.success || !result.customToken || !result.user) {
+        console.error('❌ registerUser: Invalid response format from firebase-login', result);
+        return rejectWithValue('Invalid response from server');
       }
-      
-      // Legacy response format
-      const userId = result.user?._id;
-      if (!userId) {
-        console.error('❌ registerUser: User ID not found in registration response.', result);
-        return rejectWithValue('User ID not found after registration.');
-      }
-      return { userId, phone: userData.phone, autoLoggedIn: false };
+
+      const customToken = result.customToken;
+      const user = result.user;
+
+      // Exchange custom token for ID token with RBAC claims
+      console.log('🔄 registerUser: Exchanging custom token for ID token with RBAC claims');
+      const idTokenWithClaims = await firebaseTokenHelper.signInWithCustomToken(customToken);
+      console.log('✅ registerUser: Got ID token with RBAC claims');
+
+      // Use the ID token (with RBAC claims) as the access token
+      const accessToken = idTokenWithClaims;
+
+      // Use apiInterceptor to handle token storage
+      await apiInterceptor.handleLoginResponse({
+        access_token: accessToken,
+        refresh_token: '', // Firebase handles refresh via SDK
+        expires_in: 3600, // Firebase ID tokens expire in 1 hour
+        token_type: 'Bearer',
+        user: user
+      });
+
+      // Also save token expiry
+      const expiryTime = new Date().getTime() + (3600 * 1000);
+      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+
+      // Save legacy token
+      await AsyncStorage.setItem('token', accessToken);
+
+      return {
+        userId: user.id,
+        phone: user.phone,
+        token: accessToken,
+        refreshToken: '', // Firebase handles token refresh automatically
+        user: user,
+        autoLoggedIn: true
+      };
     } catch (error: any) {
       console.error('🔥 Network error during registration:', error);
       return rejectWithValue(error.message);
@@ -266,7 +291,7 @@ export const loginAndVerifyUser = createAsyncThunk(
       console.log('🔄 loginAndVerifyUser: Attempting login and verification for userId:', credentials.userId);
       
       // Step 1: Log in to get tokens
-      const loginResponse = await fetch(`${API_BASE_URL}/auth/login`, {
+      const loginResponse = await fetch(`${API_BASE_URL}/identity/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -298,7 +323,7 @@ export const loginAndVerifyUser = createAsyncThunk(
       // Step 2: Update verification status
       console.log('🔄 loginAndVerifyUser: Attempting to verify user phone for userId:', credentials.userId);
       const verifyResponse = await fetch(
-        `${API_BASE_URL}/users/${credentials.userId}/verify`,
+        `${API_BASE_URL}/identity/users/${credentials.userId}/verify`,
         {
           method: 'PATCH',
           headers: {
@@ -371,7 +396,7 @@ export const signIn = createAsyncThunk(
         requestBody = { phone: credentials.emailOrPhone, password: credentials.password };
       }
 
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}/identity/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -422,7 +447,7 @@ export const signIn = createAsyncThunk(
         user: user,
       };
     } catch (error) {
-      console.log(`${API_BASE_URL}/auth/login`)
+      console.log(`${API_BASE_URL}/identity/auth/login`)
       console.error('🔥 Network error during login:', error, API_BASE_URL);
       throw error;
     }
@@ -473,61 +498,72 @@ export const verifyOTP = createAsyncThunk(
   }
 );
 
-// Async action for OTP login (passwordless sign-in)
+// Async action for Firebase OTP login (passwordless sign-in)
 export const otpLogin = createAsyncThunk(
   'auth/otpLogin',
-  async (payload: { phone: string }) => {
+  async (payload: { idToken: string; phoneNumber?: string; name?: string }) => {
     try {
-      console.log('🔄 Attempting OTP login for phone:', payload.phone);
-      const response = await fetch(`${API_BASE_URL}/auth/otp-login`, {
+      console.log('🔄 Attempting Firebase OTP login with ID token');
+      const response = await fetch(`${API_BASE_URL}/identity/auth/firebase-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: payload.phone }),
+        body: JSON.stringify({
+          idToken: payload.idToken,
+          phoneNumber: payload.phoneNumber,
+          name: payload.name
+        }),
       });
-      
-      console.log('📡 OTP login status:', response.status);
-      
+
+      console.log('📡 Firebase login status:', response.status);
+
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.message || 'OTP login failed');
+        throw new Error(err.message || 'Firebase login failed');
       }
-      
+
       const data = await response.json();
-      console.log('✅ OTP login success:', data);
-      
-      // Handle both response formats
-      const accessToken = data.access_token || data.token;
-      const refreshToken = data.refresh_token || '';
-      const expiresIn = data.expires_in || 900;
+      console.log('✅ Firebase login success:', data);
+
+      // Backend returns customToken and user
+      const customToken = data.customToken;
       const user = data.user;
-      
-      if (!accessToken || !user) {
-        throw new Error('Invalid OTP login response');
+
+      if (!customToken || !user) {
+        throw new Error('Invalid Firebase login response');
       }
-      
+
+      // Exchange custom token for ID token with RBAC claims
+      console.log('🔄 Exchanging custom token for ID token with RBAC claims');
+      const idTokenWithClaims = await firebaseTokenHelper.signInWithCustomToken(customToken);
+      console.log('✅ Got ID token with RBAC claims');
+
+      // Use the ID token (with RBAC claims) as the access token
+      const accessToken = idTokenWithClaims;
+
       // Use apiInterceptor to handle token storage
       await apiInterceptor.handleLoginResponse({
         access_token: accessToken,
-        refresh_token: refreshToken,
-        expires_in: expiresIn,
-        token_type: data.token_type || 'Bearer',
+        refresh_token: '', // Firebase handles refresh via SDK
+        expires_in: 3600, // Firebase ID tokens expire in 1 hour
+        token_type: 'Bearer',
         user: user
       });
-      
+
       // Also save token expiry
-      const expiryTime = new Date().getTime() + (expiresIn * 1000);
+      const expiryTime = new Date().getTime() + (3600 * 1000);
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
-      
+
       // Save legacy token
       await AsyncStorage.setItem('token', accessToken);
-      
+
       return {
         token: accessToken,
-        refreshToken,
+        customToken,
+        refreshToken: '',
         user,
       };
     } catch (error) {
-      console.error('❌ OTP login error:', error);
+      console.error('❌ Firebase OTP login error:', error);
       throw error;
     }
   }
@@ -540,7 +576,7 @@ export const resetPassword = createAsyncThunk(
     try {
       console.log('🔄 Attempting to reset password for phone:', phone);
       
-      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      const response = await fetch(`${API_BASE_URL}/identity/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

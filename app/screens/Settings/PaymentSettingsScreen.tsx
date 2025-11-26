@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SPACING, FONTS } from '../../utils';
+import { scaleFontSize, scaleSize } from '../../utils/fonts';
 
 // Ultra-minimal color scheme
 const COLORS_MINIMAL = {
@@ -79,10 +80,10 @@ const PaymentSettingsScreen = () => {
       
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color={COLORS_MINIMAL.text.primary} />
+          <Ionicons name="arrow-back" size={scaleSize(24)} color={COLORS_MINIMAL.text.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payment Methods</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: scaleSize(24) }} />
       </View>
 
       <ScrollView 
@@ -119,12 +120,12 @@ const PaymentSettingsScreen = () => {
                     )}
                   </View>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.menuButton}
                   activeOpacity={0.7}
                   onPress={() => {}}
                 >
-                  <Ionicons name="ellipsis-vertical" size={18} color={COLORS_MINIMAL.text.muted} />
+                  <Ionicons name="ellipsis-vertical" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
                 </TouchableOpacity>
               </View>
 
@@ -150,12 +151,12 @@ const PaymentSettingsScreen = () => {
           ))}
         </View>
 
-        <TouchableOpacity 
-          style={styles.addButton} 
+        <TouchableOpacity
+          style={styles.addButton}
           activeOpacity={0.8}
           onPress={handleAddPayment}
         >
-          <Ionicons name="add-circle-outline" size={20} color={COLORS_MINIMAL.accent} />
+          <Ionicons name="add-circle-outline" size={scaleSize(20)} color={COLORS_MINIMAL.accent} />
           <Text style={styles.addButtonText}>Add Payment Method</Text>
         </TouchableOpacity>
 
@@ -164,19 +165,19 @@ const PaymentSettingsScreen = () => {
           <View style={styles.quickPayContainer}>
             <TouchableOpacity style={styles.quickPayOption} activeOpacity={0.7}>
               <View style={styles.quickPayIcon}>
-                <MaterialCommunityIcons name="google-pay" size={24} color="#4285F4" />
+                <MaterialCommunityIcons name="google-pay" size={scaleSize(24)} color="#4285F4" />
               </View>
               <Text style={styles.quickPayText}>Google Pay</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.quickPayOption} activeOpacity={0.7}>
               <View style={styles.quickPayIcon}>
-                <Ionicons name="phone-portrait-outline" size={24} color="#002E6E" />
+                <Ionicons name="phone-portrait-outline" size={scaleSize(24)} color="#002E6E" />
               </View>
               <Text style={styles.quickPayText}>PhonePe</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.quickPayOption} activeOpacity={0.7}>
               <View style={styles.quickPayIcon}>
-                <MaterialCommunityIcons name="cash" size={24} color="#5F259F" />
+                <MaterialCommunityIcons name="cash" size={scaleSize(24)} color="#5F259F" />
               </View>
               <Text style={styles.quickPayText}>Paytm</Text>
             </TouchableOpacity>
@@ -185,7 +186,7 @@ const PaymentSettingsScreen = () => {
 
         <View style={styles.infoSection}>
           <View style={styles.infoCard}>
-            <Ionicons name="lock-closed-outline" size={18} color={COLORS_MINIMAL.text.muted} />
+            <Ionicons name="lock-closed-outline" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
             <View style={styles.infoContent}>
               <Text style={styles.infoTitle}>Your payment info is secure</Text>
               <Text style={styles.infoText}>
@@ -199,18 +200,18 @@ const PaymentSettingsScreen = () => {
           <Text style={styles.sectionTitle}>Billing Settings</Text>
           <TouchableOpacity style={styles.settingItem} activeOpacity={0.7}>
             <View style={styles.settingLeft}>
-              <Ionicons name="document-text-outline" size={20} color={COLORS_MINIMAL.text.secondary} />
+              <Ionicons name="document-text-outline" size={scaleSize(20)} color={COLORS_MINIMAL.text.secondary} />
               <Text style={styles.settingText}>Billing History</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
+            <Ionicons name="chevron-forward" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
           </TouchableOpacity>
           <View style={styles.separator} />
           <TouchableOpacity style={styles.settingItem} activeOpacity={0.7}>
             <View style={styles.settingLeft}>
-              <Ionicons name="receipt-outline" size={20} color={COLORS_MINIMAL.text.secondary} />
+              <Ionicons name="receipt-outline" size={scaleSize(20)} color={COLORS_MINIMAL.text.secondary} />
               <Text style={styles.settingText}>Auto-pay Settings</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS_MINIMAL.text.muted} />
+            <Ionicons name="chevron-forward" size={scaleSize(18)} color={COLORS_MINIMAL.text.muted} />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -224,37 +225,37 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS_MINIMAL.background,
   },
   contentContainer: {
-    paddingBottom: 100,
+    paddingBottom: scaleSize(100),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(16),
     backgroundColor: COLORS_MINIMAL.background,
   },
   headerTitle: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     color: COLORS_MINIMAL.text.primary,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   sectionTitle: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.muted,
-    marginBottom: 12,
-    paddingHorizontal: 20,
+    marginBottom: scaleSize(12),
+    paddingHorizontal: scaleSize(20),
   },
   paymentCard: {
     backgroundColor: COLORS_MINIMAL.surface,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
+    marginHorizontal: scaleSize(20),
+    marginBottom: scaleSize(12),
+    padding: scaleSize(16),
+    borderRadius: scaleSize(12),
   },
   cardHeader: {
     flexDirection: 'row',
@@ -267,13 +268,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
+    width: scaleSize(48),
+    height: scaleSize(48),
+    borderRadius: scaleSize(10),
     backgroundColor: COLORS_MINIMAL.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: scaleSize(12),
   },
   cardInfo: {
     flex: 1,
@@ -281,54 +282,54 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: scaleSize(8),
   },
   cardType: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     color: COLORS_MINIMAL.text.primary,
   },
   defaultBadge: {
     backgroundColor: COLORS_MINIMAL.accent,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: scaleSize(8),
+    paddingVertical: scaleSize(2),
+    borderRadius: scaleSize(6),
   },
   defaultText: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 10,
+    fontSize: scaleFontSize(10),
     color: COLORS_MINIMAL.background,
   },
   cardNumber: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     color: COLORS_MINIMAL.text.secondary,
-    marginTop: 2,
+    marginTop: scaleSize(2),
   },
   cardExpiry: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     color: COLORS_MINIMAL.text.muted,
-    marginTop: 2,
+    marginTop: scaleSize(2),
   },
   menuButton: {
-    padding: 4,
+    padding: scaleSize(4),
   },
   cardActions: {
     flexDirection: 'row',
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: scaleSize(12),
+    paddingTop: scaleSize(12),
     borderTopWidth: 1,
     borderTopColor: COLORS_MINIMAL.border,
-    gap: 12,
+    gap: scaleSize(12),
   },
   actionButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: scaleSize(6),
+    paddingHorizontal: scaleSize(12),
   },
   actionText: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     color: COLORS_MINIMAL.accent,
   },
   removeText: {
@@ -339,85 +340,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
-    marginHorizontal: 20,
-    marginBottom: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
+    marginHorizontal: scaleSize(20),
+    marginBottom: scaleSize(32),
+    paddingVertical: scaleSize(14),
+    borderRadius: scaleSize(12),
+    gap: scaleSize(8),
   },
   addButtonText: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     color: COLORS_MINIMAL.accent,
   },
   quickPayContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingHorizontal: scaleSize(20),
+    gap: scaleSize(12),
   },
   quickPayOption: {
     flex: 1,
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.surface,
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: scaleSize(16),
+    borderRadius: scaleSize(12),
   },
   quickPayIcon: {
-    marginBottom: 8,
+    marginBottom: scaleSize(8),
   },
   quickPayText: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     color: COLORS_MINIMAL.text.secondary,
   },
   infoSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
+    paddingHorizontal: scaleSize(20),
+    marginBottom: scaleSize(24),
   },
   infoCard: {
     flexDirection: 'row',
     backgroundColor: `${COLORS_MINIMAL.accent}10`,
-    padding: 16,
-    borderRadius: 12,
+    padding: scaleSize(16),
+    borderRadius: scaleSize(12),
     alignItems: 'flex-start',
   },
   infoContent: {
-    marginLeft: 12,
+    marginLeft: scaleSize(12),
     flex: 1,
   },
   infoTitle: {
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS_MINIMAL.text.primary,
-    marginBottom: 4,
+    marginBottom: scaleSize(4),
   },
   infoText: {
     fontFamily: FONTS.POPPINS.REGULAR,
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     color: COLORS_MINIMAL.text.secondary,
-    lineHeight: 18,
+    lineHeight: scaleSize(18),
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: scaleSize(14),
+    paddingHorizontal: scaleSize(20),
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: scaleSize(12),
   },
   settingText: {
     fontFamily: FONTS.POPPINS.MEDIUM,
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     color: COLORS_MINIMAL.text.primary,
   },
   separator: {
     height: 1,
     backgroundColor: COLORS_MINIMAL.divider,
-    marginLeft: 52,
+    marginLeft: scaleSize(52),
   },
 });
 
