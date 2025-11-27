@@ -69,6 +69,7 @@ class TokenRefreshService {
     }
 
     // Check if user is authenticated
+    await firebaseTokenHelper.waitForAuthReady();
     if (!firebaseTokenHelper.isAuthenticated()) {
       console.log('⚠️ [TokenRefreshService] No authenticated user, stopping refresh');
       this.stop();

@@ -26,7 +26,7 @@ class UserService {
 
   async getUserById(userId: string, token?: string): Promise<UserProfile> {
     try {
-      const response = await axios.get(`${BASE_URL}/users/${userId}` , this.getAuthHeaders(token));
+      const response = await axios.get(`${BASE_URL}/identity/users/${userId}` , this.getAuthHeaders(token));
       return response.data as UserProfile;
     } catch (error: any) {
       console.error('UserService.getUserById error:', error?.response?.data || error?.message);

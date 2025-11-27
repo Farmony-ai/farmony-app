@@ -78,7 +78,7 @@ class FCMService {
         return;
       }
 
-      await apiInterceptor.makeAuthenticatedRequest('/users/fcm-token', {
+      await apiInterceptor.makeAuthenticatedRequest('/identity/users/fcm-token', {
         method: 'POST',
         body: JSON.stringify({ token }),
       });
@@ -96,7 +96,7 @@ class FCMService {
         return;
       }
 
-      await apiInterceptor.makeAuthenticatedRequest('/users/fcm-token', {
+      await apiInterceptor.makeAuthenticatedRequest('/identity/users/fcm-token', {
         method: 'DELETE',
         body: JSON.stringify({ token }),
       });
@@ -119,12 +119,12 @@ class FCMService {
       // Update token on backend
       try {
         if (oldToken) {
-          await apiInterceptor.makeAuthenticatedRequest('/users/fcm-token', {
+          await apiInterceptor.makeAuthenticatedRequest('/identity/users/fcm-token', {
             method: 'DELETE',
             body: JSON.stringify({ token: oldToken }),
           });
         }
-        await apiInterceptor.makeAuthenticatedRequest('/users/fcm-token', {
+        await apiInterceptor.makeAuthenticatedRequest('/identity/users/fcm-token', {
           method: 'POST',
           body: JSON.stringify({ token: newToken }),
         });

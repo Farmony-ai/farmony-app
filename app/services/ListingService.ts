@@ -13,6 +13,8 @@ export interface CreateListingPayload {
   subcategory?: string;
   photos: ImagePickerResult[];
   coordinates: [number, number]; // [longitude, latitude]
+  // Optional: Address ID for service location (if provided, backend uses this address's coordinates)
+  addressId?: string;
   price: number;
   unitOfMeasure: string;
   minimumOrder: number;
@@ -72,6 +74,8 @@ class ListingService {
         // Include mapped names if present
         ...(payload.category ? { category: payload.category } : {}),
         ...(payload.subcategory ? { subcategory: payload.subcategory } : {}),
+        // Include addressId if provided (backend will use this address's coordinates)
+        ...(payload.addressId ? { addressId: payload.addressId } : {}),
         coordinates: payload.coordinates,
         price: payload.price,
         unitOfMeasure: payload.unitOfMeasure,

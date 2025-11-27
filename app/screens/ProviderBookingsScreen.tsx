@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Modal,
+  TextInput,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
@@ -15,6 +17,7 @@ import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import BookingService, { Booking, BookingsResponse } from '../services/BookingService';
+import ServiceRequestService, { ServiceRequest } from '../services/ServiceRequestService';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { canTransition, setOrderStatus } from '../services/orderStatus';
@@ -22,26 +25,36 @@ import { canTransition, setOrderStatus } from '../services/orderStatus';
 const { width: screenWidth } = Dimensions.get('window');
 const TAB_WIDTH = (screenWidth - 40) / 3;
 
-type TabType = 'pending' | 'accepted' | 'paid' | 'completed' | 'canceled';
+type TabType = 'opportunities' | 'accepted' | 'paid' | 'completed' | 'canceled';
 
 const ProviderBookingsScreen = () => {
   const navigation = useNavigation<any>();
-  const [activeTab, setActiveTab] = useState<TabType>('pending');
+  const [activeTab, setActiveTab] = useState<TabType>('opportunities');
   const [bookings, setBookings] = useState<BookingsResponse>({
     active: [],
     completed: [],
     canceled: [],
     toReview: [],
   });
+  const [openOpportunities, setOpenOpportunities] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [processingAction, setProcessingAction] = useState<'accept' | 'cancel' | null>(null);
+
+  // Accept modal state
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [quotePrice, setQuotePrice] = useState('');
+  const [quoteMessage, setQuoteMessage] = useState('');
+  const [accepting, setAccepting] = useState(false);
 
   const { user } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
     fetchBookings();
+    fetchOpportunities();
   }, [user?.id]);
 
   const fetchBookings = async () => {
@@ -59,18 +72,34 @@ const ProviderBookingsScreen = () => {
         console.log('[ProviderBookingsScreen] Loaded provider bookings (grouped):\n', pretty);
       } catch {}
       setBookings(data);
-        setLoading(false);
-        setRefreshing(false);
+      setLoading(false);
+      setRefreshing(false);
     } catch (error) {
-      console.error('Error loading dummy data:', error);
+      console.error('Error loading bookings:', error);
       setLoading(false);
       setRefreshing(false);
     }
   };
 
+  const fetchOpportunities = async () => {
+    try {
+      setOpportunitiesLoading(true);
+      const response = await ServiceRequestService.getAvailableRequests();
+      console.log('[ProviderBookingsScreen] Loaded opportunities:', response.requests?.length || 0);
+      setOpenOpportunities(response.requests || []);
+    } catch (error) {
+      console.error('Error fetching opportunities:', error);
+      setOpenOpportunities([]);
+    } finally {
+      setOpportunitiesLoading(false);
+    }
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
-    fetchBookings();
+    Promise.all([fetchBookings(), fetchOpportunities()]).finally(() => {
+      setRefreshing(false);
+    });
   };
 
   const handleAcceptBooking = async (bookingId: string) => {
@@ -99,10 +128,10 @@ const ProviderBookingsScreen = () => {
                   _id: (updated && (updated as any)._id) || bookingId,
                   status: ((updated && (updated as any).status) || 'accepted') as any,
                 };
-                  return {
-                    ...prev,
-                    active: prev.active.map(b => b._id === bookingId ? nextOrder : b),
-                  };
+                return {
+                  ...prev,
+                  active: prev.active.map(b => b._id === bookingId ? nextOrder : b),
+                };
               });
               Alert.alert('Success', 'Booking accepted successfully');
             } catch (error: any) {
@@ -164,6 +193,57 @@ const ProviderBookingsScreen = () => {
     );
   };
 
+  // Opportunity acceptance handlers
+  const handleAcceptOpportunity = (request: ServiceRequest) => {
+    setSelectedRequest(request);
+    setQuotePrice('');
+    setQuoteMessage('');
+    setShowAcceptModal(true);
+  };
+
+  const submitAcceptance = async () => {
+    if (!selectedRequest) return;
+
+    if (!quotePrice || parseFloat(quotePrice) <= 0) {
+      Alert.alert('Validation Error', 'Please enter a valid price');
+      return;
+    }
+
+    try {
+      setAccepting(true);
+      const result = await ServiceRequestService.acceptRequest(selectedRequest._id, {
+        price: parseFloat(quotePrice),
+        message: quoteMessage,
+      });
+
+      Alert.alert('Success!', 'You have successfully accepted the service request.', [
+        {
+          text: 'View Order',
+          onPress: () => {
+            setShowAcceptModal(false);
+            setSelectedRequest(null);
+            navigation.navigate('OrderDetail', { bookingId: result.orderId });
+          },
+        },
+        {
+          text: 'OK',
+          onPress: () => {
+            setShowAcceptModal(false);
+            setSelectedRequest(null);
+          },
+        },
+      ]);
+
+      // Refresh opportunities list to remove the accepted one
+      fetchOpportunities();
+      fetchBookings(); // Also refresh bookings to show new order
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to accept request. It may have been accepted by another provider.');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
@@ -181,7 +261,7 @@ const ProviderBookingsScreen = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | Date) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-IN', {
       day: 'numeric',
@@ -189,6 +269,15 @@ const ProviderBookingsScreen = () => {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+    });
+  };
+
+  const formatServiceDate = (dateString: string | Date) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
     });
   };
 
@@ -213,9 +302,9 @@ const ProviderBookingsScreen = () => {
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(booking.status)}20` }]}>
-            <Text 
-              variant="caption" 
-              weight="medium" 
+            <Text
+              variant="caption"
+              weight="medium"
               style={{ color: getStatusColor(booking.status) }}
             >
               {booking.status.toUpperCase()}
@@ -272,35 +361,110 @@ const ProviderBookingsScreen = () => {
     );
   };
 
-  const renderEmptyState = (type: string) => (
-    <View style={styles.emptyContainer}>
-      <Ionicons 
-        name={type === 'pending' ? 'time-outline' : type === 'accepted' || type === 'paid' ? 'hourglass-outline' : type === 'completed' ? 'checkmark-done-outline' : 'close-circle-outline'} 
-        size={64} 
-        color={COLORS.TEXT.SECONDARY} 
-      />
-      <Text variant="h4" weight="semibold" style={styles.emptyTitle}>
-        No {type.charAt(0).toUpperCase() + type.slice(1)} Bookings
-      </Text>
-      <Text variant="body" color={COLORS.TEXT.SECONDARY} align="center" style={styles.emptyText}>
-        {type === 'pending' 
-          ? 'New booking requests will appear here'
-          : type === 'accepted' || type === 'paid'
-          ? 'Your ongoing bookings will appear here'
-          : type === 'completed'
-          ? 'Your completed bookings will appear here'
-          : 'Canceled bookings will appear here'}
-      </Text>
-    </View>
-  );
+  const renderOpportunityCard = (request: ServiceRequest) => {
+    const distanceKm = (request as any).distanceMeters
+      ? ((request as any).distanceMeters / 1000).toFixed(1)
+      : '?';
+    const seeker = typeof request.seekerId === 'object' ? request.seekerId : null;
+    const category = typeof request.categoryId === 'object' ? request.categoryId : null;
+
+    return (
+      <TouchableOpacity
+        key={request._id}
+        style={styles.bookingCard}
+        onPress={() => navigation.navigate('ServiceRequestDetails', { requestId: request._id })}
+        activeOpacity={0.8}
+      >
+        <View style={styles.bookingHeader}>
+          <View style={styles.bookingInfo}>
+            <Text variant="body" weight="semibold" numberOfLines={1} style={styles.bookingTitle}>
+              {request.title}
+            </Text>
+            <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
+              {seeker?.name || 'Customer'} {category?.name ? `• ${category.name}` : ''}
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: '#E8F5E9' }]}>
+            <Ionicons name="location-outline" size={12} color="#4CAF50" style={{ marginRight: 2 }} />
+            <Text variant="caption" weight="medium" style={{ color: '#4CAF50' }}>
+              {distanceKm} km
+            </Text>
+          </View>
+        </View>
+
+        <Text
+          variant="caption"
+          color={COLORS.TEXT.SECONDARY}
+          numberOfLines={2}
+          style={styles.opportunityDescription}
+        >
+          {request.description}
+        </Text>
+
+        <View style={styles.bookingDetails}>
+          {request.budget && (
+            <View style={styles.detailRow}>
+              <Ionicons name="cash-outline" size={16} color={COLORS.TEXT.SECONDARY} />
+              <Text variant="body" weight="semibold" color={COLORS.PRIMARY.MAIN}>
+                ₹{request.budget.min} - ₹{request.budget.max}
+              </Text>
+            </View>
+          )}
+          <View style={styles.detailRow}>
+            <Ionicons name="calendar-outline" size={16} color={COLORS.TEXT.SECONDARY} />
+            <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
+              {formatServiceDate(request.serviceStartDate)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.acceptButton, { flex: 1 }]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleAcceptOpportunity(request);
+            }}
+          >
+            <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.PRIMARY.MAIN} />
+            <Text variant="body" weight="medium" color={COLORS.PRIMARY.MAIN} style={{ marginLeft: 6 }}>
+              Accept Job
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderEmptyState = (type: string) => {
+    const isOpportunities = type === 'opportunities';
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons
+          name={isOpportunities ? 'briefcase-outline' : type === 'accepted' || type === 'paid' ? 'hourglass-outline' : type === 'completed' ? 'checkmark-done-outline' : 'close-circle-outline'}
+          size={64}
+          color={COLORS.TEXT.SECONDARY}
+        />
+        <Text variant="h4" weight="semibold" style={styles.emptyTitle}>
+          {isOpportunities ? 'No Open Opportunities' : `No ${type.charAt(0).toUpperCase() + type.slice(1)} Bookings`}
+        </Text>
+        <Text variant="body" color={COLORS.TEXT.SECONDARY} align="center" style={styles.emptyText}>
+          {isOpportunities
+            ? 'Service requests matching your skills will appear here'
+            : type === 'accepted' || type === 'paid'
+            ? 'Your ongoing bookings will appear here'
+            : type === 'completed'
+            ? 'Your completed bookings will appear here'
+            : 'Canceled bookings will appear here'}
+        </Text>
+      </View>
+    );
+  };
 
   const getTabData = () => {
-    // Split according to the five visible statuses
-    // Note: Backend puts pending orders in 'active' array, not 'toReview'
     switch (activeTab) {
-      case 'pending':
-        // Fix: Get pending bookings from active array, not toReview
-        return bookings.active.filter(b => b.status === 'pending');
+      case 'opportunities':
+        return null; // Handled separately
       case 'accepted':
         return bookings.active.filter(b => b.status === 'accepted');
       case 'paid':
@@ -329,15 +493,15 @@ const ProviderBookingsScreen = () => {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Tabs: pending | accepted | paid | completed | canceled */}
+      {/* Tabs: opportunities | accepted | paid | completed | canceled */}
       <ScrollView style={styles.tabContainer} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'pending' && styles.activeTab]} onPress={() => setActiveTab('pending')}>
-          <Text variant="body" weight={activeTab === 'pending' ? 'semibold' : 'regular'} color={activeTab === 'pending' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
-            Pending
+        <TouchableOpacity style={[styles.tab, activeTab === 'opportunities' && styles.activeTab]} onPress={() => setActiveTab('opportunities')}>
+          <Text variant="body" weight={activeTab === 'opportunities' ? 'semibold' : 'regular'} color={activeTab === 'opportunities' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
+            Opportunities
           </Text>
-          {bookings.active.filter(b => b.status === 'pending').length > 0 && (
+          {openOpportunities.length > 0 && (
             <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">{bookings.active.filter(b => b.status === 'pending').length}</Text>
+              <Text variant="caption" weight="semibold" color="#fff">{openOpportunities.length}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -345,7 +509,7 @@ const ProviderBookingsScreen = () => {
         <TouchableOpacity style={[styles.tab, activeTab === 'accepted' && styles.activeTab]} onPress={() => setActiveTab('accepted')}>
           <Text variant="body" weight={activeTab === 'accepted' ? 'semibold' : 'regular'} color={activeTab === 'accepted' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
             Accepted
-              </Text>
+          </Text>
           {bookings.active.filter(b => b.status === 'accepted').length > 0 && (
             <View style={styles.tabBadge}>
               <Text variant="caption" weight="semibold" color="#fff">{bookings.active.filter(b => b.status === 'accepted').length}</Text>
@@ -378,7 +542,7 @@ const ProviderBookingsScreen = () => {
         <TouchableOpacity style={[styles.tab, activeTab === 'canceled' && styles.activeTab]} onPress={() => setActiveTab('canceled')}>
           <Text variant="body" weight={activeTab === 'canceled' ? 'semibold' : 'regular'} color={activeTab === 'canceled' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
             Canceled
-              </Text>
+          </Text>
           {bookings.canceled.length > 0 && (
             <View style={styles.tabBadge}>
               <Text variant="caption" weight="semibold" color="#fff">{bookings.canceled.length}</Text>
@@ -389,28 +553,142 @@ const ProviderBookingsScreen = () => {
 
       {/* Content */}
       <View style={{ flex: 1 }}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
-          </View>
-        ) : tabData.length === 0 ? (
-          renderEmptyState(activeTab)
+        {activeTab === 'opportunities' ? (
+          // Opportunities tab content
+          opportunitiesLoading && !refreshing ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+            </View>
+          ) : openOpportunities.length === 0 ? (
+            renderEmptyState('opportunities')
+          ) : (
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[COLORS.PRIMARY.MAIN]}
+                />
+              }
+            >
+              {openOpportunities.map(renderOpportunityCard)}
+            </ScrollView>
+          )
         ) : (
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={[COLORS.PRIMARY.MAIN]}
-              />
-            }
-          >
-            {tabData.map((booking) => renderBookingCard(booking, activeTab === 'pending'))}
-          </ScrollView>
+          // Bookings tab content
+          loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+            </View>
+          ) : tabData && tabData.length === 0 ? (
+            renderEmptyState(activeTab)
+          ) : (
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[COLORS.PRIMARY.MAIN]}
+                />
+              }
+            >
+              {tabData?.map((booking) => renderBookingCard(booking, false))}
+            </ScrollView>
+          )
         )}
       </View>
+
+      {/* Accept Request Modal */}
+      <Modal
+        visible={showAcceptModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAcceptModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text variant="h4" weight="semibold" color={COLORS.TEXT.PRIMARY}>
+                Accept Service Request
+              </Text>
+              <TouchableOpacity onPress={() => setShowAcceptModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.TEXT.PRIMARY} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text variant="body" weight="semibold" color={COLORS.TEXT.PRIMARY} style={{ marginBottom: SPACING.MD }}>
+                {selectedRequest?.title}
+              </Text>
+
+              <View style={styles.modalSection}>
+                <Text variant="caption" weight="semibold" color={COLORS.TEXT.PRIMARY} style={{ marginBottom: SPACING.XS }}>
+                  Your Quote Price *
+                </Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={quotePrice}
+                  onChangeText={setQuotePrice}
+                  placeholder="Enter your price in ₹"
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.TEXT.SECONDARY}
+                />
+              </View>
+
+              <View style={styles.modalSection}>
+                <Text variant="caption" weight="semibold" color={COLORS.TEXT.PRIMARY} style={{ marginBottom: SPACING.XS }}>
+                  Message to Customer (Optional)
+                </Text>
+                <TextInput
+                  style={[styles.modalInput, styles.modalTextArea]}
+                  value={quoteMessage}
+                  onChangeText={setQuoteMessage}
+                  placeholder="Add any notes or details about your service..."
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  placeholderTextColor={COLORS.TEXT.SECONDARY}
+                />
+              </View>
+
+              <View style={styles.modalNote}>
+                <Ionicons name="information-circle-outline" size={16} color={COLORS.TEXT.SECONDARY} />
+                <Text variant="caption" color={COLORS.TEXT.SECONDARY} style={{ marginLeft: SPACING.XS, flex: 1 }}>
+                  Once accepted, an order will be created and the customer will be notified.
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonOutline]}
+                onPress={() => setShowAcceptModal(false)}
+              >
+                <Text variant="body" weight="medium" color={COLORS.TEXT.SECONDARY}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={submitAcceptance}
+                disabled={accepting}
+              >
+                {accepting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text variant="body" weight="medium" color="#fff">
+                    Submit
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaWrapper>
   );
 };
@@ -523,9 +801,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: SPACING.SM,
     paddingVertical: 4,
     borderRadius: BORDER_RADIUS.SM,
+  },
+  opportunityDescription: {
+    paddingHorizontal: SPACING.MD,
+    marginBottom: SPACING.SM,
+    lineHeight: 18,
   },
   bookingDetails: {
     flexDirection: 'row',
@@ -561,6 +846,74 @@ const styles = StyleSheet.create({
   rejectButton: {
     backgroundColor: '#FEF2F2',
     borderColor: '#FCA5A5',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: BORDER_RADIUS.LG,
+    borderTopRightRadius: BORDER_RADIUS.LG,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: SPACING.MD,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
+  modalBody: {
+    padding: SPACING.MD,
+  },
+  modalSection: {
+    marginBottom: SPACING.MD,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    borderRadius: BORDER_RADIUS.MD,
+    padding: SPACING.SM,
+    fontSize: 16,
+    color: COLORS.TEXT.PRIMARY,
+    backgroundColor: '#fff',
+  },
+  modalTextArea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  modalNote: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.BACKGROUND.SECONDARY,
+    padding: SPACING.SM,
+    borderRadius: BORDER_RADIUS.MD,
+    marginTop: SPACING.SM,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: SPACING.MD,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+    gap: SPACING.SM,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: BORDER_RADIUS.MD,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonOutline: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  modalButtonPrimary: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
   },
 });
 

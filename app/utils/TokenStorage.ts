@@ -96,7 +96,7 @@ export class TokenStorage {
       const accessToken = data[this.KEYS.ACCESS_TOKEN];
       const refreshToken = data[this.KEYS.REFRESH_TOKEN];
 
-      if (!accessToken || !refreshToken) {
+      if (!accessToken || refreshToken === null || refreshToken === undefined) {
         console.log('ℹ️ [TokenStorage] No tokens found in storage');
         return null;
       }

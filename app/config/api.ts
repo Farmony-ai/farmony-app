@@ -11,7 +11,7 @@ export const API_CONFIG = {
     // android: 'http:// 192.168.1.101:3000', 
     
     // For iOS Simulator (replace with your actual IP)F
-    ios: 'http://192.168.31.250:3000',
+    ios: 'http://192.168.1.53:3000',
     
     // For Physical Device (replace with your actual IP)
     device: 'http://192.168.1.101:3000', // Replace with your computer's IP
@@ -40,7 +40,7 @@ const getBaseURL = () => {
     if (Platform.OS === 'android') {
       return API_CONFIG.development.android; // Android emulator
     } else if (Platform.OS === 'ios') {
-      return API_CONFIG.production.api; // iOS simulator
+      return API_CONFIG.development.ios; // iOS simulator
     }
     return API_CONFIG.development.device; // Fallback
   }

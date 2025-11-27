@@ -65,7 +65,9 @@ const AddressSelectionScreen = () => {
       setLoading(true);
       setHasError(false);
       const userAddresses = await AddressService.getUserAddresses(user.id);
-      setAddresses(userAddresses);
+
+      // getUserAddresses returns empty array if no addresses found (not an error)
+      setAddresses(userAddresses || []);
 
       // Set the default address as selected
       const defaultAddress = userAddresses.find(addr => addr.isDefault);
@@ -81,26 +83,11 @@ const AddressSelectionScreen = () => {
         }
       }
     } catch (error: any) {
-      setHasError(true);
+      // Only set hasError for actual network/server errors, not for empty results
+      // AddressService.getUserAddresses already handles 404 and returns empty array
+      console.error('Error fetching addresses:', error);
+      setHasError(false); // Don't show error state - show empty state instead
       setAddresses([]);
-
-      // Only show alert if requested (not during refresh)
-      if (showAlert) {
-        Alert.alert(
-          'Unable to Load Addresses',
-          'We couldn\'t load your saved addresses. Please check your internet connection and try again.',
-          [
-            {
-              text: 'Retry',
-              onPress: () => fetchAddresses(true)
-            },
-            {
-              text: 'OK',
-              style: 'cancel'
-            }
-          ]
-        );
-      }
     } finally {
       setLoading(false);
     }
