@@ -4,119 +4,266 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, FONTS } from '../utils';
+import { COLORS, SPACING, FONTS, FONT_SIZES, BORDER_RADIUS } from '../utils';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ListingService from '../services/ListingService';
 import ListingCard from '../components/ListingCard';
-
-interface Listing {
-  _id: string;
-  title: string;
-  description: string;
-  price: number;
-  unitOfMeasure: string;
-  photos: string[];
-  location: {
-    address: string;
-    coordinates: { lat: number; lng: number };
-  };
-  providerId: string;
-  categoryId: string;
-  subCategoryId: string;
-}
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { Listing } from '../services/ListingService';
 
 const ListingsScreen = () => {
-  const { categoryId, subCategoryId } = useSelector((state: RootState) => state.listing);
+  const { user, token } = useSelector((state: RootState) => state.auth);
+  const authToken = token || undefined;
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (categoryId && subCategoryId) {
-      fetchListingsByCategories(categoryId, subCategoryId);
-    } else {
-      // Optionally fetch all listings or show a message if no category is selected
-      // For now, we'll just log a message
-      console.log('No category or subcategory selected. Displaying all listings or a default view.');
-      // fetchAllListings(); // Uncomment if you want to fetch all listings by default
+    if (user?.id) {
+      fetchListings();
     }
-  }, [categoryId, subCategoryId]);
+  }, [user?.id]);
 
-  const fetchListingsByCategories = async (catId: string, subCatId: string) => {
+  const fetchListings = async () => {
     try {
+      if (!user?.id) {
+        throw new Error('User ID not found');
+      }
+      
       setLoading(true);
-      // Assuming ListingService has a method to fetch by category and subcategory
-      const fetchedListings = await ListingService.getListingsByCategories(catId, subCatId);
+      const fetchedListings = await ListingService.getProviderListings(user.id);
       setListings(fetchedListings);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching listings:', error);
-      Alert.alert('Error', 'Failed to load listings. Please try again.');
+      let errorMessage = 'Failed to load listings. Please try again.';
+      
+      if (error.message.includes('Network Error')) {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication error. Please log in again.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You do not have permission to view these listings.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'No listings found.';
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  // Example of fetching all listings (if needed)
-  // const fetchAllListings = async () => {
-  //   try {
-  //     setLoading(true);
-  //     const fetchedListings = await ListingService.getAllListings();
-  //     setListings(fetchedListings);
-  //   } catch (error) {
-  //     console.error('Error fetching all listings:', error);
-  //     Alert.alert('Error', 'Failed to load all listings. Please try again.');
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchListings();
+  };
+
+  const handleListingUpdate = () => {
+    fetchListings();
+  };
 
   return (
-    <SafeAreaWrapper>
+    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+      {/* Clean Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Listings</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>MY LISTINGS</Text>
+          <View style={styles.headerLine} />
+        </View>
       </View>
-      <ScrollView contentContainerStyle={styles.container}>
-        {loading ? (
-          <Text style={styles.loadingText}>Loading listings...</Text>
-        ) : listings.length > 0 ? (
-          listings.map((listing) => (
-            <ListingCard key={listing._id} listing={listing} />
-          ))
-        ) : (
-          <Text style={styles.noListingsText}>No listings found for the selected categories.</Text>
-        )}
-      </ScrollView>
+
+      {loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+          <Text style={styles.loadingText}>Loading your listings...</Text>
+        </View>
+      ) : (
+        <ScrollView 
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.PRIMARY.MAIN]}
+              tintColor={COLORS.PRIMARY.MAIN}
+            />
+          }
+        >
+          {listings.length > 0 ? (
+            <>
+              {/* Stats Summary */}
+              <View style={styles.statsContainer}>
+                <View style={styles.statCard}>
+                  <View style={styles.statIconContainer}>
+                    <Ionicons name="list-outline" size={18} color={COLORS.PRIMARY.MAIN} />
+                  </View>
+                  <Text style={styles.statValue}>{listings.length}</Text>
+                  <Text style={styles.statLabel}>Total</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <View style={[styles.statIconContainer, { backgroundColor: COLORS.SUCCESS.LIGHT }]}>
+                    <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.SUCCESS.MAIN} />
+                  </View>
+                  <Text style={styles.statValue}>
+                    {listings.filter(l => l.isActive).length}
+                  </Text>
+                  <Text style={styles.statLabel}>Active</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <View style={[styles.statIconContainer, { backgroundColor: '#FEF3C7' }]}>
+                    <Ionicons name="pause-circle-outline" size={18} color="#F59E0B" />
+                  </View>
+                  <Text style={styles.statValue}>
+                    {listings.filter(l => !l.isActive).length}
+                  </Text>
+                  <Text style={styles.statLabel}>Inactive</Text>
+                </View>
+              </View>
+
+              {/* Listings */}
+              <View style={styles.listingsContainer}>
+                {listings.map((listing) => (
+                  <View key={listing._id} style={styles.cardWrapper}>
+                    <ListingCard 
+                      listing={listing}
+                      onListingUpdate={handleListingUpdate}
+                    />
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="document-text-outline" size={48} color={COLORS.TEXT.SECONDARY} />
+              </View>
+              <Text style={styles.noListingsText}>
+                You haven't created any listings yet
+              </Text>
+              <Text style={styles.noListingsSubtext}>
+                Start by creating your first listing to offer services
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
   header: {
-    padding: SPACING.LG,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER,
+    paddingVertical: SPACING.LG,
+    paddingHorizontal: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+  },
+  headerContent: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.TEXT.PRIMARY,
+    color: COLORS.TEXT.SECONDARY,
+    letterSpacing: 1.5,
+    marginRight: SPACING.MD,
+  },
+  headerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.BORDER.PRIMARY,
   },
   container: {
-    padding: SPACING.LG,
+    flexGrow: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING['4XL'],
   },
   loadingText: {
-    padding: SPACING.LG,
-    textAlign: 'center',
+    marginTop: SPACING.MD,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
-  noListingsText: {
-    padding: SPACING.LG,
-    textAlign: 'center',
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    gap: SPACING.SM,
+    marginBottom: SPACING.XS,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: BORDER_RADIUS.LG,
+    padding: SPACING.MD,
+    alignItems: 'center',
+  },
+  statIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.SM,
+  },
+  statValue: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
+  },
+  listingsContainer: {
+    padding: SPACING.MD,
+    paddingBottom: SPACING['4XL'],
+  },
+  cardWrapper: {
+    marginBottom: SPACING.MD,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING['4XL'],
+    paddingHorizontal: SPACING.LG,
+  },
+  emptyIconContainer: {
+    marginBottom: SPACING.MD,
+    padding: SPACING.LG,
+    borderRadius: BORDER_RADIUS.XL,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
+  noListingsText: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    textAlign: 'center',
+    marginBottom: SPACING.SM,
+  },
+  noListingsSubtext: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });
 

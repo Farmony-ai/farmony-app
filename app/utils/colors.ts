@@ -1,6 +1,6 @@
 export const COLORS = {
   PRIMARY: {
-    MAIN: '#1A7F5A', // Main green
+    MAIN: '#3C8629', // Main green
     LIGHT: '#D6F5E6', // Card background green
     DARK: '#145C41',
     CONTRAST: '#FFFFFF',
@@ -10,6 +10,16 @@ export const COLORS = {
     LIGHT: '#DDF6D2',
     DARK: '#6FCF97',
     CONTRAST: '#1A7F5A',
+  },
+  SUCCESS: {
+    MAIN: '#28A745', // A standard green for success
+    LIGHT: '#D4EDDA', // Lighter shade for backgrounds
+    DARK: '#1E7E34', // Darker shade for text/icons
+  },
+  DANGER: {
+    MAIN: '#DC3545', // A standard red for errors and warnings
+    LIGHT: '#F8D7DA', // Lighter shade for backgrounds
+    DARK: '#721C24', // Darker shade for text/icons
   },
   NEUTRAL: {
     WHITE: '#FFFFFF',
@@ -39,6 +49,7 @@ export const COLORS = {
   BACKGROUND: {
     PRIMARY: '#F8F9FA', // App background
     CARD: '#F3F4F6', // Card backgrounds
+    SECONDARY: '#FFFFFF', // Secondary background
     HIGHLIGHT: '#ECFAE5', // Highlighted card
     NAV: '#E9F9F2', // Bottom nav background
   },

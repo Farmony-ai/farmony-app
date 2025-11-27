@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
 import {
   View,
   StyleSheet,
@@ -9,37 +11,24 @@ import {
   KeyboardAvoidingView,
   Alert,
   Image,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
+import { COLORS, SHADOWS, FONTS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import CatalogueService from '../services/CatalogueService';
-import ListingService from '../services/ListingService';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import CatalogueService, { Category, SubCategory } from '../services/CatalogueService';
+import ListingService, { CreateListingPayload } from '../services/ListingService';
+import categoryIcons from '../utils/icons';
+import MultiImagePicker from '../components/MultiImagePicker';
+import { ImagePickerResult } from '../services/ImagePickerService';
 
-interface Category {
-  _id: string;
-  name: string;
-  description: string;
-  category: string;
-  transactionType: string;
-  parentId: string | null;
-  icon: string;
-  isActive: boolean;
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-  __v: number;
-}
-
-interface SubCategory {
-  _id: string;
-  name: string;
-  categoryId: string;
-  description?: string;
-}
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 90 : 75; // keep in sync with BottomTabNavigator
 
 interface ListingFormData {
   providerId: string;
@@ -47,155 +36,189 @@ interface ListingFormData {
   description: string;
   categoryId: string;
   subCategoryId: string;
-  photos: string[];
-  location: {
-    address: string;
-    coordinates: {
-      lat: number;
-      lng: number;
-    };
-  };
+  subCategorySelected: boolean;
+  photos: ImagePickerResult[];
+  videoUrl?: string;
+  coordinates: [number, number];
   price: string;
   unitOfMeasure: string;
   minimumOrder: string;
-  availableFrom: Date;
-  availableTo: Date;
-  tags: string[];
 }
-
-// Icon mapping for categories
-const iconMapping: { [key: string]: string } = {
-  'farm_machinery': 'construct-outline',
-  'specialist': 'person-outline',
-  'tools': 'hammer-outline',
-  'storage': 'cube-outline',
-  'event': 'calendar-outline',
-  'produce': 'leaf-outline',
-  'transport': 'car-outline',
-  'default': 'ellipse-outline'
-};
 
 const CreateListingScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute<any>();
+  const listingId = route.params?.listingId;
+  const isEditMode = !!listingId;
+
   const [currentStep, setCurrentStep] = useState(1);
-  const [showFromDatePicker, setShowFromDatePicker] = useState(false);
-  const [showToDatePicker, setShowToDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [tagInput, setTagInput] = useState('');
   const [showUnitDropdown, setShowUnitDropdown] = useState(false);
- 
   const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
   const [availableSubCategories, setAvailableSubCategories] = useState<SubCategory[]>([]);
-  
+  const [isDataReady, setIsDataReady] = useState(false);
+
+  const { user, token } = useSelector((state: RootState) => state.auth);
+
   const [formData, setFormData] = useState<ListingFormData>({
-    providerId: '687b5692b9434ec2d0e7adc9', // Hardcoded for now
+    providerId: '',
     title: '',
     description: '',
     categoryId: '',
     subCategoryId: '',
+    subCategorySelected: false,
     photos: [],
-    location: {
-      address: '',
-      coordinates: {
-        lat: 18.0534,
-        lng: 78.1134,
-      },
-    },
+    coordinates: [] as unknown as [number, number],
     price: '',
     unitOfMeasure: 'per_hour',
     minimumOrder: '1',
-    availableFrom: new Date(),
-    availableTo: new Date(new Date().setMonth(new Date().getMonth() + 6)),
-    tags: [],
   });
 
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
   useEffect(() => {
-    fetchCategories();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
 
-  const fetchCategories = async () => {
-    try {
-      setLoading(true);
-      const categories = await CatalogueService.getCategories();
-      console.log('Fetched categories:', categories);
-      setAvailableCategories(categories);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      Alert.alert('Error', 'Failed to load categories. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: (currentStep - 1) / 3,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [currentStep]);
+
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        setLoading(true);
+        const categories = await CatalogueService.getCategories();
+        setAvailableCategories(categories);
+
+        if (isEditMode) {
+          const listingData = await ListingService.getListingById(listingId);
+          const resolvedProviderId = (listingData as any)?.providerId?._id ?? (listingData as any)?.providerId ?? '';
+          const resolvedCategoryId = (listingData as any)?.categoryId?._id ?? (listingData as any)?.categoryId ?? '';
+          const resolvedSubCategoryId = (listingData as any)?.subCategoryId?._id ?? (listingData as any)?.subCategoryId ?? '';
+
+          setFormData({
+            ...formData,
+            providerId: resolvedProviderId,
+            title: (listingData as any)?.title ?? '',
+            description: (listingData as any)?.description ?? '',
+            categoryId: resolvedCategoryId,
+            subCategoryId: resolvedSubCategoryId,
+            photos: (listingData as any)?.photos ?? [],
+            price: String((listingData as any)?.price ?? ''),
+            unitOfMeasure: (listingData as any)?.unitOfMeasure ?? 'per_hour',
+            minimumOrder: String((listingData as any)?.minimumOrder ?? '1'),
+            subCategorySelected: true,
+          });
+          if ((listingData as any)?.categoryId) {
+            const catIdForSubs = (listingData as any)?.categoryId?._id ?? (listingData as any)?.categoryId;
+            if (catIdForSubs) {
+              fetchSubCategories(catIdForSubs);
+            }
+          }
+        } else if (user?.id) {
+          setFormData(prev => ({ ...prev, providerId: user.id }));
+        }
+        setIsDataReady(true);
+      } catch (error) {
+        console.error('Error initializing data:', error);
+        Alert.alert('Error', 'Failed to load initial data. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeData();
+  }, [user, isEditMode, listingId, token]);
 
   const fetchSubCategories = async (categoryId: string) => {
     try {
       setLoading(true);
       const subCategories = await CatalogueService.getSubCategories(categoryId);
-      console.log('Fetched subcategories:', subCategories);
       setAvailableSubCategories(subCategories);
     } catch (error) {
       console.error('Error fetching subcategories:', error);
-      Alert.alert('Error', 'Failed to load subcategories. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCategorySelect = async (categoryId: string) => {
-    handleInputChange('categoryId', categoryId);
-    handleInputChange('subCategoryId', ''); // Reset subcategory
+    setFormData(prev => ({
+      ...prev,
+      categoryId,
+      subCategoryId: '',
+      subCategorySelected: false,
+    }));
     await fetchSubCategories(categoryId);
+  };
+
+  const handleSubCategorySelect = (subCategoryId: string) => {
+    const selectedSub = availableSubCategories.find(sub => sub._id === subCategoryId);
+    setFormData(prev => ({
+      ...prev,
+      subCategoryId,
+      unitOfMeasure: selectedSub?.defaultUnitOfMeasure || 'per_hour',
+      price: selectedSub?.suggestedMinPrice?.toString() || '',
+      subCategorySelected: true,
+    }));
   };
 
   const unitOptions = [
     { value: 'per_hour', label: 'Per Hour' },
     { value: 'per_day', label: 'Per Day' },
     { value: 'per_hectare', label: 'Per Hectare' },
-    { value: 'per_kg', label: 'Per Kg' },
+
     { value: 'per_unit', label: 'Per Unit' },
   ];
 
-  const handleInputChange = (field: string, value: any) => {
-    if (field.includes('.')) {
-      const [parent, child] = field.split('.');
-      setFormData(prev => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent as keyof ListingFormData],
-          [child]: value,
-        },
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
-    }
+  const handleInputChange = (field: keyof ListingFormData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleAddPhoto = () => {
-    // TODO: Implement photo picker
-    Alert.alert('Photo Picker', 'Photo picker will be implemented');
-  };
-
-  const handleAddTag = (tag: string) => {
-    if (tag && !formData.tags.includes(tag)) {
-      setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
-    }
-  };
-
-  const handleRemoveTag = (index: number) => {
+  const handleImagesSelected = (images: ImagePickerResult[]) => {
     setFormData(prev => ({
       ...prev,
-      tags: prev.tags.filter((_, i) => i !== index),
+      photos: images,
     }));
   };
-
+  
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        return formData.title.length > 0 && formData.description.length > 0;
+        return !!formData.categoryId;
       case 2:
-        return formData.categoryId.length > 0 && formData.subCategoryId.length > 0;
+        return !!formData.subCategoryId;
       case 3:
-        return formData.price.length > 0 && parseFloat(formData.price) > 0;
+        return !!formData.price && !!formData.unitOfMeasure && !!formData.minimumOrder;
+      case 4:
+        return formData.photos.length > 0;  // Only photos are required, description is optional
       default:
         return true;
     }
@@ -209,142 +232,90 @@ const CreateListingScreen = () => {
         handleSubmit();
       }
     } else {
-      Alert.alert('Validation Error', 'Please fill all required fields');
+      Alert.alert('Required Fields', 'Please complete all required fields in this step.');
     }
   };
 
-  const formatDateForAPI = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    } else {
+      navigation.goBack();
+    }
   };
 
   const handleSubmit = async () => {
+    if (!token) {
+      Alert.alert('Error', 'You must be logged in to create or update a listing.');
+      return;
+    }
+
     try {
       setLoading(true);
-      
-      // Create payload matching API structure
-      const payload = {
-        providerId: "687b5692b9434ec2d0e7adc9", // Hardcoded as requested
-        title: formData.title,
+
+      // Map selected IDs to their human-readable names right before building payload
+      const selectedCategoryName = availableCategories.find(c => c._id === formData.categoryId)?.name;
+      const selectedSubCategoryName = availableSubCategories.find(s => s._id === formData.subCategoryId)?.name;
+
+      const payload: CreateListingPayload = {
+        providerId: formData.providerId,
+        title: formData.title || `${selectedSubCategoryName || formData.subCategoryId} Service`,
         description: formData.description,
         categoryId: formData.categoryId,
         subCategoryId: formData.subCategoryId,
-        photos: formData.photos.length > 0 ? formData.photos : [
-          "https://example.com/placeholder1.jpg",
-          "https://example.com/placeholder2.jpg"
-        ],
-        coordinates: [formData.location.coordinates.lng, formData.location.coordinates.lat],
+        // Pass mapped names if found; these are optional in the payload
+        ...(selectedCategoryName ? { category: selectedCategoryName } : {}),
+        ...(selectedSubCategoryName ? { subcategory: selectedSubCategoryName } : {}),
+        photos: formData.photos,
+        coordinates: formData.coordinates,
         price: parseFloat(formData.price),
         unitOfMeasure: formData.unitOfMeasure,
         minimumOrder: parseInt(formData.minimumOrder),
-        availableFrom: formatDateForAPI(formData.availableFrom),
-        availableTo: formatDateForAPI(formData.availableTo),
-        tags: formData.tags,
-        isActive: true
+        availableFrom: new Date().toISOString(),
+        availableTo: new Date().toISOString(),
+        tags: [],
+        isActive: true,
+        isVerified: false,
       };
 
-      console.log('Listing payload:', payload);
-      
-      // TODO: Uncomment when API is ready
-      const response = await ListingService.createListing(payload);
-      console.log('Listing created:', response);
-      
-      Alert.alert('Success', 'Listing created successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      if (isEditMode) {
+        await ListingService.updateListing(listingId, payload);
+        Alert.alert('Success', 'Listing updated successfully!', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else {
+        await ListingService.createListing(payload);
+        Alert.alert('Success', 'Listing created successfully!', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (error) {
-      console.error('Error creating listing:', error);
-      Alert.alert('Error', 'Failed to create listing. Please try again.');
+      console.error('Error submitting listing:', error);
+      Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'create'} listing. Please try again.`);
     } finally {
       setLoading(false);
     }
   };
 
-  const renderStepIndicator = () => (
-    <View style={styles.stepIndicator}>
-      {[1, 2, 3, 4].map((step) => (
-        <View key={step} style={styles.stepContainer}>
-          <View
-            style={[
-              styles.stepCircle,
-              currentStep >= step && styles.stepCircleActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.stepNumber,
-                currentStep >= step && styles.stepNumberActive,
-              ]}
-            >
-              {step}
-            </Text>
-          </View>
-          {step < 4 && (
-            <View
-              style={[
-                styles.stepLine,
-                currentStep > step && styles.stepLineActive,
-              ]}
-            />
-          )}
-        </View>
-      ))}
-    </View>
-  );
-
+  // Render Step 1: Category Selection
   const renderStep1 = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Basic Information</Text>
-      <Text style={styles.stepSubtitle}>Tell us about your service</Text>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Title *</Text>
-        <TextInput
-          style={styles.textInput}
-          placeholder="e.g., John Deere Tractor with Plough"
-          placeholderTextColor="#9CA3AF"
-          value={formData.title}
-          onChangeText={(text) => handleInputChange('title', text)}
-        />
+    <Animated.View style={[styles.stepContent, {
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }]
+    }]}>
+      <View style={styles.stepHeader}>
+        <Text style={styles.stepNumber}>01</Text>
+        <View style={styles.stepTitleContainer}>
+          <Text style={styles.stepTitle}>Choose Category</Text>
+          <Text style={styles.stepSubtitle}>What type of service do you offer?</Text>
+        </View>
       </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Description *</Text>
-        <TextInput
-          style={[styles.textInput, styles.textArea]}
-          placeholder="Describe your service in detail..."
-          placeholderTextColor="#9CA3AF"
-          value={formData.description}
-          onChangeText={(text) => handleInputChange('description', text)}
-          multiline
-          numberOfLines={4}
-          textAlignVertical="top"
-        />
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Location</Text>
-        <TextInput
-          style={styles.textInput}
-          placeholder="Enter service location"
-          placeholderTextColor="#9CA3AF"
-          value={formData.location.address}
-          onChangeText={(text) => handleInputChange('location.address', text)}
-        />
-      </View>
-    </View>
-  );
-
-  const renderStep2 = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Category Selection</Text>
-      <Text style={styles.stepSubtitle}>Choose the right category for your service</Text>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Category *</Text>
-        {loading && <Text style={styles.loadingText}>Loading categories...</Text>}
+      <ScrollView 
+        style={styles.formSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
+      >
         <View style={styles.categoryGrid}>
           {availableCategories.map((category) => (
             <TouchableOpacity
@@ -354,16 +325,8 @@ const CreateListingScreen = () => {
                 formData.categoryId === category._id && styles.categoryCardActive,
               ]}
               onPress={() => handleCategorySelect(category._id)}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name={iconMapping[category.icon] || iconMapping.default}
-                size={28}
-                color={
-                  formData.categoryId === category._id
-                    ? COLORS.PRIMARY.MAIN
-                    : '#6B7280'
-                }
-              />
               <Text
                 style={[
                   styles.categoryText,
@@ -373,607 +336,841 @@ const CreateListingScreen = () => {
               >
                 {category.name}
               </Text>
+              <Image
+                source={categoryIcons[category.icon || 'tools'] || categoryIcons['tools']}
+                style={[
+                  styles.categoryIcon,
+                  formData.categoryId === category._id && { 
+                    tintColor: COLORS.PRIMARY.MAIN,
+                    opacity: 1 
+                  }
+                ]}
+              />
+              {formData.categoryId === category._id && (
+                <View style={styles.selectedBadge}>
+                  <Ionicons name="checkmark" size={12} color={COLORS.NEUTRAL.WHITE} />
+                </View>
+              )}
             </TouchableOpacity>
           ))}
         </View>
-      </View>
-
-      {formData.categoryId && (
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Subcategory *</Text>
-          {loading && <Text style={styles.loadingText}>Loading subcategories...</Text>}
-          {availableSubCategories.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {availableSubCategories.map((sub) => (
-                <TouchableOpacity
-                  key={sub._id}
-                  style={[
-                    styles.subCategoryChip,
-                    formData.subCategoryId === sub._id && styles.subCategoryChipActive,
-                  ]}
-                  onPress={() => handleInputChange('subCategoryId', sub._id)}
-                >
-                  <Text
-                    style={[
-                      styles.subCategoryText,
-                      formData.subCategoryId === sub._id && styles.subCategoryTextActive,
-                    ]}
-                  >
-                    {sub.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <Text style={styles.noDataText}>No subcategories available for this category</Text>
-          )}
-        </View>
-      )}
-    </View>
+      </ScrollView>
+    </Animated.View>
   );
 
+  // Render Step 2: Subcategory Selection
+  const renderStep2 = () => (
+    <Animated.View style={[styles.stepContent, {
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }]
+    }]}>
+      <View style={styles.stepHeader}>
+        <Text style={styles.stepNumber}>02</Text>
+        <View style={styles.stepTitleContainer}>
+          <Text style={styles.stepTitle}>Select Service Type</Text>
+          <Text style={styles.stepSubtitle}>Choose your specific service</Text>
+        </View>
+      </View>
+
+      <ScrollView 
+        style={styles.formSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
+      >
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+            <Text style={styles.loadingText}>Loading subcategories...</Text>
+          </View>
+        ) : availableSubCategories.length > 0 ? (
+          <View>
+            {availableSubCategories.map((sub) => (
+              <TouchableOpacity
+                key={sub._id}
+                style={[
+                  styles.subCategoryItem,
+                  formData.subCategoryId === sub._id && styles.subCategoryItemActive,
+                ]}
+                onPress={() => handleSubCategorySelect(sub._id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.subCategoryContent}>
+                  <View style={[
+                    styles.subCategoryIconContainer,
+                    formData.subCategoryId === sub._id && styles.subCategoryIconActive
+                  ]}>
+                    <Image
+                      source={categoryIcons[sub.icon || 'tools'] || categoryIcons['tools']}
+                      style={[
+                        styles.subCategoryIcon,
+                        formData.subCategoryId === sub._id && { tintColor: COLORS.PRIMARY.MAIN }
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.subCategoryTextContainer}>
+                    <Text
+                      style={[
+                        styles.subCategoryName,
+                        formData.subCategoryId === sub._id && styles.subCategoryNameActive,
+                      ]}
+                    >
+                      {sub.name}
+                    </Text>
+                    {sub.description && (
+                      <Text style={styles.subCategoryDescription} numberOfLines={1}>
+                        {sub.description}
+                      </Text>
+                    )}
+                  </View>
+                  {formData.subCategoryId === sub._id && (
+                    <Ionicons name="checkmark-circle" size={24} color={COLORS.PRIMARY.MAIN} />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="category" size={48} color={COLORS.TEXT.PLACEHOLDER} />
+            <Text style={styles.emptyStateText}>No subcategories available</Text>
+          </View>
+        )}
+      </ScrollView>
+    </Animated.View>
+  );
+
+  // Render Step 3: Pricing & Details
   const renderStep3 = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Pricing & Availability</Text>
-      <Text style={styles.stepSubtitle}>Set your pricing and availability</Text>
+    <Animated.View style={[styles.stepContent, {
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }]
+    }]}>
+      <View style={styles.stepHeader}>
+        <Text style={styles.stepNumber}>03</Text>
+        <View style={styles.stepTitleContainer}>
+          <Text style={styles.stepTitle}>Pricing Details</Text>
+          <Text style={styles.stepSubtitle}>Set your service pricing</Text>
+        </View>
+      </View>
 
-      <View style={styles.rowInputs}>
-        <View style={[styles.inputGroup, { flex: 1 }]}>
-          <Text style={styles.inputLabel}>Price *</Text>
-          <TextInput
-            style={styles.textInput}
-            placeholder="0"
-            placeholderTextColor="#9CA3AF"
-            value={formData.price}
-            onChangeText={(text) => handleInputChange('price', text)}
-            keyboardType="numeric"
-          />
+      <ScrollView 
+        style={styles.formSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
+      >
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Service Price</Text>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.currencySymbol}>₹</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter price"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              value={formData.price}
+              onChangeText={(text) => handleInputChange('price', text)}
+              keyboardType="numeric"
+            />
+            {formData.price && (
+              <Ionicons name="checkmark-circle" size={20} color={COLORS.SUCCESS.MAIN} />
+            )}
+          </View>
         </View>
 
-        <View style={[styles.inputGroup, { flex: 1, marginLeft: 12 }]}>
-          <Text style={styles.inputLabel}>Unit</Text>
-          <TouchableOpacity 
-            style={styles.dropdown}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Pricing Unit</Text>
+          <TouchableOpacity
+            style={styles.inputWrapper}
             onPress={() => setShowUnitDropdown(!showUnitDropdown)}
+            activeOpacity={0.7}
           >
-            <Text style={styles.dropdownText}>
-              {unitOptions.find(u => u.value === formData.unitOfMeasure)?.label}
+            <MaterialIcons name="schedule" size={20} color={COLORS.TEXT.PLACEHOLDER} />
+            <Text style={[styles.dropdownText, formData.unitOfMeasure && styles.dropdownTextSelected]}>
+              {unitOptions.find(u => u.value === formData.unitOfMeasure)?.label || 'Select Unit'}
             </Text>
-            <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            <Ionicons 
+              name={showUnitDropdown ? "chevron-up" : "chevron-down"} 
+              size={20} 
+              color={COLORS.TEXT.SECONDARY} 
+            />
           </TouchableOpacity>
-        </View>
-      </View>
-
-      {showUnitDropdown && (
-        <View style={styles.dropdownOptions}>
-          {unitOptions.map((option) => (
-            <TouchableOpacity
-              key={option.value}
-              style={styles.dropdownOption}
-              onPress={() => {
-                handleInputChange('unitOfMeasure', option.value);
-                setShowUnitDropdown(false);
-              }}
-            >
-              <Text style={styles.dropdownOptionText}>{option.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Minimum Order</Text>
-        <TextInput
-          style={styles.textInput}
-          placeholder="1"
-          placeholderTextColor="#9CA3AF"
-          value={formData.minimumOrder}
-          onChangeText={(text) => handleInputChange('minimumOrder', text)}
-          keyboardType="numeric"
-        />
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Available From</Text>
-        <TouchableOpacity
-          style={styles.dateInput}
-          onPress={() => setShowFromDatePicker(true)}
-        >
-          <Ionicons name="calendar-outline" size={20} color="#6B7280" />
-          <Text style={styles.dateText}>
-            {formData.availableFrom.toLocaleDateString()}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Available To</Text>
-        <TouchableOpacity
-          style={styles.dateInput}
-          onPress={() => setShowToDatePicker(true)}
-        >
-          <Ionicons name="calendar-outline" size={20} color="#6B7280" />
-          <Text style={styles.dateText}>
-            {formData.availableTo.toLocaleDateString()}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {showFromDatePicker && (
-        <DateTimePicker
-          value={formData.availableFrom}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(event, date) => {
-            setShowFromDatePicker(Platform.OS === 'ios');
-            if (date) handleInputChange('availableFrom', date);
-          }}
-        />
-      )}
-
-      {showToDatePicker && (
-        <DateTimePicker
-          value={formData.availableTo}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(event, date) => {
-            setShowToDatePicker(Platform.OS === 'ios');
-            if (date) handleInputChange('availableTo', date);
-          }}
-        />
-      )}
-    </View>
-  );
-
-  const renderStep4 = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Photos & Tags</Text>
-      <Text style={styles.stepSubtitle}>Add photos and tags to attract more customers</Text>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Photos</Text>
-        <TouchableOpacity style={styles.photoUploadBox} onPress={handleAddPhoto}>
-          <Ionicons name="camera-outline" size={32} color="#6B7280" />
-          <Text style={styles.photoUploadText}>Add Photos</Text>
-        </TouchableOpacity>
-        {formData.photos.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
-            {formData.photos.map((photo, index) => (
-              <View key={index} style={styles.photoItem}>
-                <Image source={{ uri: photo }} style={styles.photoThumbnail} />
+          {showUnitDropdown && (
+            <View style={styles.dropdownOptions}>
+              {unitOptions.map((option) => (
                 <TouchableOpacity
-                  style={styles.photoRemove}
+                  key={option.value}
+                  style={[
+                    styles.dropdownOption,
+                    formData.unitOfMeasure === option.value && styles.dropdownOptionActive
+                  ]}
                   onPress={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      photos: prev.photos.filter((_, i) => i !== index),
-                    }));
+                    handleInputChange('unitOfMeasure', option.value);
+                    setShowUnitDropdown(false);
                   }}
                 >
-                  <Ionicons name="close" size={16} color="#fff" />
+                  <Text style={[
+                    styles.dropdownOptionText,
+                    formData.unitOfMeasure === option.value && styles.dropdownOptionTextActive
+                  ]}>
+                    {option.label}
+                  </Text>
+                  {formData.unitOfMeasure === option.value && (
+                    <Ionicons name="checkmark" size={18} color={COLORS.PRIMARY.MAIN} />
+                  )}
                 </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Tags</Text>
-        <View style={styles.tagInputContainer}>
-          <TextInput
-            style={styles.tagInput}
-            placeholder="Add tags (e.g., tractor, plough)"
-            placeholderTextColor="#9CA3AF"
-            value={tagInput}
-            onChangeText={setTagInput}
-            onSubmitEditing={() => {
-              if (tagInput.trim()) {
-                handleAddTag(tagInput.trim());
-                setTagInput('');
-              }
-            }}
-            returnKeyType="done"
-          />
-        </View>
-        <View style={styles.tagsContainer}>
-          {formData.tags.map((tag, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
-              <TouchableOpacity onPress={() => handleRemoveTag(index)}>
-                <Ionicons name="close-circle" size={18} color="#6B7280" />
-              </TouchableOpacity>
+              ))}
             </View>
-          ))}
+          )}
         </View>
-      </View>
-    </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Minimum Order Quantity</Text>
+          <View style={styles.inputWrapper}>
+            <MaterialIcons name="shopping-cart" size={20} color={COLORS.TEXT.PLACEHOLDER} />
+            <TextInput
+              style={styles.input}
+              placeholder="Enter minimum quantity"
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              value={formData.minimumOrder}
+              onChangeText={(text) => handleInputChange('minimumOrder', text)}
+              keyboardType="numeric"
+            />
+          </View>
+        </View>
+
+        <View style={styles.infoCard}>
+          <Ionicons name="information-circle" size={20} color={COLORS.PRIMARY.MAIN} />
+          <Text style={styles.infoText}>
+            Customers must order at least {formData.minimumOrder || '1'} {formData.unitOfMeasure.replace('per_', '')} of your service
+          </Text>
+        </View>
+      </ScrollView>
+    </Animated.View>
   );
 
-  return (
-    <SafeAreaWrapper backgroundColor="#f5f5f5">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
+  // Render Step 4: Photos & Description
+  const renderStep4 = () => (
+    <Animated.View style={[styles.stepContent, {
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }]
+    }]}>
+      <View style={styles.stepHeader}>
+        <Text style={styles.stepNumber}>04</Text>
+        <View style={styles.stepTitleContainer}>
+          <Text style={styles.stepTitle}>Service Details</Text>
+          <Text style={styles.stepSubtitle}>Add photos and description</Text>
+        </View>
+      </View>
+
+      <ScrollView 
+        style={styles.formSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }} // Increased padding to avoid overlap
       >
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Service Photos</Text>
+          <Text style={styles.inputHint}>Add up to 10 photos to showcase your service</Text>
+          <MultiImagePicker
+            onImagesSelected={handleImagesSelected}
+            maxImages={10}
+            placeholder="Add Photos"
+          />
+          {formData.photos.length > 0 && (
+            <View style={styles.photoCount}>
+              <Ionicons name="images" size={16} color={COLORS.PRIMARY.MAIN} />
+              <Text style={styles.photoCountText}>
+                {formData.photos.length} photo{formData.photos.length > 1 ? 's' : ''} selected
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Service Description (Optional)</Text>
+          <Text style={styles.inputHint}>Describe what you offer and what makes it special</Text>
+          <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Enter detailed description of your service..."
+              placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
+              value={formData.description}
+              onChangeText={(text) => handleInputChange('description', text)}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+          {formData.description && (
+            <Text style={styles.charCount}>
+              {formData.description.length} characters
+            </Text>
+          )}
+        </View>
+      </ScrollView>
+    </Animated.View>
+  );
+
+  if (!isDataReady) {
+    return (
+      <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+        <View style={styles.loadingScreen}>
+          <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+          <Text style={styles.loadingScreenText}>Loading...</Text>
+        </View>
+      </SafeAreaWrapper>
+    );
+  }
+
+  return (
+    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+      <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create New Listing</Text>
+          
+          <View style={styles.logoSection}>
+            <Text style={styles.headerTitle}>{isEditMode ? 'Edit' : 'Create'} Listing</Text>
+          </View>
+
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Step Indicator */}
-        {renderStepIndicator()}
-
-        {/* Form Content */}
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep2()}
-          {currentStep === 3 && renderStep3()}
-          {currentStep === 4 && renderStep4()}
-
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            {currentStep > 1 && (
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => setCurrentStep(currentStep - 1)}
-              >
-                <Text style={styles.secondaryButtonText}>Back</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[styles.primaryButton, currentStep === 1 && { flex: 1 }]}
-              onPress={handleNext}
-              disabled={loading}
-            >
-              <Text style={styles.primaryButtonText}>
-                {currentStep === 4 ? 'Create Listing' : 'Next'}
-              </Text>
-            </TouchableOpacity>
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <Animated.View
+              style={[
+                styles.progressFill,
+                {
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                },
+              ]}
+            />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          <View style={styles.progressSteps}>
+            {[1, 2, 3, 4].map((step) => (
+              <View
+                key={step}
+                style={[
+                  styles.progressStep,
+                  currentStep >= step && styles.progressStepActive,
+                ]}
+              >
+                {currentStep > step ? (
+                  <Ionicons name="checkmark" size={12} color={COLORS.NEUTRAL.WHITE} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.progressStepText,
+                      currentStep >= step && styles.progressStepTextActive,
+                    ]}
+                  >
+                    {step}
+                  </Text>
+                )}
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Content */}
+        <View style={styles.content}>
+          <Animated.View
+            style={[
+              styles.formCard,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
+          >
+            {currentStep === 1 && renderStep1()}
+            {currentStep === 2 && renderStep2()}
+            {currentStep === 3 && renderStep3()}
+            {currentStep === 4 && renderStep4()}
+          </Animated.View>
+        </View>
+
+        {/* The bottom action button is now consistently rendered across all steps */}
+        <View style={styles.bottomActions}>
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              (!validateStep(currentStep) || loading) && styles.primaryButtonDisabled
+            ]}
+            onPress={handleNext}
+            disabled={!validateStep(currentStep) || loading}
+            activeOpacity={0.8}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+            ) : (
+              <>
+                <Text style={styles.primaryButtonText}>
+                  {currentStep === 4 ? (isEditMode ? 'Update Listing' : 'Create Listing') : 'Continue'}
+                </Text>
+                {currentStep < 4 && (
+                  <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
+                )}
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
+  loadingScreen: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingScreenText: {
+    marginTop: SPACING.MD,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
   },
   backButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
+  logoSection: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    flex: 1,
-    textAlign: 'center',
   },
-  stepIndicator: {
+  progressContainer: {
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+  },
+  progressBar: {
+    height: 3,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderRadius: 2,
+  },
+  progressSteps: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -14,
+    paddingHorizontal: SPACING.XL,
+  },
+  progressStep: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 24,
-    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: COLORS.NEUTRAL.WHITE,
   },
-  stepContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stepCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepCircleActive: {
+  progressStepActive: {
     backgroundColor: COLORS.PRIMARY.MAIN,
   },
-  stepNumber: {
-    fontSize: 14,
+  progressStepText: {
+    fontSize: 11,
     fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
+    color: COLORS.TEXT.SECONDARY,
   },
-  stepNumberActive: {
-    color: '#fff',
+  progressStepTextActive: {
+    color: COLORS.NEUTRAL.WHITE,
   },
-  stepLine: {
-    width: 40,
-    height: 2,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 8,
+  content: {
+    flex: 1,
+    paddingHorizontal: SPACING.MD,
+    paddingTop: SPACING.MD,
   },
-  stepLineActive: {
-    backgroundColor: COLORS.PRIMARY.DARK,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 100,
+  formCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: SPACING.LG,
+    flex: 1,
+    marginBottom: SPACING.SM,
   },
   stepContent: {
-    padding: 20,
+    flex: 1,
+  },
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.XL,
+  },
+  stepNumber: {
+    fontSize: 24,
+    fontFamily: FONTS.POPPINS.BOLD,
+    color: COLORS.PRIMARY.LIGHT,
+    marginRight: SPACING.MD,
+    lineHeight: 24,
+    fontWeight: '700',
+  },
+  stepTitleContainer: {
+    flex: 1,
+    paddingTop: 2,
   },
   stepTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   stepSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
-    fontWeight: '400',
-    marginBottom: 24,
+    color: COLORS.TEXT.SECONDARY,
   },
-  inputGroup: {
-    marginBottom: 20,
+  formSection: {
+    flex: 1,
   },
-  inputLabel: {
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: 8,
-  },
-  textInput: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
+  
+  // Category Grid
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
   categoryCard: {
-    width: '48%',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    minHeight: 100,
+    width: '47%',
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: 16,
+    padding: SPACING.MD,
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: COLORS.BORDER.PRIMARY,
+    minHeight: 110,
+    position: 'relative',
   },
   categoryCardActive: {
-    borderColor: COLORS.PRIMARY.MAIN,
     backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderColor: COLORS.PRIMARY.MAIN,
+    borderWidth: 2,
+  },
+  categoryIcon: {
+    width: 36,
+    height: 36,
+    resizeMode: 'contain',
+    tintColor: COLORS.TEXT.SECONDARY,
+    position: 'absolute',
+    bottom: SPACING.SM,
+    right: SPACING.SM,
+    opacity: 0.8,
   },
   categoryText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
-    marginTop: 8,
-    textAlign: 'center',
+    color: COLORS.TEXT.SECONDARY,
+    marginBottom: SPACING.XS,
   },
   categoryTextActive: {
-    color: COLORS.PRIMARY.MAIN,
+    color: COLORS.PRIMARY.DARK,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
   },
-  subCategoryChip: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-  },
-  subCategoryChipActive: {
+  selectedBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: COLORS.PRIMARY.MAIN,
-    borderColor: COLORS.PRIMARY.MAIN,
-  },
-  subCategoryText: {
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
-  },
-  subCategoryTextActive: {
-    color: '#fff',
-  },
-  rowInputs: {
-    flexDirection: 'row',
-    marginBottom: 20,
-  },
-  dropdown: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  dropdownText: {
-    fontSize: 16,
+  
+  // Subcategory List
+  subCategoryItem: {
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: 14,
+    marginBottom: SPACING.SM,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    overflow: 'hidden',
+  },
+  subCategoryItemActive: {
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  subCategoryContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.MD,
+  },
+  subCategoryIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 22,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.MD,
+  },
+  subCategoryIconActive: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  subCategoryIcon: {
+    width: 46,
+    height: 46,
+    resizeMode: 'contain',
+
+  },
+  subCategoryTextContainer: {
+    flex: 1,
+  },
+  subCategoryName: {
+    fontSize: 15,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 2,
+  },
+  subCategoryNameActive: {
+    color: COLORS.PRIMARY.DARK,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  subCategoryDescription: {
+    fontSize: 12,
     fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  
+  // Input Fields
+  inputGroup: {
+    marginBottom: SPACING.LG,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.XS,
+  },
+  inputHint: {
+    fontSize: 11,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginBottom: SPACING.SM,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+    borderRadius: 12,
+    paddingHorizontal: SPACING.MD,
+    height: 48,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  textAreaWrapper: {
+    height: 'auto',
+    minHeight: 100,
+    alignItems: 'flex-start',
+    paddingVertical: SPACING.SM,
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    paddingVertical: 0,
+    marginLeft: SPACING.SM,
+  },
+  textArea: {
+    marginLeft: 0,
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  currencySymbol: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  
+  // Dropdown
+  dropdownText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PLACEHOLDER,
+    marginLeft: SPACING.SM,
+  },
+  dropdownTextSelected: {
     color: COLORS.TEXT.PRIMARY,
   },
   dropdownOptions: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    marginTop: SPACING.XS,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 12,
-    marginTop: -15,
-    marginBottom: 20,
-    marginHorizontal: 106,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER.PRIMARY,
+    overflow: 'hidden',
   },
   dropdownOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.MD,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
+  dropdownOptionActive: {
+    backgroundColor: COLORS.PRIMARY.LIGHT,
   },
   dropdownOptionText: {
     fontSize: 14,
     fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.PRIMARY,
   },
-  dateInput: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateText: {
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
-    marginLeft: 12,
-  },
-  photoUploadBox: {
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 32,
-    alignItems: 'center',
-  },
-  photoUploadText: {
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
-    marginTop: 8,
-  },
-  photoList: {
-    marginTop: 12,
-  },
-  photoItem: {
-    position: 'relative',
-    marginRight: 8,
-  },
-  photoThumbnail: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-  },
-  photoRemove: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tagInputContainer: {
-    marginBottom: 12,
-  },
-  tagInput: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.REGULAR,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tag: {
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  tagText: {
-    fontSize: 14,
+  dropdownOptionTextActive: {
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.PRIMARY.MAIN,
-    marginRight: 4,
   },
-  actionButtons: {
+  
+  // Info Card
+  infoCard: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 12,
-  },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    borderRadius: 12,
-    paddingVertical: 16,
     alignItems: 'center',
-    ...SHADOWS.MD,
-  },
-  primaryButtonText: {
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#fff',
-  },
-  secondaryButton: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    padding: SPACING.MD,
     borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
+    marginTop: SPACING.SM,
   },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#6B7280',
+  infoText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.PRIMARY.MAIN,
+    marginLeft: SPACING.SM,
+    lineHeight: 18,
+  },
+  
+  // Photo Count
+  photoCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.SM,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  photoCountText: {
+    fontSize: 12,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+    marginLeft: SPACING.XS,
+  },
+  
+  // Character Count
+  charCount: {
+    fontSize: 11,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    textAlign: 'right',
+    marginTop: SPACING.XS,
+  },
+  
+  // Empty State
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING['4XL'],
+  },
+  emptyStateText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginTop: SPACING.MD,
+  },
+  
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING['4XL'],
   },
   loadingText: {
-    fontSize: 14,
+    marginTop: SPACING.MD,
+    fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginVertical: 10,
+    color: COLORS.TEXT.SECONDARY,
   },
-  noDataText: {
+  
+  // Bottom Actions
+  bottomActions: {
+    padding: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+    paddingBottom: SPACING.MD + 12,
+    marginBottom: 60, // ensure we sit above the tab bar
+  },
+  primaryButton: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.SM,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    opacity: 0.5,
+  },
+  primaryButtonLoading: {
+    opacity: 0.8,
+  },
+  primaryButtonText: {
+    fontSize: 15,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  cancelButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.MD,
+  },
+  cancelButtonText: {
     fontSize: 14,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
-    textAlign: 'center',
-    paddingVertical: 20,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.TEXT.SECONDARY,
   },
 });
 

@@ -15,15 +15,18 @@ import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import BookingService, { Booking, BookingsResponse } from '../services/BookingService';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+import { canTransition, setOrderStatus } from '../services/orderStatus';
 
 const { width: screenWidth } = Dimensions.get('window');
 const TAB_WIDTH = (screenWidth - 40) / 3;
 
-type TabType = 'toReview' | 'active' | 'completed';
+type TabType = 'pending' | 'accepted' | 'paid' | 'completed' | 'canceled';
 
 const ProviderBookingsScreen = () => {
   const navigation = useNavigation<any>();
-  const [activeTab, setActiveTab] = useState<TabType>('toReview');
+  const [activeTab, setActiveTab] = useState<TabType>('pending');
   const [bookings, setBookings] = useState<BookingsResponse>({
     active: [],
     completed: [],
@@ -32,187 +35,32 @@ const ProviderBookingsScreen = () => {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [processingAction, setProcessingAction] = useState<'accept' | 'cancel' | null>(null);
+
+  const { user } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
     fetchBookings();
-  }, []);
+  }, [user?.id]);
 
   const fetchBookings = async () => {
     try {
       setLoading(true);
-      // Using dummy data for now
-      setTimeout(() => {
-        setBookings({
-          toReview: [
-            {
-              isAutoRejected: false,
-              _id: "6871c690e7fd8a5bc9a49389",
-              listingId: {
-                _id: "6871c639e7fd8a5bc9a49384",
-                title: "John Deere Tractor with Plough",
-                price: 1500,
-                unitOfMeasure: "per_day"
-              },
-              seekerId: {
-                _id: "6871c683e7fd8a5bc9a49387",
-                name: "Rajesh Kumar",
-                phone: "+91 98765 43210",
-                email: "rajesh.kumar@example.com"
-              },
-              providerId: "687145eb6d913a8f9c3c6d4e",
-              status: "pending",
-              createdAt: "2025-01-18T14:30:00.000Z",
-              expiresAt: "2025-01-22T12:00:00.000Z",
-              totalAmount: 3000,
-              coordinates: [78.1134, 18.0534],
-              updatedAt: "2025-01-18T14:30:00.000Z",
-              __v: 0,
-              quantity: 2,
-              serviceDate: "2025-01-20T09:00:00.000Z",
-              notes: "Need for 2 hectares of land preparation"
-            },
-            {
-              isAutoRejected: false,
-              _id: "6871c690e7fd8a5bc9a49390",
-              listingId: {
-                _id: "6871c639e7fd8a5bc9a49385",
-                title: "Seed Sowing Machine",
-                price: 800,
-                unitOfMeasure: "per_hectare"
-              },
-              seekerId: {
-                _id: "6871c683e7fd8a5bc9a49388",
-                name: "Priya Sharma",
-                phone: "+91 87654 32109",
-                email: "priya.sharma@example.com"
-              },
-              providerId: "687145eb6d913a8f9c3c6d4e",
-              status: "pending",
-              createdAt: "2025-01-19T10:15:00.000Z",
-              expiresAt: "2025-01-23T12:00:00.000Z",
-              totalAmount: 2400,
-              coordinates: [78.2134, 18.1534],
-              updatedAt: "2025-01-19T10:15:00.000Z",
-              __v: 0,
-              quantity: 3,
-              serviceDate: "2025-01-21T08:00:00.000Z"
-            }
-          ],
-          active: [
-            {
-              isAutoRejected: false,
-              _id: "6871c690e7fd8a5bc9a49391",
-              listingId: {
-                _id: "6871c639e7fd8a5bc9a49386",
-                title: "Drip Irrigation System Installation",
-                price: 5000,
-                unitOfMeasure: "per_hectare"
-              },
-              seekerId: {
-                _id: "6871c683e7fd8a5bc9a49389",
-                name: "Suresh Reddy",
-                phone: "+91 99887 76655",
-                email: "suresh.reddy@example.com"
-              },
-              providerId: "687145eb6d913a8f9c3c6d4e",
-              status: "accepted",
-              createdAt: "2025-01-17T09:00:00.000Z",
-              expiresAt: "2025-01-25T12:00:00.000Z",
-              totalAmount: 15000,
-              coordinates: [78.3134, 18.2534],
-              updatedAt: "2025-01-17T09:00:00.000Z",
-              __v: 0,
-              quantity: 3,
-              serviceDate: "2025-01-22T07:00:00.000Z",
-              notes: "Installation for 3 hectares of vegetable farm"
-            },
-            {
-              isAutoRejected: false,
-              _id: "6871c690e7fd8a5bc9a49392",
-              listingId: {
-                _id: "6871c639e7fd8a5bc9a49387",
-                title: "Harvesting Service",
-                price: 2000,
-                unitOfMeasure: "per_hectare"
-              },
-              seekerId: {
-                _id: "6871c683e7fd8a5bc9a49390",
-                name: "Amit Patel",
-                phone: "+91 77889 99001",
-                email: "amit.patel@example.com"
-              },
-              providerId: "687145eb6d913a8f9c3c6d4e",
-              status: "paid",
-              createdAt: "2025-01-16T11:30:00.000Z",
-              expiresAt: "2025-01-24T12:00:00.000Z",
-              totalAmount: 8000,
-              coordinates: [78.0134, 17.9534],
-              updatedAt: "2025-01-16T11:30:00.000Z",
-              __v: 0,
-              quantity: 4,
-              serviceDate: "2025-01-23T06:00:00.000Z"
-            }
-          ],
-          completed: [
-            {
-              isAutoRejected: false,
-              _id: "6871c690e7fd8a5bc9a49393",
-              listingId: {
-                _id: "6871c639e7fd8a5bc9a49388",
-                title: "Land Preparation with Rotavator",
-                price: 1200,
-                unitOfMeasure: "per_hectare"
-              },
-              seekerId: {
-                _id: "6871c683e7fd8a5bc9a49391",
-                name: "Vijay Singh",
-                phone: "+91 66778 89900",
-                email: "vijay.singh@example.com"
-              },
-              providerId: "687145eb6d913a8f9c3c6d4e",
-              status: "completed",
-              createdAt: "2025-01-10T08:00:00.000Z",
-              expiresAt: "2025-01-18T12:00:00.000Z",
-              totalAmount: 6000,
-              coordinates: [78.4134, 18.3534],
-              updatedAt: "2025-01-15T16:00:00.000Z",
-              __v: 0,
-              quantity: 5,
-              serviceDate: "2025-01-12T07:00:00.000Z"
-            },
-            {
-              isAutoRejected: false,
-              _id: "6871c690e7fd8a5bc9a49394",
-              listingId: {
-                _id: "6871c639e7fd8a5bc9a49389",
-                title: "Pesticide Spraying Service",
-                price: 500,
-                unitOfMeasure: "per_hectare"
-              },
-              seekerId: {
-                _id: "6871c683e7fd8a5bc9a49392",
-                name: "Lakshmi Devi",
-                phone: "+91 55667 78899",
-                email: "lakshmi.devi@example.com"
-              },
-              providerId: "687145eb6d913a8f9c3c6d4e",
-              status: "completed",
-              createdAt: "2025-01-08T10:00:00.000Z",
-              expiresAt: "2025-01-16T12:00:00.000Z",
-              totalAmount: 2000,
-              coordinates: [78.5134, 18.4534],
-              updatedAt: "2025-01-10T14:00:00.000Z",
-              __v: 0,
-              quantity: 4,
-              serviceDate: "2025-01-09T06:30:00.000Z",
-              notes: "Organic pesticide spray for cotton crop"
-            }
-          ],
-          canceled: []
-        });
+      if (!user?.id) {
+        setBookings({ active: [], completed: [], canceled: [], toReview: [] });
         setLoading(false);
         setRefreshing(false);
-      }, 1000);
+        return;
+      }
+      const data = await BookingService.getProviderBookings(user.id);
+      try {
+        const pretty = JSON.stringify(data, null, 2);
+        console.log('[ProviderBookingsScreen] Loaded provider bookings (grouped):\n', pretty);
+      } catch {}
+      setBookings(data);
+        setLoading(false);
+        setRefreshing(false);
     } catch (error) {
       console.error('Error loading dummy data:', error);
       setLoading(false);
@@ -235,23 +83,34 @@ const ProviderBookingsScreen = () => {
           text: 'Accept',
           onPress: async () => {
             try {
-              // For now, just update the local state
+              setProcessingId(bookingId);
+              setProcessingAction('accept');
+              const current = bookings.active.find(b => b._id === bookingId)?.status || 'pending';
+              if (!canTransition(current as any, 'accepted')) {
+                Alert.alert('Not allowed', 'This booking cannot be accepted.');
+                return;
+              }
+              const updated: any = await setOrderStatus({ orderId: bookingId, status: 'accepted' });
               setBookings(prev => {
-                const booking = prev.toReview.find(b => b._id === bookingId);
-                if (booking) {
-                  booking.status = 'accepted';
+                const original = prev.active.find(b => b._id === bookingId);
+                const nextOrder: Booking = {
+                  ...(original || ({} as any)),
+                  ...(updated || {}),
+                  _id: (updated && (updated as any)._id) || bookingId,
+                  status: ((updated && (updated as any).status) || 'accepted') as any,
+                };
                   return {
                     ...prev,
-                    toReview: prev.toReview.filter(b => b._id !== bookingId),
-                    active: [...prev.active, booking]
+                    active: prev.active.map(b => b._id === bookingId ? nextOrder : b),
                   };
-                }
-                return prev;
               });
               Alert.alert('Success', 'Booking accepted successfully');
-            } catch (error) {
+            } catch (error: any) {
               console.error('Error accepting booking:', error);
-              Alert.alert('Error', 'Failed to accept booking. Please try again.');
+              Alert.alert('Error', error?.message || 'Failed to accept booking. Please try again.');
+            } finally {
+              setProcessingId(null);
+              setProcessingAction(null);
             }
           },
         },
@@ -270,15 +129,34 @@ const ProviderBookingsScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // For now, just update the local state
+              setProcessingId(bookingId);
+              setProcessingAction('cancel');
+              const current = bookings.active.find(b => b._id === bookingId)?.status || 'pending';
+              if (!canTransition(current as any, 'canceled')) {
+                Alert.alert('Not allowed', 'This booking cannot be rejected.');
+                return;
+              }
+              const updated: any = await setOrderStatus({ orderId: bookingId, status: 'canceled' });
               setBookings(prev => ({
                 ...prev,
-                toReview: prev.toReview.filter(b => b._id !== bookingId)
+                active: prev.active.filter(b => b._id !== bookingId),
+                canceled: [
+                  ...prev.canceled,
+                  {
+                    ...(prev.active.find(b => b._id === bookingId) as any),
+                    ...(updated || {}),
+                    _id: (updated && (updated as any)._id) || bookingId,
+                    status: 'canceled' as any,
+                  },
+                ],
               }));
               Alert.alert('Success', 'Booking rejected');
-            } catch (error) {
+            } catch (error: any) {
               console.error('Error rejecting booking:', error);
-              Alert.alert('Error', 'Failed to reject booking. Please try again.');
+              Alert.alert('Error', error?.message || 'Failed to reject booking. Please try again.');
+            } finally {
+              setProcessingId(null);
+              setProcessingAction(null);
             }
           },
         },
@@ -364,6 +242,7 @@ const ProviderBookingsScreen = () => {
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.actionButton, styles.rejectButton]}
+              disabled={processingId === booking._id && processingAction === 'cancel'}
               onPress={(e) => {
                 e.stopPropagation();
                 handleRejectBooking(booking._id);
@@ -376,6 +255,7 @@ const ProviderBookingsScreen = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, styles.acceptButton]}
+              disabled={processingId === booking._id && processingAction === 'accept'}
               onPress={(e) => {
                 e.stopPropagation();
                 handleAcceptBooking(booking._id);
@@ -395,31 +275,40 @@ const ProviderBookingsScreen = () => {
   const renderEmptyState = (type: string) => (
     <View style={styles.emptyContainer}>
       <Ionicons 
-        name={type === 'toReview' ? 'time-outline' : type === 'active' ? 'hourglass-outline' : 'checkmark-circle-outline'} 
+        name={type === 'pending' ? 'time-outline' : type === 'accepted' || type === 'paid' ? 'hourglass-outline' : type === 'completed' ? 'checkmark-done-outline' : 'close-circle-outline'} 
         size={64} 
         color={COLORS.TEXT.SECONDARY} 
       />
       <Text variant="h4" weight="semibold" style={styles.emptyTitle}>
-        No {type === 'toReview' ? 'Pending' : type.charAt(0).toUpperCase() + type.slice(1)} Bookings
+        No {type.charAt(0).toUpperCase() + type.slice(1)} Bookings
       </Text>
       <Text variant="body" color={COLORS.TEXT.SECONDARY} align="center" style={styles.emptyText}>
-        {type === 'toReview' 
+        {type === 'pending' 
           ? 'New booking requests will appear here'
-          : type === 'active'
+          : type === 'accepted' || type === 'paid'
           ? 'Your ongoing bookings will appear here'
-          : 'Your completed bookings will appear here'}
+          : type === 'completed'
+          ? 'Your completed bookings will appear here'
+          : 'Canceled bookings will appear here'}
       </Text>
     </View>
   );
 
   const getTabData = () => {
+    // Split according to the five visible statuses
+    // Note: Backend puts pending orders in 'active' array, not 'toReview'
     switch (activeTab) {
-      case 'toReview':
-        return bookings.toReview;
-      case 'active':
-        return bookings.active;
+      case 'pending':
+        // Fix: Get pending bookings from active array, not toReview
+        return bookings.active.filter(b => b.status === 'pending');
+      case 'accepted':
+        return bookings.active.filter(b => b.status === 'accepted');
+      case 'paid':
+        return bookings.active.filter(b => b.status === 'paid');
       case 'completed':
         return bookings.completed;
+      case 'canceled':
+        return bookings.canceled;
       default:
         return [];
     }
@@ -440,91 +329,88 @@ const ProviderBookingsScreen = () => {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'toReview' && styles.activeTab]}
-          onPress={() => setActiveTab('toReview')}
-        >
-          <Text
-            variant="body"
-            weight={activeTab === 'toReview' ? 'semibold' : 'regular'}
-            color={activeTab === 'toReview' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY}
-          >
-            To Review
+      {/* Tabs: pending | accepted | paid | completed | canceled */}
+      <ScrollView style={styles.tabContainer} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
+        <TouchableOpacity style={[styles.tab, activeTab === 'pending' && styles.activeTab]} onPress={() => setActiveTab('pending')}>
+          <Text variant="body" weight={activeTab === 'pending' ? 'semibold' : 'regular'} color={activeTab === 'pending' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
+            Pending
           </Text>
-          {bookings.toReview.length > 0 && (
+          {bookings.active.filter(b => b.status === 'pending').length > 0 && (
             <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">
-                {bookings.toReview.length}
-              </Text>
+              <Text variant="caption" weight="semibold" color="#fff">{bookings.active.filter(b => b.status === 'pending').length}</Text>
             </View>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'active' && styles.activeTab]}
-          onPress={() => setActiveTab('active')}
-        >
-          <Text
-            variant="body"
-            weight={activeTab === 'active' ? 'semibold' : 'regular'}
-            color={activeTab === 'active' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY}
-          >
-            Active
-          </Text>
-          {bookings.active.length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">
-                {bookings.active.length}
+        <TouchableOpacity style={[styles.tab, activeTab === 'accepted' && styles.activeTab]} onPress={() => setActiveTab('accepted')}>
+          <Text variant="body" weight={activeTab === 'accepted' ? 'semibold' : 'regular'} color={activeTab === 'accepted' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
+            Accepted
               </Text>
+          {bookings.active.filter(b => b.status === 'accepted').length > 0 && (
+            <View style={styles.tabBadge}>
+              <Text variant="caption" weight="semibold" color="#fff">{bookings.active.filter(b => b.status === 'accepted').length}</Text>
             </View>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
-          onPress={() => setActiveTab('completed')}
-        >
-          <Text
-            variant="body"
-            weight={activeTab === 'completed' ? 'semibold' : 'regular'}
-            color={activeTab === 'completed' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY}
-          >
+        <TouchableOpacity style={[styles.tab, activeTab === 'paid' && styles.activeTab]} onPress={() => setActiveTab('paid')}>
+          <Text variant="body" weight={activeTab === 'paid' ? 'semibold' : 'regular'} color={activeTab === 'paid' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
+            Paid
+          </Text>
+          {bookings.active.filter(b => b.status === 'paid').length > 0 && (
+            <View style={styles.tabBadge}>
+              <Text variant="caption" weight="semibold" color="#fff">{bookings.active.filter(b => b.status === 'paid').length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.tab, activeTab === 'completed' && styles.activeTab]} onPress={() => setActiveTab('completed')}>
+          <Text variant="body" weight={activeTab === 'completed' ? 'semibold' : 'regular'} color={activeTab === 'completed' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
             Completed
           </Text>
           {bookings.completed.length > 0 && (
             <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">
-                {bookings.completed.length}
-              </Text>
+              <Text variant="caption" weight="semibold" color="#fff">{bookings.completed.length}</Text>
             </View>
           )}
         </TouchableOpacity>
-      </View>
+
+        <TouchableOpacity style={[styles.tab, activeTab === 'canceled' && styles.activeTab]} onPress={() => setActiveTab('canceled')}>
+          <Text variant="body" weight={activeTab === 'canceled' ? 'semibold' : 'regular'} color={activeTab === 'canceled' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
+            Canceled
+              </Text>
+          {bookings.canceled.length > 0 && (
+            <View style={styles.tabBadge}>
+              <Text variant="caption" weight="semibold" color="#fff">{bookings.canceled.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
 
       {/* Content */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
-        </View>
-      ) : tabData.length === 0 ? (
-        renderEmptyState(activeTab)
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[COLORS.PRIMARY.MAIN]}
-            />
-          }
-        >
-          {tabData.map((booking) => renderBookingCard(booking, activeTab === 'toReview'))}
-        </ScrollView>
-      )}
+      <View style={{ flex: 1 }}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+          </View>
+        ) : tabData.length === 0 ? (
+          renderEmptyState(activeTab)
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[COLORS.PRIMARY.MAIN]}
+              />
+            }
+          >
+            {tabData.map((booking) => renderBookingCard(booking, activeTab === 'pending'))}
+          </ScrollView>
+        )}
+      </View>
     </SafeAreaWrapper>
   );
 };
@@ -554,18 +440,26 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT.PRIMARY,
   },
   tabContainer: {
-    flexDirection: 'row',
+    flexGrow: 0,
     backgroundColor: '#fff',
     paddingHorizontal: SPACING.MD,
+    paddingBottom: SPACING.SM,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.BORDER.PRIMARY,
   },
+  tabContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
   tab: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.MD,
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.MD,
+    minWidth: 110,
+    marginRight: SPACING.SM,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
     position: 'relative',
@@ -581,9 +475,12 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     minWidth: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
-    padding: SPACING.MD,
+    flexGrow: 1,
+    paddingHorizontal: SPACING.MD,
+    paddingTop: SPACING.MD,
     paddingBottom: SPACING['4XL'],
   },
   loadingContainer: {

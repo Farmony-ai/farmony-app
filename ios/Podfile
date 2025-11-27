@@ -1,19 +1,11 @@
-# Podfile
+source 'https://cdn.cocoapods.org/'
 
-use_modular_headers!
+platform :ios, '16.0'
 
-# Resolve react_native_pods.rb with node to allow for hoisting
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
-  )', __dir__]).strip
-
-platform :ios, '15.1' # Set a specific iOS version, e.g., '13.4'
+require_relative '../node_modules/react-native/scripts/react_native_pods'
 prepare_react_native_project!
 
-# Use static frameworks for all pods. This is required for React Native Firebase
-# and helps avoid many common integration issues.
+# Use static frameworks by default (needed for Firebase Swift)
 use_frameworks! :linkage => :static
 
 target 'RuralShareApp' do
@@ -21,29 +13,55 @@ target 'RuralShareApp' do
 
   use_react_native!(
     :path => config[:reactNativePath],
-    # An absolute path to your application root.
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :hermes_enabled => true
   )
 
-  # This hook is a workaround for certain pods (like Flipper)
-  # that have trouble with the 'use_frameworks!' directive.
-  pre_install do |installer|
-    $static_framework = ['FlipperKit', 'Flipper', 'Flipper-Folly', 'CocoaAsyncSocket', 'ComponentKit', 'RCT-Folly', 'Yoga', 'boost', 'glog', 'DoubleConversion']
-    installer.pod_targets.each do |pod|
-      if $static_framework.include?(pod.name)
-        def pod.build_type;
-          Pod::BuildType.static_library
+  # ✅ GoogleMaps & Places MUST be dynamic (avoid duplicate symbols)
+  pod 'GoogleMaps', :modular_headers => true
+  pod 'GooglePlaces', :modular_headers => true
+
+  rn_maps_path = File.join(__dir__, '../node_modules/react-native-maps')
+  pod 'react-native-google-maps', :path => rn_maps_path
+
+  # ✅ Firebase pods (static fine)
+  pod 'FirebaseCore'
+  pod 'FirebaseAuth'
+  
+  post_install do |installer|
+    react_native_post_install(installer)
+    
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+        config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+        
+        # ✅ Fixed: Single EXCLUDED_ARCHS configuration for simulator
+        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+        
+        # ✅ Changed: Use YES for debug builds to avoid architecture conflicts
+        if config.name == 'Debug'
+          config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+        else
+          config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
         end
+        
+        config.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
+        config.build_settings['OTHER_LDFLAGS'] << '-ObjC'
+        config.build_settings['GCC_NO_COMMON_BLOCKS'] = 'YES'
       end
     end
-  end
 
-  post_install do |installer|
-    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
-    react_native_post_install(
-      installer,
-      config[:reactNativePath],
-      :mac_catalyst_enabled => false
-    )
+    # ✅ Toolchain fix
+    installer.aggregate_targets.each do |target|
+      target.xcconfigs.each do |variant_name, xcconfig|
+        xcconfig_path = target.client_root + target.xcconfig_relative_path(variant_name)
+        IO.write(xcconfig_path, IO.read(xcconfig_path).gsub("DT_TOOLCHAIN_DIR", "TOOLCHAIN_DIR"))
+      end
+    end
+    
+    # ✅ Additional fix for M1/M2/M4 Macs
+    installer.pods_project.build_configurations.each do |config|
+      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+    end
   end
 end

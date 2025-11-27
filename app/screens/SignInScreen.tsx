@@ -1,222 +1,397 @@
-import React, {useState} from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
+  ActivityIndicator,
+  Keyboard,
+  Animated,
+  StatusBar,
 } from 'react-native';
-import {useDispatch, useSelector} from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
-import Text from '../components/Text';
-import Button from '../components/Button';
-import {COLORS, SPACING, BORDER_RADIUS, SHADOWS} from '../utils';
-import {isValidEmail, isRequired} from '../utils/validators';
-import {signIn, clearError} from '../store/slices/authSlice';
-import {RootState, AppDispatch} from '../store';
+import { COLORS, SPACING } from '../utils';
+import { FONTS, FONT_SIZES, scaleSize, getFontFamily } from '../utils/fonts';
+import { RootState, AppDispatch } from '../store';
+import { 
+  setPendingUserPhone, 
+  clearError, 
+  otpLogin,
+  setOtpChannel 
+} from '../store/slices/authSlice';
+import { checkPhoneExists } from '../services/api';
+import firebaseSMSService from '../services/firebaseSMS';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const SignInScreen = () => {
   const navigation = useNavigation();
-  // Redux state and dispatch
   const dispatch = useDispatch<AppDispatch>();
-  const {isSigningIn, error} = useSelector((state: RootState) => state.auth);
+  const { isLoading, error, isVerifyingOTP } = useSelector((state: RootState) => state.auth);
 
-  // Form state
-  const [emailOrPhone, setEmailOrPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [emailOrPhoneError, setEmailOrPhoneError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  // Screen state
+  const [currentStep, setCurrentStep] = useState<'phone' | 'otp'>('phone');
+  
+  // Phone step state
+  const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  
+  // OTP step state
+  const [otp, setOTP] = useState(['', '', '', '', '', '']);
+  const [otpError, setOTPError] = useState('');
+  const [smsConfirmation, setSMSConfirmation] = useState<any>(null);
+  const [resendTimer, setResendTimer] = useState(0);
+  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Form validation
-  const validateForm = () => {
-    let isValid = true;
-    
-    // Clear previous errors
-    setEmailOrPhoneError('');
-    setPasswordError('');
-    
-    // Email/Phone validation
-    if (!isRequired(emailOrPhone)) {
-      setEmailOrPhoneError('Email or Phone is required');
-      isValid = false;
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Focus first OTP input when step changes
+    if (currentStep === 'otp') {
+      setTimeout(() => {
+        inputRefs.current[0]?.focus();
+      }, 300);
+      startResendTimer();
     }
     
-    // Password validation
-    if (!isRequired(password)) {
-      setPasswordError('Password is required');
-      isValid = false;
+    // Animate transition between steps
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [currentStep]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  const startResendTimer = () => {
+    setResendTimer(30);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
-    
-    return isValid;
+    timerRef.current = setInterval(() => {
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
-  // Handle sign in
-  const handleSignIn = async () => {
-    if (!validateForm()) return;
+  const validatePhone = async () => {
+    if (!phone || phone.length !== 10) {
+      setPhoneError('Please enter a valid 10-digit phone number');
+      return false;
+    }
     
-    // Clear any previous errors
-    dispatch(clearError());
-    
+    setIsValidating(true);
     try {
-      // Attempt to sign in
-      const result = await dispatch(signIn({emailOrPhone, password}));
+      const result = await checkPhoneExists(phone);
+      setIsValidating(false);
       
-      if (signIn.fulfilled.match(result)) {
-        // Success - navigation will happen through Redux state
-        console.log('✅ Sign in successful');
-      } else {
-        // Error - will be handled by Redux state
-        console.log('❌ Sign in failed');
+      if (!result.exists) {
+        setPhoneError('Phone number not registered. Please sign up first.');
+        return false;
       }
     } catch (error) {
-      console.error('Sign in error:', error);
+      setIsValidating(false);
+      setPhoneError('Unable to verify phone number. Please try again.');
+      return false;
+    }
+    
+    setPhoneError('');
+    return true;
+  };
+
+  const handlePhoneSubmit = async () => {
+    Keyboard.dismiss();
+    if (!(await validatePhone())) return;
+    
+    dispatch(clearError());
+    dispatch(setPendingUserPhone(phone));
+    
+    try {
+      await startFirebaseSMSAuth();
+      setCurrentStep('otp');
+    } catch (error) {
+      setPhoneError('Failed to send OTP. Please try again.');
     }
   };
 
-  // Navigate to sign up screen
-  const handleNavigateToSignUp = () => {
-    navigation.navigate('SignUp');
+  const startFirebaseSMSAuth = async () => {
+    try {
+      const phoneE164 = `+91${phone}`;
+      const confirmation = await firebaseSMSService.sendOTP(phoneE164);
+      setSMSConfirmation(confirmation);
+      dispatch(setOtpChannel('sms'));
+    } catch (error) {
+      throw error;
+    }
   };
 
-  // Handle email/phone input change
-  const handleEmailOrPhoneChange = (text: string) => {
-    setEmailOrPhone(text);
-    if (emailOrPhoneError) setEmailOrPhoneError(''); // Clear error when user types
+  const handleOTPChange = (value: string, index: number) => {
+    if (value.length > 1) return;
+    if (value !== '' && !/^\d$/.test(value)) return;
+    
+    const newOTP = [...otp];
+    newOTP[index] = value;
+    setOTP(newOTP);
+    
+    if (otpError) setOTPError('');
+    
+    if (value !== '' && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+    
+    // Auto-submit when all 6 digits are entered
+    if (value !== '' && index === 5) {
+      const otpString = [...newOTP].join('');
+      if (otpString.length === 6) {
+        handleVerifyOTP(otpString);
+      }
+    }
   };
 
-  // Handle password input change
-  const handlePasswordChange = (text: string) => {
-    setPassword(text);
-    if (passwordError) setPasswordError(''); // Clear error when user types
+  const handleKeyPress = (key: string, index: number) => {
+    if (key === 'Backspace' && otp[index] === '' && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
   };
+
+  const handleVerifyOTP = async (otpString?: string) => {
+    const otpCode = otpString || otp.join('');
+
+    if (otpCode.length !== 6) {
+      setOTPError('Please enter all 6 digits');
+      return;
+    }
+
+    dispatch(clearError());
+    setOTPError('');
+
+    try {
+      if (!smsConfirmation) {
+        setOTPError('Please request OTP first');
+        return;
+      }
+
+      // Step 1: Verify OTP with Firebase and get UserCredential
+      const userCredential = await firebaseSMSService.verifyOTP(smsConfirmation, otpCode);
+
+      // Step 2: Get the Firebase ID token from the credential
+      const idToken = await userCredential.user.getIdToken();
+
+      // Step 3: Send ID token to backend for authentication
+      const phoneE164 = `+91${phone}`;
+      const result = await dispatch(otpLogin({
+        idToken,
+        phoneNumber: phoneE164,
+        name: 'User' // Default name, can be customized later
+      }));
+
+      if (otpLogin.fulfilled.match(result)) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
+      } else {
+        setOTPError('Login failed. Please try again.');
+      }
+    } catch (error: any) {
+      setOTPError(error.message || 'Invalid OTP. Please try again.');
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (resendTimer > 0) return;
+    
+    try {
+      setOTPError('');
+      setOTP(['', '', '', '', '', '']);
+      await startFirebaseSMSAuth();
+      startResendTimer();
+    } catch (error) {
+      setOTPError('Failed to resend OTP. Please try again.');
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep === 'otp') {
+      setCurrentStep('phone');
+      setOTP(['', '', '', '', '', '']);
+      setOTPError('');
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    } else {
+      navigation.goBack();
+    }
+  };
+
+  const renderPhoneStep = () => (
+    <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
+      <View style={styles.contentContainer}>
+        <Text style={styles.title}>Login</Text>
+        <Text style={styles.subtitle}>Enter your phone number to login</Text>
+        
+        <View style={styles.inputSection}>
+          <Text style={styles.inputLabel}>Phone Number <Text style={styles.required}>*</Text></Text>
+          <View style={styles.phoneInputWrapper}>
+            <View style={styles.countryCode}>
+              <Text style={styles.countryCodeText}>+91</Text>
+            </View>
+            <TextInput
+              style={styles.phoneInput}
+              placeholder="9876543210"
+              placeholderTextColor="#999999"
+              value={phone}
+              onChangeText={(text) => {
+                // Only allow numbers and limit to 10 digits
+                const cleaned = text.replace(/[^0-9]/g, '').slice(0, 10);
+                setPhone(cleaned);
+                if (phoneError) setPhoneError('');
+              }}
+              keyboardType="phone-pad"
+              maxLength={10}
+              autoFocus
+              editable={!isLoading && !isValidating}
+            />
+          </View>
+          {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.proceedButton, (!phone || phone.length !== 10 || isValidating) && styles.buttonDisabled]}
+        onPress={handlePhoneSubmit}
+        disabled={!phone || phone.length !== 10 || isValidating}
+        activeOpacity={0.8}
+      >
+        {isValidating ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
+          <Ionicons name="arrow-forward" size={scaleSize(24)} color="#FFFFFF" />
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+
+  const renderOTPStep = () => (
+    <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
+      <ScrollView 
+        style={styles.scrollContent}
+        contentContainerStyle={styles.otpScrollContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.otpContentWrapper}>
+          <Text style={styles.title}>OTP</Text>
+          <Text style={styles.subtitle}>
+            Please enter the OTP sent to your{'\n'}phone number
+          </Text>
+          
+          <View style={styles.otpContainer}>
+            {otp.map((digit, index) => (
+              <TextInput
+                key={index}
+                ref={ref => { inputRefs.current[index] = ref; }}
+                style={[
+                  styles.otpInput,
+                  digit && styles.otpInputFilled,
+                  otpError && styles.otpInputError,
+                ]}
+                value={digit}
+                onChangeText={text => handleOTPChange(text, index)}
+                onKeyPress={({nativeEvent}) => handleKeyPress(nativeEvent.key, index)}
+                keyboardType="number-pad"
+                maxLength={1}
+                textAlign="center"
+                editable={!isVerifyingOTP}
+                selectTextOnFocus
+              />
+            ))}
+          </View>
+
+          {otpError && (
+            <Text style={styles.otpErrorText}>{otpError}</Text>
+          )}
+
+          <TouchableOpacity
+            style={styles.resendContainer}
+            onPress={handleResendOTP}
+            disabled={resendTimer > 0}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.resendText}>
+              Didn't receive OTP? 
+              <Text style={[styles.resendLink, resendTimer > 0 && styles.resendLinkDisabled]}>
+                {resendTimer > 0 ? ` Resend in ${resendTimer}s` : ' Resend Now'}
+              </Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      <TouchableOpacity
+        style={[styles.proceedButton, (otp.join('').length !== 6 || isVerifyingOTP) && styles.buttonDisabled]}
+        onPress={() => handleVerifyOTP()}
+        disabled={otp.join('').length !== 6 || isVerifyingOTP}
+        activeOpacity={0.8}
+      >
+        {isVerifyingOTP ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
+          <Ionicons name="arrow-forward" size={scaleSize(24)} color="#FFFFFF" />
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
 
   return (
-    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <SafeAreaWrapper backgroundColor="#FFFFFF">
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <KeyboardAvoidingView 
         style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header Section */}
-          <View style={styles.header}>
-            <Image
-              source={require('../assets/tractor.png')}
-              style={styles.headerImage}
-              resizeMode="contain"
-            />
-            <Text variant="h2" weight="bold" style={styles.title}>
-              Rural Share
-            </Text>
-            <Text variant="body" style={styles.subtitle}>
-              Sign in to continue
-            </Text>
-          </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={scaleSize(24)} color="#000000" />
+          </TouchableOpacity>
+        </View>
 
-          {/* Form Section */}
-          <View style={styles.form}>
-            {/* Email/Phone Input */}
-            <View style={styles.inputContainer}>
-              <Text variant="label" weight="medium" style={styles.inputLabel}>
-                Email or Phone
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  emailOrPhoneError ? styles.inputError : null,
-                ]}
-                placeholder="Enter your email or phone"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                value={emailOrPhone}
-                onChangeText={handleEmailOrPhoneChange}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isSigningIn}
-              />
-              {emailOrPhoneError ? (
-                <Text variant="caption" style={styles.errorText}>
-                  {emailOrPhoneError}
-                </Text>
-              ) : null}
-            </View>
-
-            {/* Password Input */}
-            <View style={styles.inputContainer}>
-              <Text variant="label" weight="medium" style={styles.inputLabel}>
-                Password
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  passwordError ? styles.inputError : null,
-                ]}
-                placeholder="Enter your password"
-                placeholderTextColor={COLORS.TEXT.PLACEHOLDER}
-                value={password}
-                onChangeText={handlePasswordChange}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isSigningIn}
-              />
-              {passwordError ? (
-                <Text variant="caption" style={styles.errorText}>
-                  {passwordError}
-                </Text>
-              ) : null}
-            </View>
-
-            {/* Error Display */}
-            {error && (
-              <View style={styles.errorContainer}>
-                <Text variant="caption" style={styles.errorText}>
-                  {error}
-                </Text>
-              </View>
-            )}
-
-            {/* Sign In Button */}
-            <Button
-              title="Sign In"
-              onPress={handleSignIn}
-              loading={isSigningIn}
-              fullWidth
-              style={styles.signInButton}
-            />
-
-            {/* Forgot Password Link */}
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => navigation.navigate('ForgotPassword')}
-            >
-              <Text variant="caption" style={styles.forgotPasswordText}>
-                Sign in Using OTP!
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Sign Up Section */}
-          <View style={styles.signUpSection}>
-            <Text variant="body" style={styles.signUpPrompt}>
-              Don't have an account?{' '}
-              <Text
-                variant="body"
-                weight="medium"
-                style={styles.signUpLink}
-                onPress={handleNavigateToSignUp}
-              >
-                Sign Up
-              </Text>
-            </Text>
-          </View>
-        </ScrollView>
+        {/* Content */}
+        <View style={styles.content}>
+          {currentStep === 'phone' && renderPhoneStep()}
+          {currentStep === 'otp' && renderOTPStep()}
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaWrapper>
   );
@@ -225,84 +400,166 @@ const SignInScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: SPACING.LG,
+    backgroundColor: '#FFFFFF',
   },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: SPACING['2XL'],
-    marginBottom: SPACING['2XL'],
+    justifyContent: 'space-between',
+    paddingHorizontal: scaleSize(20),
+    paddingTop: scaleSize(16),
+    paddingBottom: scaleSize(16),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
-  headerImage: {
-    width: 80,
-    height: 80,
-    marginBottom: SPACING.MD,
+  backButton: {
+    padding: scaleSize(4),
+  },
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: scaleSize(24),
+    paddingTop: scaleSize(32),
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  otpScrollContainer: {
+    flexGrow: 1,
+    paddingBottom: scaleSize(100), // Extra padding for keyboard
+  },
+  otpContentWrapper: {
+    paddingHorizontal: scaleSize(24),
+    paddingTop: scaleSize(32),
   },
   title: {
-    color: COLORS.PRIMARY.MAIN,
-    marginBottom: SPACING.SM,
+    fontSize: FONT_SIZES['3XL'],
+    fontFamily: getFontFamily('SEMIBOLD'),
+    color: '#000000',
+    marginBottom: scaleSize(8),
   },
   subtitle: {
-    color: COLORS.TEXT.SECONDARY,
-    textAlign: 'center',
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: getFontFamily('REGULAR'),
+    color: '#666666',
+    marginBottom: scaleSize(32),
+    lineHeight: scaleSize(20),
   },
-  form: {
-    marginBottom: SPACING.XL,
-  },
-  inputContainer: {
-    marginBottom: SPACING.LG,
+  inputSection: {
+    marginTop: scaleSize(8),
   },
   inputLabel: {
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: SPACING.SM,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: getFontFamily('MEDIUM'),
+    color: '#000000',
+    marginBottom: scaleSize(8),
   },
-  input: {
+  required: {
+    color: '#FF0000',
+  },
+  phoneInputWrapper: {
+    flexDirection: 'row',
     borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    padding: SPACING.MD,
-    fontSize: 16,
-    color: COLORS.TEXT.PRIMARY,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    ...SHADOWS.SM,
+    borderColor: '#E0E0E0',
+    borderRadius: scaleSize(8),
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
   },
-  inputError: {
-    borderColor: '#EF4444',
+  countryCode: {
+    paddingHorizontal: scaleSize(16),
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#E0E0E0',
+    backgroundColor: '#F8F8F8',
   },
-  errorContainer: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: BORDER_RADIUS.SM,
-    padding: SPACING.SM,
-    marginBottom: SPACING.MD,
+  countryCodeText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: getFontFamily('MEDIUM'),
+    color: '#000000',
+  },
+  phoneInput: {
+    flex: 1,
+    paddingHorizontal: scaleSize(16),
+    paddingVertical: scaleSize(14),
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: getFontFamily('REGULAR'),
+    color: '#000000',
   },
   errorText: {
-    color: '#EF4444',
-    marginTop: SPACING.XS,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: getFontFamily('REGULAR'),
+    color: '#FF0000',
+    marginTop: scaleSize(6),
   },
-  signInButton: {
-    marginTop: SPACING.MD,
+  otpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: scaleSize(24),
+    marginBottom: scaleSize(24),
+    paddingHorizontal: scaleSize(4),
   },
-  forgotPassword: {
-    alignItems: 'center',
-    marginTop: SPACING.MD,
-  },
-  forgotPasswordText: {
-    color: COLORS.PRIMARY.MAIN,
-  },
-  signUpSection: {
-    alignItems: 'center',
-    marginTop: 'auto',
-    paddingTop: SPACING.LG,
-  },
-  signUpPrompt: {
-    color: COLORS.TEXT.SECONDARY,
+  otpInput: {
+    width: scaleSize(48),
+    height: scaleSize(52),
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: scaleSize(8),
+    fontSize: FONT_SIZES.XL,
+    fontFamily: getFontFamily('MEDIUM'),
+    color: '#000000',
     textAlign: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  signUpLink: {
+  otpInputFilled: {
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  otpInputError: {
+    borderColor: '#FF0000',
+  },
+  otpErrorText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: getFontFamily('REGULAR'),
+    color: '#FF0000',
+    textAlign: 'center',
+    marginTop: scaleSize(-16),
+    marginBottom: scaleSize(16),
+  },
+  resendContainer: {
+    alignItems: 'center',
+  },
+  resendText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: getFontFamily('REGULAR'),
+    color: '#666666',
+  },
+  resendLink: {
     color: COLORS.PRIMARY.MAIN,
+    fontFamily: getFontFamily('MEDIUM'),
+  },
+  resendLinkDisabled: {
+    color: '#999999',
+  },
+  proceedButton: {
+    position: 'absolute',
+    bottom: scaleSize(32),
+    right: scaleSize(24),
+    width: scaleSize(56),
+    height: scaleSize(56),
+    borderRadius: scaleSize(28),
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  buttonDisabled: {
+    backgroundColor: '#CCCCCC',
   },
 });
 
-export default SignInScreen; 
+export default SignInScreen;

@@ -13,7 +13,7 @@ interface DateRangeCalendarProps {
 }
 
 export default function DateRangeCalendar({ onConfirm, initialStartDate, initialEndDate }: DateRangeCalendarProps) {
-  const [markedDates, setMarkedDates] = useState({});
+  const [markedDates, setMarkedDates] = useState<Record<string, any>>({});
   const [startDate, setStartDate] = useState(initialStartDate || '');
   const [endDate, setEndDate] = useState(initialEndDate || '');
 
@@ -26,25 +26,61 @@ export default function DateRangeCalendar({ onConfirm, initialStartDate, initial
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialStartDate, initialEndDate]);
 
-  const updateMarkedDates = (start: Date, end: Date) => {
-    let dates = {};
+  const getPeriodMarkedDates = (start: Date, end: Date) => {
+    const dates: Record<string, any> = {};
     let currentDate = new Date(start);
     const stopDate = new Date(end);
 
     while (currentDate <= stopDate) {
       const dateString = currentDate.toISOString().split('T')[0];
-      dates[dateString] = { color: COLORS.PRIMARY.LIGHT, textColor: 'white' };
+      dates[dateString] = {
+        color: COLORS.PRIMARY.LIGHT,
+        textColor: COLORS.PRIMARY.DARK,
+        customTextStyle: styles.periodDayText,
+      };
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
     const startString = start.toISOString().split('T')[0];
     const endString = end.toISOString().split('T')[0];
 
-    setMarkedDates({
-      ...dates,
-      [startString]: { startingDay: true, color: COLORS.PRIMARY.MAIN, textColor: 'white' },
-      [endString]: { endingDay: true, color: COLORS.PRIMARY.MAIN, textColor: 'white' },
-    });
+    dates[startString] = {
+      startingDay: true,
+      color: COLORS.PRIMARY.MAIN,
+      textColor: 'white',
+      customTextStyle: styles.singleDayText,
+    };
+    dates[endString] = {
+      endingDay: true,
+      color: COLORS.PRIMARY.MAIN,
+      textColor: 'white',
+      customTextStyle: styles.singleDayText,
+    };
+
+    return dates;
+  };
+
+  const getSingleMarkedDate = (date: Date) => {
+    const dateString = date.toISOString().split('T')[0];
+    return {
+      [dateString]: {
+        selected: true,
+        startingDay: true,
+        endingDay: true,
+        color: COLORS.PRIMARY.MAIN,
+        textColor: '#FFFFFF',
+        customContainerStyle: styles.singleDayContainer,
+        customTextStyle: styles.singleDayText,
+      },
+    };
+  };
+
+  const updateMarkedDates = (start: Date, end: Date) => {
+    if (start.toDateString() === end.toDateString()) {
+      setMarkedDates(getSingleMarkedDate(start));
+    } else {
+      setMarkedDates(getPeriodMarkedDates(start, end));
+    }
   };
 
   const onDayPress = (day: any) => {
@@ -57,13 +93,13 @@ export default function DateRangeCalendar({ onConfirm, initialStartDate, initial
     if (!startDate || (startDate && endDate)) {
       setStartDate(day.dateString);
       setEndDate('');
-      setMarkedDates({ [day.dateString]: { startingDay: true, color: COLORS.PRIMARY.MAIN, textColor: 'white' } });
+      setMarkedDates(getSingleMarkedDate(selectedDate));
     } else {
       const newEndDate = day.dateString;
       if (new Date(newEndDate) < new Date(startDate)) {
         setStartDate(day.dateString);
         setEndDate('');
-        setMarkedDates({ [day.dateString]: { startingDay: true, color: COLORS.PRIMARY.MAIN, textColor: 'white' } });
+        setMarkedDates(getSingleMarkedDate(selectedDate));
       } else {
         setEndDate(newEndDate);
         updateMarkedDates(new Date(startDate), new Date(newEndDate));
@@ -72,8 +108,12 @@ export default function DateRangeCalendar({ onConfirm, initialStartDate, initial
   };
 
   const handleConfirm = () => {
-    if (startDate && endDate) {
-      onConfirm(startDate, endDate);
+    if (startDate) {
+      if (endDate) {
+        onConfirm(startDate, endDate);
+      } else {
+        onConfirm(startDate, startDate);
+      }
     }
   };
 
@@ -86,10 +126,13 @@ export default function DateRangeCalendar({ onConfirm, initialStartDate, initial
         markedDates={markedDates}
         theme={calendarTheme}
       />
-      <TouchableOpacity 
-        style={[styles.confirmButton, (!startDate || !endDate) && styles.disabledButton]}
-        onPress={handleConfirm} 
-        disabled={!startDate || !endDate}
+      <TouchableOpacity
+        style={[
+          styles.confirmButton,
+          !startDate && styles.disabledButton,
+        ]}
+        onPress={handleConfirm}
+        disabled={!startDate}
       >
         <Text weight="semibold" color={'white'}>
           Confirm
@@ -134,5 +177,23 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: COLORS.TEXT.PLACEHOLDER,
+  },
+  singleDayContainer: {
+    borderRadius: BORDER_RADIUS.FULL,
+    backgroundColor: COLORS.PRIMARY.MAIN,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+    width: 38,
+    height: 38,
+    alignSelf: 'center',
+  },
+  singleDayText: {
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  periodDayText: {
+    fontWeight: '500',
+    color: COLORS.PRIMARY.DARK,
   },
 });

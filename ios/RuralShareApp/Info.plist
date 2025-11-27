@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>RuralShareApp</string>
+	<string>Farmony</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -16,29 +16,106 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>RuralShare needs access to your location to show nearby services</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>RuralShare needs access to your location to show nearby services</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string></string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.383808719248-pbjq3smi9k2gtb8qer8rdua48v4g08as</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>org.reactjs.native.example.FarmonyApp</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string></string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.383808719248-pbjq3smi9k2gtb8qer8rdua48v4g08as</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>FirebasePhoneAuthAutoVerifyDisabled</key>
+	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>googlechromes</string>
+		<string>comgooglemaps</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<false/>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>127.0.0.1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+			</dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Farmony needs camera access to capture photos for profile and service listings</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Farmony needs access to your location to show nearby services and provide better recommendations</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>Farmony needs access to your location to show nearby services</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Farmony needs permission to save photos to your library</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Farmony needs access to your photos to upload profile pictures and service images</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Poppins-Thin.ttf</string>
+		<string>Poppins-ExtraLight.ttf</string>
+		<string>Poppins-Light.ttf</string>
+		<string>Poppins-Regular.ttf</string>
+		<string>Poppins-Medium.ttf</string>
+		<string>Poppins-SemiBold.ttf</string>
+		<string>Poppins-Bold.ttf</string>
+		<string>Poppins-ExtraBold.ttf</string>
+		<string>Poppins-Black.ttf</string>
+		<string>Ionicons.ttf</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>processing</string>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -53,18 +130,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	<key>UIAppFonts</key>
-	<array>
-		<string>Poppins-Thin.ttf</string>
-		<string>Poppins-ExtraLight.ttf</string>
-		<string>Poppins-Light.ttf</string>
-		<string>Poppins-Regular.ttf</string>
-		<string>Poppins-Medium.ttf</string>
-		<string>Poppins-SemiBold.ttf</string>
-		<string>Poppins-Bold.ttf</string>
-		<string>Poppins-ExtraBold.ttf</string>
-		<string>Poppins-Black.ttf</string>
-		<string>Ionicons.ttf</string>
-	</array>
 </dict>
 </plist>

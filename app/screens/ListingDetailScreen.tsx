@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+/* eslint-disable react-hooks/rules-of-hooks */
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,86 +8,56 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  TextInput,
-  KeyboardAvoidingView,
+  Dimensions,
+  Animated,
   Platform,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../utils';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import ListingService from '../services/ListingService';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+import ListingService, { PopulatedListing } from '../services/ListingService';
 
-interface ListingDetail {
-  _id: string;
-  title: string;
-  description: string;
-  photos: string[];
-  price: number;
-  unitOfMeasure: string;
-  minimumOrder: number;
-  isActive: boolean;
-  tags: string[];
-  viewCount: number;
-  bookingCount: number;
-  availableFrom: string;
-  availableTo: string;
-  createdAt: string;
-  location: {
-    type: string;
-    coordinates: number[];
-  };
-  providerId: {
-    _id: string;
-    name: string;
-    email: string;
-    phone: string;
-  };
-  categoryId: {
-    _id: string;
-    name: string;
-    icon: string;
-  };
-  subCategoryId: {
-    _id: string;
-    name: string;
-  };
-}
+const { width: screenWidth } = Dimensions.get('window');
 
 const ListingDetailScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { listingId } = route.params;
+  const { listingId, fromSearch } = route.params;
+  const { token, user } = useSelector((state: RootState) => state.auth);
 
-  const [listing, setListing] = useState<ListingDetail | null>(null);
+  const [listing, setListing] = useState<PopulatedListing | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editedData, setEditedData] = useState<any>({});
-  const [showFromDatePicker, setShowFromDatePicker] = useState(false);
-  const [showToDatePicker, setShowToDatePicker] = useState(false);
-  const [tagInput, setTagInput] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isToggling, setIsToggling] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const autoScrollTimer = useRef<NodeJS.Timeout | null>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    fetchListingDetail();
-  }, []);
-
-  const fetchListingDetail = async () => {
+  const fetchListingDetail = useCallback(async () => {
     try {
       setLoading(true);
       const response = await ListingService.getListingById(listingId);
       setListing(response);
-      setEditedData({
-        title: response.title,
-        description: response.description,
-        price: response.price.toString(),
-        minimumOrder: response.minimumOrder.toString(),
-        tags: [...response.tags],
-        availableFrom: new Date(response.availableFrom),
-        availableTo: new Date(response.availableTo),
-        isActive: response.isActive,
-      });
+      
+      if (user && response.providerId) {
+        const providerId = typeof response.providerId === 'object' 
+          ? response.providerId._id 
+          : response.providerId;
+        setIsOwner(user.id === providerId);
+      }
+      
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     } catch (error) {
       console.error('Error fetching listing detail:', error);
       Alert.alert('Error', 'Failed to load listing details.');
@@ -94,7 +65,34 @@ const ListingDetailScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [listingId, token, navigation, user, fadeAnim]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchListingDetail();
+    }, [fetchListingDetail])
+  );
+
+  useEffect(() => {
+    if (listing?.photoUrls && listing.photoUrls.length > 1) {
+      autoScrollTimer.current = setInterval(() => {
+        setCurrentImageIndex((prevIndex) => {
+          const nextIndex = (prevIndex + 1) % listing.photoUrls.length;
+          scrollViewRef.current?.scrollTo({
+            x: screenWidth * nextIndex,
+            animated: true,
+          });
+          return nextIndex;
+        });
+      }, 3000);
+
+      return () => {
+        if (autoScrollTimer.current) {
+          clearInterval(autoScrollTimer.current);
+        }
+      };
+    }
+  }, [listing?.photoUrls]);
 
   const handleDelete = () => {
     Alert.alert(
@@ -120,83 +118,76 @@ const ListingDetailScreen = () => {
             }
           },
         },
-      ],
+      ]
     );
   };
 
-  const handleSave = async () => {
+  const handleEdit = () => {
+    setShowMenu(false);
+    navigation.navigate('CreateListing', { listingId: listing?._id });
+  };
+
+  const handleToggleStatus = async () => {
+    if (!listing || !token || isToggling) return;
+    
     try {
-      setLoading(true);
-      const updatePayload = {
-        title: editedData.title,
-        description: editedData.description,
-        price: parseFloat(editedData.price),
-        minimumOrder: parseInt(editedData.minimumOrder),
-        tags: editedData.tags,
-        availableFrom: editedData.availableFrom.toISOString().split('T')[0],
-        availableTo: editedData.availableTo.toISOString().split('T')[0],
-        isActive: editedData.isActive,
-      };
+      setIsToggling(true);
+      setShowMenu(false);
       
-      await ListingService.updateListing(listingId, updatePayload);
-      Alert.alert('Success', 'Listing updated successfully');
-      setIsEditMode(false);
-      fetchListingDetail(); // Refresh data
+      const newStatus = !listing.isActive;
+      await ListingService.toggleListingStatus(listing._id, newStatus);
+      
+      setListing(prevListing => 
+        prevListing ? { ...prevListing, isActive: newStatus } : null
+      );
+      
+      Alert.alert(
+        'Success', 
+        `Listing has been ${newStatus ? 'activated' : 'deactivated'} successfully.`
+      );
     } catch (error) {
-      console.error('Error updating listing:', error);
-      Alert.alert('Error', 'Failed to update listing. Please try again.');
+      console.error('Error toggling listing status:', error);
+      Alert.alert('Error', 'Failed to update listing status. Please try again.');
     } finally {
-      setLoading(false);
+      setIsToggling(false);
     }
   };
 
-  const handleCancel = () => {
-    if (listing) {
-      setEditedData({
-        title: listing.title,
-        description: listing.description,
-        price: listing.price.toString(),
-        minimumOrder: listing.minimumOrder.toString(),
-        tags: [...listing.tags],
-        availableFrom: new Date(listing.availableFrom),
-        availableTo: new Date(listing.availableTo),
-        isActive: listing.isActive,
-      });
-    }
-    setIsEditMode(false);
+  const handleProceedToCheckout = () => {
+    if (!listing) return;
+    
+    const bookingData = {
+      listing: listing,
+      listingId: listing._id,
+    };
+    
+    navigation.navigate('Checkout', bookingData);
   };
 
-  const handleAddTag = () => {
-    if (tagInput.trim() && !editedData.tags.includes(tagInput.trim())) {
-      setEditedData({
-        ...editedData,
-        tags: [...editedData.tags, tagInput.trim()],
-      });
-      setTagInput('');
-    }
+  const getUnitLabel = (unit: string) => {
+    const unitLabels: { [key: string]: string } = {
+      per_hour: '/hr',
+      per_day: '/day',
+      per_hectare: '/ha',
+      per_kg: '/kg',
+      per_unit: '/unit',
+      per_piece: '/piece',
+    };
+    return unitLabels[unit] || '';
   };
 
-  const handleRemoveTag = (index: number) => {
-    setEditedData({
-      ...editedData,
-      tags: editedData.tags.filter((_: string, i: number) => i !== index),
-    });
-  };
-
-  const formatDate = (date: Date | string) => {
-    const d = typeof date === 'string' ? new Date(date) : date;
-    return d.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+  const handleScroll = (event: any) => {
+    const slideSize = screenWidth;
+    const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
+    setCurrentImageIndex(index);
   };
 
   if (loading) {
     return (
-      <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+      <SafeAreaWrapper backgroundColor="#FAFAFA">
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+          <Text style={styles.loadingText}>Loading details...</Text>
         </View>
       </SafeAreaWrapper>
     );
@@ -205,330 +196,239 @@ const ListingDetailScreen = () => {
   if (!listing) return null;
 
   return (
-    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        {/* Header */}
+    <SafeAreaWrapper backgroundColor="#FAFAFA">
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        {/* Clean Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
           </TouchableOpacity>
-          <Text variant="h4" weight="semibold" style={styles.headerTitle}>
-            {isEditMode ? 'Edit Listing' : 'Listing Details'}
-          </Text>
-          {isEditMode ? (
-            <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-              <Text variant="body" weight="semibold" color={COLORS.PRIMARY.MAIN}>
-                Save
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 40 }} />
+          
+          {isOwner && (
+            <>
+              <TouchableOpacity style={styles.headerButton} onPress={() => setShowMenu(!showMenu)}>
+                <Ionicons name="ellipsis-vertical" size={24} color={COLORS.TEXT.PRIMARY} />
+              </TouchableOpacity>
+              {showMenu && (
+                <View style={styles.menuDropdown}>
+                  <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
+                    <Ionicons name="create-outline" size={18} color={COLORS.TEXT.PRIMARY} />
+                    <Text style={styles.menuText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.menuItem, isToggling && styles.menuItemDisabled]} 
+                    onPress={handleToggleStatus}
+                    disabled={isToggling}
+                  >
+                    <Ionicons 
+                      name={listing?.isActive ? "pause-outline" : "play-outline"} 
+                      size={18} 
+                      color={listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN} 
+                    />
+                    <Text style={[styles.menuText, { 
+                      color: listing?.isActive ? "#F59E0B" : COLORS.SUCCESS.MAIN 
+                    }]}>
+                      {isToggling ? 'Processing...' : (listing?.isActive ? 'Deactivate' : 'Activate')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.menuItem} onPress={handleDelete}>
+                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <Text style={[styles.menuText, { color: "#EF4444" }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
           )}
         </View>
 
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            !isOwner && { paddingBottom: 100 }
+          ]}
         >
-          {/* Image Gallery */}
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.imageGallery}
-          >
-            {listing.photos.map((photo, index) => (
-              <Image key={index} source={{ uri: photo }} style={styles.listingImage} />
-            ))}
-          </ScrollView>
-
-          {/* Basic Info */}
-          <View style={styles.section}>
-            {isEditMode ? (
-              <>
-                <Text style={styles.inputLabel}>Title</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={editedData.title}
-                  onChangeText={(text) => setEditedData({ ...editedData, title: text })}
-                  placeholder="Enter title"
-                />
-              </>
-            ) : (
-              <Text variant="h4" weight="bold" style={styles.title}>
-                {listing.title}
-              </Text>
-            )}
-
-            <View style={styles.metaContainer}>
-              <View style={styles.categoryBadge}>
-                <Ionicons name="pricetag-outline" size={16} color={COLORS.PRIMARY.MAIN} />
-                <Text variant="caption" color={COLORS.PRIMARY.MAIN} style={{ marginLeft: 4 }}>
-                  {listing.categoryId.name} • {listing.subCategoryId.name}
-                </Text>
-              </View>
-              <View style={[styles.statusBadge, !listing.isActive && styles.statusBadgeInactive]}>
-                <Text variant="caption" weight="medium" color={listing.isActive ? COLORS.PRIMARY.MAIN : '#6B7280'}>
-                  {listing.isActive ? 'Active' : 'Inactive'}
-                </Text>
-              </View>
-            </View>
-
-            {isEditMode ? (
-              <>
-                <Text style={styles.inputLabel}>Description</Text>
-                <TextInput
-                  style={[styles.textInput, styles.textArea]}
-                  value={editedData.description}
-                  onChangeText={(text) => setEditedData({ ...editedData, description: text })}
-                  placeholder="Enter description"
-                  multiline
-                  numberOfLines={4}
-                />
-              </>
-            ) : (
-              <Text variant="body" color={COLORS.TEXT.SECONDARY} style={styles.description}>
-                {listing.description}
-              </Text>
-            )}
-          </View>
-
-          {/* Pricing */}
-          <View style={styles.section}>
-            <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-              Pricing Details
-            </Text>
-            <View style={styles.pricingContainer}>
-              {isEditMode ? (
-                <View style={styles.editRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.inputLabel}>Price</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={editedData.price}
-                      onChangeText={(text) => setEditedData({ ...editedData, price: text })}
-                      keyboardType="numeric"
-                      placeholder="0"
+          {/* Main Card Container */}
+          <View style={styles.mainCard}>
+            {/* Image Carousel */}
+            {listing.photoUrls && listing.photoUrls.length > 0 ? (
+              <View style={styles.imageContainer}>
+                <ScrollView
+                  ref={scrollViewRef}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={handleScroll}
+                  scrollEventThrottle={16}
+                  onTouchStart={() => {
+                    if (autoScrollTimer.current) {
+                      clearInterval(autoScrollTimer.current);
+                    }
+                  }}
+                  onTouchEnd={() => {
+                    if (listing.photoUrls && listing.photoUrls.length > 1) {
+                      autoScrollTimer.current = setInterval(() => {
+                        setCurrentImageIndex((prevIndex) => {
+                          const nextIndex = (prevIndex + 1) % listing.photoUrls.length;
+                          scrollViewRef.current?.scrollTo({
+                            x: screenWidth * nextIndex,
+                            animated: true,
+                          });
+                          return nextIndex;
+                        });
+                      }, 3000);
+                    }
+                  }}
+                >
+                  {listing.photoUrls.map((photo, index) => (
+                    <Image 
+                      key={index} 
+                      source={{ uri: typeof photo === 'string' ? photo : photo.uri }} 
+                      style={styles.listingImage} 
                     />
+                  ))}
+                </ScrollView>
+                
+                {/* Image Dots */}
+                {listing.photoUrls.length > 1 && (
+                  <View style={styles.dotsContainer}>
+                    {listing.photoUrls.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.dot,
+                          index === currentImageIndex && styles.activeDot
+                        ]}
+                      />
+                    ))}
                   </View>
-                  <View style={{ flex: 1, marginLeft: SPACING.SM }}>
-                    <Text style={styles.inputLabel}>Minimum Order</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={editedData.minimumOrder}
-                      onChangeText={(text) => setEditedData({ ...editedData, minimumOrder: text })}
-                      keyboardType="numeric"
-                      placeholder="1"
-                    />
+                )}
+              </View>
+            ) : (
+              <View style={styles.noImageContainer}>
+                <Ionicons name="image-outline" size={40} color={COLORS.TEXT.SECONDARY} />
+                <Text style={styles.noImageText}>No images available</Text>
+              </View>
+            )}
+
+            {/* Content Section */}
+            <View style={styles.contentSection}>
+              {/* Title and Price Row */}
+              <View style={styles.titlePriceRow}>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.title}>{listing.subCategoryId.name}</Text>
+                  <Text style={styles.category}>{listing.categoryId.name}</Text>
+                </View>
+                <View style={styles.priceContainer}>
+                  <Text style={styles.priceLabel}>Service price</Text>
+                  <Text style={styles.price}>
+                    ₹{listing.price.toLocaleString()}
+                    <Text style={styles.priceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
+                  </Text>
+                </View>
+              </View>
+
+              {/* Info Grid */}
+              <View style={styles.infoGrid}>
+                <View style={styles.infoItem}>
+                  <Ionicons name="cube-outline" size={20} color="#666" />
+                  <Text style={styles.infoValue}>{listing.minimumOrder}</Text>
+                  <Text style={styles.infoLabel}>Min Order</Text>
+                </View>
+                
+                {isOwner ? (
+                  <>
+                    <View style={styles.infoItem}>
+                      <Ionicons name="eye-outline" size={20} color="#666" />
+                      <Text style={styles.infoValue}>{listing.viewCount}</Text>
+                      <Text style={styles.infoLabel}>Views</Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <MaterialIcons name="event-available" size={20} color="#666" />
+                      <Text style={styles.infoValue}>{listing.bookingCount}</Text>
+                      <Text style={styles.infoLabel}>Bookings</Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.infoItem}>
+                      <View style={styles.statusIndicator}>
+                        <View style={[styles.statusDot, !listing.isActive && styles.inactiveDot]} />
+                      </View>
+                      <Text style={styles.infoValue}>
+                        {listing.isActive ? 'Available' : 'Inactive'}
+                      </Text>
+                      <Text style={styles.infoLabel}>Status</Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {/* Description */}
+               {listing.description && (
+              <View style={styles.descriptionSection}>
+                <Text style={styles.sectionTitle}>About this service</Text>
+                <Text style={styles.description}>{listing.description}</Text>
+              </View>
+               )}
+              {/* Provider Info for Non-Owners */}
+              {!isOwner && typeof listing.providerId === 'object' && (
+                <View style={styles.providerSection}>
+                  <View style={styles.providerInfo}>
+                    <View style={styles.providerAvatar}>
+                      <Ionicons name="person" size={20} color={COLORS.PRIMARY.MAIN} />
+                    </View>
+                    <View style={styles.providerDetails}>
+                      <Text style={styles.providerLabel}>Service Provider</Text>
+                      <Text style={styles.providerName}>{listing.providerId.name}</Text>
+                    </View>
                   </View>
                 </View>
-              ) : (
-                <>
-                  <View style={styles.priceItem}>
-                    <Text variant="body" color={COLORS.TEXT.SECONDARY}>Price</Text>
-                    <Text variant="h4" weight="bold" color={COLORS.PRIMARY.MAIN}>
-                      ₹{listing.price}/{listing.unitOfMeasure}
+              )}
+
+              {/* Owner Metrics */}
+              {isOwner && (
+                <View style={styles.metricsRow}>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>Conversion</Text>
+                    <Text style={styles.metricValue}>
+                      {listing.bookingCount && listing.viewCount 
+                        ? `${((listing.bookingCount / listing.viewCount) * 100).toFixed(1)}%`
+                        : '0%'}
                     </Text>
                   </View>
-                  <View style={styles.priceItem}>
-                    <Text variant="body" color={COLORS.TEXT.SECONDARY}>Minimum Order</Text>
-                    <Text variant="h4" weight="semibold">
-                      {listing.minimumOrder} {listing.unitOfMeasure}
-                    </Text>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>Avg Response</Text>
+                    <Text style={styles.metricValue}>2 hrs</Text>
                   </View>
-                </>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>Rating</Text>
+                    <Text style={styles.metricValue}>4.8</Text>
+                  </View>
+                </View>
               )}
             </View>
           </View>
-
-          {/* Availability */}
-          <View style={styles.section}>
-            <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-              Availability
-            </Text>
-            {isEditMode ? (
-              <View style={styles.dateContainer}>
-                <TouchableOpacity
-                  style={styles.dateInput}
-                  onPress={() => setShowFromDatePicker(true)}
-                >
-                  <Text variant="body" color={COLORS.TEXT.SECONDARY}>From</Text>
-                  <Text variant="body">{formatDate(editedData.availableFrom)}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dateInput}
-                  onPress={() => setShowToDatePicker(true)}
-                >
-                  <Text variant="body" color={COLORS.TEXT.SECONDARY}>To</Text>
-                  <Text variant="body">{formatDate(editedData.availableTo)}</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.dateContainer}>
-                <View style={styles.dateItem}>
-                  <Ionicons name="calendar-outline" size={20} color={COLORS.TEXT.SECONDARY} />
-                  <View style={{ marginLeft: SPACING.SM }}>
-                    <Text variant="caption" color={COLORS.TEXT.SECONDARY}>From</Text>
-                    <Text variant="body" weight="medium">{formatDate(listing.availableFrom)}</Text>
-                  </View>
-                </View>
-                <View style={styles.dateItem}>
-                  <Ionicons name="calendar-outline" size={20} color={COLORS.TEXT.SECONDARY} />
-                  <View style={{ marginLeft: SPACING.SM }}>
-                    <Text variant="caption" color={COLORS.TEXT.SECONDARY}>To</Text>
-                    <Text variant="body" weight="medium">{formatDate(listing.availableTo)}</Text>
-                  </View>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Tags */}
-          <View style={styles.section}>
-            <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-              Tags
-            </Text>
-            {isEditMode && (
-              <View style={styles.tagInputContainer}>
-                <TextInput
-                  style={[styles.textInput, { flex: 1 }]}
-                  value={tagInput}
-                  onChangeText={setTagInput}
-                  placeholder="Add tag"
-                  onSubmitEditing={handleAddTag}
-                  returnKeyType="done"
-                />
-                <TouchableOpacity style={styles.addTagButton} onPress={handleAddTag}>
-                  <Ionicons name="add" size={20} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
-            <View style={styles.tagsContainer}>
-              {editedData.tags.map((tag: string, index: number) => (
-                <View key={index} style={styles.tag}>
-                  <Text variant="body" color={COLORS.PRIMARY.MAIN}>
-                    {tag}
-                  </Text>
-                  {isEditMode && (
-                    <TouchableOpacity onPress={() => handleRemoveTag(index)}>
-                      <Ionicons name="close-circle" size={18} color={COLORS.PRIMARY.MAIN} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Stats */}
-          {!isEditMode && (
-            <View style={styles.section}>
-              <Text variant="h4" weight="semibold" style={styles.sectionTitle}>
-                Statistics
-              </Text>
-              <View style={styles.statsContainer}>
-                <View style={styles.statCard}>
-                  <Ionicons name="eye-outline" size={24} color={COLORS.PRIMARY.MAIN} />
-                  <Text variant="h3" weight="bold" style={styles.statValue}>
-                    {listing.viewCount}
-                  </Text>
-                  <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-                    Views
-                  </Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Ionicons name="calendar-check-outline" size={24} color={COLORS.PRIMARY.MAIN} />
-                  <Text variant="h3" weight="bold" style={styles.statValue}>
-                    {listing.bookingCount}
-                  </Text>
-                  <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-                    Bookings
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Status Toggle in Edit Mode */}
-          {isEditMode && (
-            <View style={styles.section}>
-              <View style={styles.statusToggleContainer}>
-                <Text variant="body" weight="medium">Listing Status</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.statusToggle,
-                    editedData.isActive && styles.statusToggleActive,
-                  ]}
-                  onPress={() => setEditedData({ ...editedData, isActive: !editedData.isActive })}
-                >
-                  <Text
-                    variant="body"
-                    weight="medium"
-                    color={editedData.isActive ? '#fff' : COLORS.TEXT.SECONDARY}
-                  >
-                    {editedData.isActive ? 'Active' : 'Inactive'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
         </ScrollView>
 
-        {/* Date Pickers */}
-        {showFromDatePicker && (
-          <DateTimePicker
-            value={editedData.availableFrom}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, date) => {
-              setShowFromDatePicker(Platform.OS === 'ios');
-              if (date) setEditedData({ ...editedData, availableFrom: date });
-            }}
-          />
+        {/* Bottom CTA for Non-Owners */}
+        {!isOwner && listing.isActive && (
+          <View style={styles.bottomCTA}>
+            <View style={styles.ctaContent}>
+              <View>
+                <Text style={styles.ctaPriceLabel}>Starting from</Text>
+                <Text style={styles.ctaPrice}>
+                  ₹{listing.price.toLocaleString()}
+                  <Text style={styles.ctaPriceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.proceedButton} onPress={handleProceedToCheckout}>
+                <Text style={styles.proceedButtonText}>Book Now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
-
-        {showToDatePicker && (
-          <DateTimePicker
-            value={editedData.availableTo}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, date) => {
-              setShowToDatePicker(Platform.OS === 'ios');
-              if (date) setEditedData({ ...editedData, availableTo: date });
-            }}
-          />
-        )}
-
-        {/* Action Buttons */}
-        <View style={styles.actionContainer}>
-          {isEditMode ? (
-            <>
-              <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-                <Text variant="body" weight="semibold" color={COLORS.TEXT.SECONDARY}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity style={styles.editButton} onPress={() => setIsEditMode(true)}>
-                <Ionicons name="create-outline" size={20} color="#fff" />
-                <Text variant="body" weight="semibold" color="#fff" style={{ marginLeft: 8 }}>
-                  Edit
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-                <Ionicons name="trash-outline" size={20} color="#fff" />
-                <Text variant="body" weight="semibold" color="#fff" style={{ marginLeft: 8 }}>
-                  Delete
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
     </SafeAreaWrapper>
   );
 };
@@ -539,225 +439,295 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    marginTop: SPACING.MD,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.MD,
     paddingVertical: SPACING.MD,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
+    position: 'relative',
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.SM,
+  },
+  menuDropdown: {
+    position: 'absolute',
+    top: 60,
+    right: SPACING.MD,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: BORDER_RADIUS.MD,
+    padding: SPACING.XS,
+    ...SHADOWS.LG,
+    zIndex: 1000,
+    minWidth: 150,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.SM,
+  },
+  menuText: {
+    marginLeft: SPACING.SM,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  menuItemDisabled: {
+    opacity: 0.5,
+  },
+  scrollContent: {
+    paddingBottom: SPACING.XL,
+  },
+  mainCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginHorizontal: SPACING.MD,
+
+    borderRadius: BORDER_RADIUS.LG,
+    overflow: 'hidden',
+    ...SHADOWS.MD,
+  },
+  imageContainer: {
+    width: screenWidth - (SPACING.MD * 2),
+    height: 240,
+    position: 'relative',
+  },
+  listingImage: {
+    width: screenWidth - (SPACING.MD * 2),
+    height: 240,
+    resizeMode: 'cover',
+  },
+  dotsContainer: {
+    position: 'absolute',
+    bottom: SPACING.MD,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    left: '50%',
+    transform: [{ translateX: -30 }],
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginHorizontal: 3,
+  },
+  activeDot: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    width: 16,
+  },
+  noImageContainer: {
+    height: 240,
+    backgroundColor: COLORS.BACKGROUND.CARD,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noImageText: {
+    marginTop: SPACING.SM,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  contentSection: {
+    padding: SPACING.MD,
+  },
+  titlePriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.MD,
+    paddingBottom: SPACING.MD,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.BORDER.PRIMARY,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
+  titleContainer: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.TEXT.PRIMARY,
-  },
-  saveButton: {
-    paddingHorizontal: SPACING.MD,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-  imageGallery: {
-    height: 250,
-    backgroundColor: COLORS.BACKGROUND.CARD,
-  },
-  listingImage: {
-    width: 375, // Adjust based on screen width
-    height: 250,
-    resizeMode: 'cover',
-  },
-  section: {
-    padding: SPACING.MD,
-    backgroundColor: '#fff',
-    marginBottom: SPACING.SM,
+    marginRight: SPACING.MD,
   },
   title: {
-    marginBottom: SPACING.SM,
-    fontSize: 20,
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: 4,
   },
-  metaContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.MD,
-  },
-  categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  statusBadge: {
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.SM,
-  },
-  statusBadgeInactive: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
-  },
-  description: {
-    lineHeight: 22,
-    fontSize: 14,
+  category: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: COLORS.TEXT.SECONDARY,
   },
+  priceContainer: {
+    alignItems: 'flex-end',
+  },
+  priceLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginBottom: 4,
+  },
+  price: {
+    fontSize: FONT_SIZES['XL'],
+    fontFamily: FONTS.POPPINS.BOLD,
+    color: COLORS.SUCCESS.MAIN,
+  },
+  priceUnit: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  infoGrid: {
+    flexDirection: 'row',
+    paddingVertical: SPACING.MD,
+    gap: SPACING.SM,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
+  infoItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statusIndicator: {
+    marginBottom: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.SUCCESS.MAIN,
+  },
+  inactiveDot: {
+    backgroundColor: COLORS.TEXT.SECONDARY,
+  },
+  infoValue: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginTop: 4,
+  },
+  infoLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginTop: 2,
+  },
+  descriptionSection: {
+    paddingVertical: SPACING.MD,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER.PRIMARY,
+  },
   sectionTitle: {
-    marginBottom: SPACING.MD,
-    fontSize: 16,
-    // fontWeight: '600',
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+    marginBottom: SPACING.SM,
   },
-  pricingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  description: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    lineHeight: 20,
   },
-  priceItem: {
-    flex: 1,
+  providerSection: {
+    paddingTop: SPACING.MD,
   },
-  dateContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dateItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.SM,
-  },
-  tag: {
+  providerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY.LIGHT,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.XS,
-    borderRadius: BORDER_RADIUS.LG,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statCard: {
+  providerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.BACKGROUND.CARD,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginRight: SPACING.MD,
+  },
+  providerDetails: {
     flex: 1,
   },
-  statValue: {
-    marginVertical: SPACING.XS,
+  providerLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
   },
-  actionContainer: {
+  providerName: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  metricsRow: {
     flexDirection: 'row',
-    padding: SPACING.MD,
-    gap: SPACING.SM,
-    backgroundColor: '#fff',
+    paddingTop: SPACING.MD,
+    gap: SPACING.MD,
+  },
+  metricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  metricLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+    marginBottom: 4,
+  },
+  metricValue: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  bottomCTA: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     borderTopWidth: 1,
     borderTopColor: COLORS.BORDER.PRIMARY,
-  },
-  editButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.PRIMARY.MAIN,
     paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    ...SHADOWS.SM,
-  },
-  deleteButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EF4444',
-    paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    ...SHADOWS.SM,
-  },
-  cancelButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: COLORS.TEXT.PRIMARY,
-    marginBottom: SPACING.XS,
-    marginTop: SPACING.SM,
-  },
-  textInput: {
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
     paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    fontSize: 16,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.PRIMARY,
+    ...SHADOWS.MD,
   },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  editRow: {
+  ctaContent: {
     flexDirection: 'row',
-  },
-  dateInput: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    padding: SPACING.MD,
-    marginHorizontal: SPACING.XS,
-  },
-  tagInputContainer: {
-    flexDirection: 'row',
-    marginBottom: SPACING.SM,
-    gap: SPACING.SM,
-  },
-  addTagButton: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    paddingHorizontal: SPACING.MD,
-    justifyContent: 'center',
-    borderRadius: BORDER_RADIUS.MD,
-  },
-  statusToggleContainer: {
-    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  statusToggle: {
-    paddingHorizontal: SPACING.LG,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MD,
-    backgroundColor: COLORS.BACKGROUND.CARD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
+  ctaPriceLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
   },
-  statusToggleActive: {
+  ctaPrice: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.BOLD,
+    color: COLORS.TEXT.PRIMARY,
+  },
+  ctaPriceUnit: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
+  proceedButton: {
     backgroundColor: COLORS.PRIMARY.MAIN,
-    borderColor: COLORS.PRIMARY.MAIN,
+    paddingHorizontal: SPACING.XL,
+    paddingVertical: SPACING.MD,
+    borderRadius: BORDER_RADIUS.MD,
+    ...SHADOWS.SM,
+  },
+  proceedButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
 });
 
