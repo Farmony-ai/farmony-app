@@ -313,23 +313,26 @@ const AddAddressScreen = () => {
 
     setLoading(true);
     try {
+      // Build address data - userId is passed separately to the service, not in the body
       const addressData: CreateAddressDto = {
-        userId: user.id,
+        userId: user.id, // Used by service to build URL, not sent in body
         addressType: addressTag.toLowerCase(),
         customLabel: addressTag,
         addressLine1,
-        addressLine2,
-        village,
-        tehsil,
-        district,
-        state,
-        pincode,
+        addressLine2: addressLine2 || undefined,
+        village: village || undefined,
+        tehsil: tehsil || undefined,
+        district: district || undefined,
+        state: state || undefined,
+        pincode: pincode || undefined,
         location: {
           type: 'Point',
           coordinates: [regionRef.current.longitude, regionRef.current.latitude]
         },
         isDefault: false,
       };
+
+      console.log('AddAddressScreen - Saving address:', JSON.stringify(addressData, null, 2));
 
       if (isEditMode && editAddress) {
         await AddressService.updateAddress(user.id, editAddress._id, addressData);
@@ -340,7 +343,8 @@ const AddAddressScreen = () => {
       }
       navigation.goBack();
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to save address. Please try again.');
+      console.error('AddAddressScreen - Error saving address:', error?.message || error);
+      Alert.alert('Error', error?.message || 'Failed to save address. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,4 @@
-import {createSlice, createAsyncThunk, PayloadAction} from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../config/api';
 import apiInterceptor from '../../services/apiInterceptor';
@@ -18,7 +18,7 @@ const decodeJwt = (token: string) => {
   try {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
       return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
     return JSON.parse(jsonPayload);
@@ -86,10 +86,10 @@ interface User {
 interface AuthState {
   // Authentication status
   isAuthenticated: boolean;
-  user: User | null; 
+  user: User | null;
   token: string | null;
   refreshToken: string | null;
-  
+
   // Loading states for better UX
   isLoading: boolean;
   isSigningIn: boolean;
@@ -98,19 +98,19 @@ interface AuthState {
   isUpdatingUserVerification: boolean;
   isCreatingProfile: boolean;
   isResettingPassword: boolean; // Added for password reset
-  
+
   // Error handling
   error: string | null;
-  
+
   // OTP verification state
   isOTPRequired: boolean;
   pendingUserPhone: string | null;
   pendingUserId: string | null;
-  
+
   // Authentication flow flags
   isForgotPassword: boolean;
   isOtpLogin: boolean; // Added for OTP login flow
-  
+
   // Screen navigation state
   currentScreen: 'signIn' | 'signUp' | 'otp' | 'authenticated' | 'forgotPassword' | 'otpLogin';
   otpChannel: 'sms' | 'whatsapp' | null;
@@ -122,7 +122,7 @@ const initialState: AuthState = {
   user: null,
   token: null,
   refreshToken: null,
-  
+
   isLoading: true, // Start with loading true to check auth
   isSigningIn: false,
   isSigningUp: false,
@@ -130,15 +130,15 @@ const initialState: AuthState = {
   isUpdatingUserVerification: false,
   isCreatingProfile: false,
   isResettingPassword: false,
-  
+
   error: null,
-  
+
   isOTPRequired: false,
   pendingUserPhone: null,
   pendingUserId: null,
   isForgotPassword: false,
   isOtpLogin: false,
-  
+
   currentScreen: 'signIn',
   otpChannel: null,
 };
@@ -155,7 +155,7 @@ const debugAsyncStorage = async () => {
       'user'
     ];
     const values = await AsyncStorage.multiGet(keys);
-    
+
     console.log('=== AsyncStorage Debug ===');
     values.forEach(([key, value]) => {
       console.log(`${key}: ${value ? value.substring(0, 50) + '...' : 'null'}`);
@@ -169,6 +169,9 @@ const debugAsyncStorage = async () => {
 export const checkAuth = createAsyncThunk('auth/checkAuth', async (_, { rejectWithValue }) => {
   console.log('🔄 checkAuth: Checking authentication status...');
   try {
+    // Wait for Firebase to initialize
+    await firebaseTokenHelper.waitForAuthReady();
+
     const [[, accessToken], [, refreshToken], [, userJson]] = await AsyncStorage.multiGet([
       STORAGE_KEYS.ACCESS_TOKEN,
       STORAGE_KEYS.REFRESH_TOKEN,
@@ -203,7 +206,7 @@ export const registerUser = createAsyncThunk(
       idToken: string; // Firebase ID token from OTP verification
       role?: 'individual' | 'SHG' | 'FPO';
     },
-    {rejectWithValue},
+    { rejectWithValue },
   ) => {
     try {
       console.log('🔄 registerUser: Attempting firebase-login with user...', userData.phone);
@@ -216,7 +219,7 @@ export const registerUser = createAsyncThunk(
 
       const response = await fetch(`${API_BASE_URL}/identity/auth/firebase-login`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           idToken: userData.idToken,
           name: userData.name,
@@ -236,18 +239,22 @@ export const registerUser = createAsyncThunk(
       const result = await response.json();
       console.log('✅ registerUser: firebase-login successful, response:', result);
 
-      // Backend returns: { success, customToken, user, message }
-      if (!result.success || !result.customToken || !result.user) {
+      // Backend returns: { success, user, message }
+      if (!result.success || !result.user) {
         console.error('❌ registerUser: Invalid response format from firebase-login', result);
         return rejectWithValue('Invalid response from server');
       }
 
-      const customToken = result.customToken;
       const user = result.user;
 
-      // Exchange custom token for ID token with RBAC claims
-      console.log('🔄 registerUser: Exchanging custom token for ID token with RBAC claims');
-      const idTokenWithClaims = await firebaseTokenHelper.signInWithCustomToken(customToken);
+      // Force refresh ID token to pick up new RBAC claims set by backend
+      console.log('🔄 registerUser: Refreshing ID token to get new RBAC claims');
+      const idTokenWithClaims = await firebaseTokenHelper.getIdToken(true);
+
+      if (!idTokenWithClaims) {
+        throw new Error('Failed to get refreshed ID token');
+      }
+
       console.log('✅ registerUser: Got ID token with RBAC claims');
 
       // Use the ID token (with RBAC claims) as the access token
@@ -289,7 +296,7 @@ export const loginAndVerifyUser = createAsyncThunk(
   async (credentials: { phone: string; password: string; userId: string }, { rejectWithValue, dispatch }) => {
     try {
       console.log('🔄 loginAndVerifyUser: Attempting login and verification for userId:', credentials.userId);
-      
+
       // Step 1: Log in to get tokens
       const loginResponse = await fetch(`${API_BASE_URL}/identity/auth/login`, {
         method: 'POST',
@@ -307,14 +314,14 @@ export const loginAndVerifyUser = createAsyncThunk(
         console.error('❌ loginAndVerifyUser: Login failed:', errorData);
         return rejectWithValue(errorData.message || 'Login failed after OTP verification');
       }
-      
+
       const loginResult = await loginResponse.json();
-      
+
       // Extract tokens based on response format
       const accessToken = loginResult.access_token || loginResult.token;
       const refreshToken = loginResult.refresh_token || '';
       const expiresIn = loginResult.expires_in || 900;
-      
+
       if (!accessToken) {
         console.error('❌ loginAndVerifyUser: Login did not return a token.');
         return rejectWithValue('Login did not return a token.');
@@ -340,17 +347,17 @@ export const loginAndVerifyUser = createAsyncThunk(
         console.error('❌ loginAndVerifyUser: User verification failed:', errorData);
         return rejectWithValue(errorData.message || 'User verification failed');
       }
-      
+
       console.log('✅ loginAndVerifyUser: User phone verified successfully.');
 
       // Step 3: Get updated user profile using apiInterceptor
       const profileResponse = await apiInterceptor.getProfile(credentials.userId);
-      
+
       if (!profileResponse.success || !profileResponse.data) {
         console.error('❌ Failed to fetch user profile');
         return rejectWithValue('Failed to fetch user profile');
       }
-      
+
       const userProfile = profileResponse.data;
       console.log('✅ loginAndVerifyUser: User profile fetched successfully.', userProfile);
 
@@ -362,11 +369,11 @@ export const loginAndVerifyUser = createAsyncThunk(
         token_type: loginResult.token_type || 'Bearer',
         user: userProfile
       });
-      
+
       // Also save token expiry
       const expiryTime = new Date().getTime() + (expiresIn * 1000);
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
-      
+
       // Save legacy token
       await AsyncStorage.setItem('token', accessToken);
 
@@ -382,7 +389,7 @@ export const loginAndVerifyUser = createAsyncThunk(
 // Async action for user login
 export const signIn = createAsyncThunk(
   'auth/signIn',
-  async (credentials: {emailOrPhone: string; password: string}) => {
+  async (credentials: { emailOrPhone: string; password: string }) => {
     try {
       console.log('🔄 Attempting to sign in user:', credentials.emailOrPhone);
 
@@ -403,28 +410,28 @@ export const signIn = createAsyncThunk(
         },
         body: JSON.stringify(requestBody),
       });
-      
+
       console.log('📡 Response status:', response.status);
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         console.error('❌ Login failed:', errorData);
         throw new Error(errorData.message || 'Login failed');
       }
-      
+
       const result = await response.json();
       console.log('✅ Login successful:', result);
-      
+
       // Handle both new and legacy response formats
       const accessToken = result.access_token || result.token;
       const refreshToken = result.refresh_token || '';
       const expiresIn = result.expires_in || 900;
       const user = result.user;
-      
+
       if (!accessToken || !user) {
         throw new Error('Invalid login response format');
       }
-      
+
       // Use apiInterceptor to handle token storage
       await apiInterceptor.handleLoginResponse({
         access_token: accessToken,
@@ -433,14 +440,14 @@ export const signIn = createAsyncThunk(
         token_type: result.token_type || 'Bearer',
         user: user
       });
-      
+
       // Also save token expiry for our auth slice
       const expiryTime = new Date().getTime() + (expiresIn * 1000);
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
-      
+
       // Save legacy token for backward compatibility
       await AsyncStorage.setItem('token', accessToken);
-      
+
       return {
         access_token: accessToken,
         refresh_token: refreshToken,
@@ -457,12 +464,12 @@ export const signIn = createAsyncThunk(
 // Async action for OTP verification
 export const verifyOTP = createAsyncThunk(
   'auth/verifyOTP',
-  async (otpData: {phone: string; otp: string; password?: string; userId?: string | null}, { getState, dispatch }) => {
+  async (otpData: { phone: string; otp: string; password?: string; userId?: string | null }, { getState, dispatch }) => {
     try {
       console.log('🔄 Verifying OTP for phone:', otpData.phone);
-      
+
       const state = getState() as { auth: AuthState };
-      
+
       // For forgot password flow, we just verify the OTP
       if (state.auth.isForgotPassword) {
         console.log('✅ OTP verification successful for forgot password flow');
@@ -472,16 +479,16 @@ export const verifyOTP = createAsyncThunk(
           requiresPasswordReset: true,
         };
       }
-      
+
       // For registration flow
       const pendingUserId = otpData.userId || state.auth.pendingUserId;
-      
+
       if (!pendingUserId || !otpData.password) {
         throw new Error('No pending user found. Please restart the authentication process.');
       }
-      
+
       console.log('✅ OTP verification successful, marking user as verified');
-      
+
       // Dispatch loginAndVerifyUser
       dispatch(loginAndVerifyUser({ phone: otpData.phone, password: otpData.password, userId: pendingUserId }));
 
@@ -524,18 +531,22 @@ export const otpLogin = createAsyncThunk(
       const data = await response.json();
       console.log('✅ Firebase login success:', data);
 
-      // Backend returns customToken and user
-      const customToken = data.customToken;
+      // Backend returns user
       const user = data.user;
 
-      if (!customToken || !user) {
+      if (!user) {
         throw new Error('Invalid Firebase login response');
       }
 
-      // Exchange custom token for ID token with RBAC claims
-      console.log('🔄 Exchanging custom token for ID token with RBAC claims');
-      const idTokenWithClaims = await firebaseTokenHelper.signInWithCustomToken(customToken);
-      console.log('✅ Got ID token with RBAC claims');
+      // Force refresh ID token to pick up new RBAC claims set by backend
+      console.log('🔄 otpLogin: Refreshing ID token to get new RBAC claims');
+      const idTokenWithClaims = await firebaseTokenHelper.getIdToken(true);
+
+      if (!idTokenWithClaims) {
+        throw new Error('Failed to get refreshed ID token');
+      }
+
+      console.log('✅ otpLogin: Got ID token with RBAC claims');
 
       // Use the ID token (with RBAC claims) as the access token
       const accessToken = idTokenWithClaims;
@@ -558,7 +569,6 @@ export const otpLogin = createAsyncThunk(
 
       return {
         token: accessToken,
-        customToken,
         refreshToken: '',
         user,
       };
@@ -575,7 +585,7 @@ export const resetPassword = createAsyncThunk(
   async ({ phone, newPassword }: { phone: string; newPassword: string }, { rejectWithValue }) => {
     try {
       console.log('🔄 Attempting to reset password for phone:', phone);
-      
+
       const response = await fetch(`${API_BASE_URL}/identity/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -584,20 +594,20 @@ export const resetPassword = createAsyncThunk(
           newPassword,
         }),
       });
-      
+
       console.log('📡 Reset password response status:', response.status);
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         console.error('❌ Password reset failed:', errorData);
         return rejectWithValue(errorData.message || 'Failed to reset password');
       }
-      
+
       const result = await response.json();
       console.log('✅ Password reset successful:', result);
-      
+
       // Don't automatically log in - just return success
-      return { 
+      return {
         success: true,
         message: result.message || 'Password reset successfully'
       };
@@ -617,7 +627,7 @@ const authSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
-    
+
     // Navigate between auth screens
     setCurrentScreen: (state, action) => {
       state.currentScreen = action.payload;
@@ -627,12 +637,12 @@ const authSlice = createSlice({
     setIsOtpLogin: (state, action: PayloadAction<boolean>) => {
       state.isOtpLogin = action.payload;
     },
-    
+
     // Set pending user phone - NEW
     setPendingUserPhone: (state, action: PayloadAction<string>) => {
       state.pendingUserPhone = action.payload;
     },
-    
+
     // Set forgot password flag - NEW
     setIsForgotPassword: (state, action: PayloadAction<boolean>) => {
       state.isForgotPassword = action.payload;
@@ -651,7 +661,7 @@ const authSlice = createSlice({
       state.isForgotPassword = false;
       state.pendingUserPhone = null;
     },
-    
+
     // Update user verification status
     updateUserVerification: (state, action) => {
       if (state.user) {
@@ -659,7 +669,7 @@ const authSlice = createSlice({
       }
       state.isUpdatingUserVerification = false;
     },
-    
+
     // Logout user completely
     logout: (state) => {
       state.isAuthenticated = false;
@@ -676,7 +686,7 @@ const authSlice = createSlice({
       // Use apiInterceptor's logout method which handles clearing tokens
       apiInterceptor.logout();
     },
-    
+
     // Reset all loading states
     resetLoadingStates: (state) => {
       state.isLoading = false;
@@ -691,19 +701,19 @@ const authSlice = createSlice({
     setOtpChannel: (state, action: PayloadAction<'sms' | 'whatsapp' | null>) => {
       state.otpChannel = action.payload;
     },
-    
+
     // Update tokens (useful when refresh happens in background)
     updateTokens: (state, action: PayloadAction<{ accessToken: string; refreshToken: string }>) => {
       state.token = action.payload.accessToken;
       state.refreshToken = action.payload.refreshToken;
     },
-    
+
     // Update the in-memory user object (used after profile/preference edits)
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
     },
   },
-  
+
   extraReducers: (builder) => {
     // Check Auth reducers
     builder
@@ -742,7 +752,7 @@ const authSlice = createSlice({
       })
       .addCase(registerUser.fulfilled, (state, action) => {
         state.isSigningUp = false;
-        
+
         if (action.payload.autoLoggedIn && action.payload.token) {
           // New register endpoint that returns tokens
           state.isAuthenticated = true;
@@ -758,14 +768,14 @@ const authSlice = createSlice({
           state.currentScreen = 'otp';
           state.isOTPRequired = true;
         }
-        
+
         state.error = null;
       })
       .addCase(registerUser.rejected, (state, action) => {
         state.isSigningUp = false;
         state.error = action.payload as string || 'Registration failed';
       });
-    
+
     // Sign In reducers
     builder
       .addCase(signIn.pending, (state) => {
@@ -775,21 +785,21 @@ const authSlice = createSlice({
       .addCase(signIn.fulfilled, (state, action) => {
         state.isSigningIn = false;
         console.log('✅ signIn.fulfilled: Payload received:', action.payload);
-        
+
         state.isAuthenticated = true;
         state.user = action.payload.user;
         state.token = action.payload.access_token;
         state.refreshToken = action.payload.refresh_token || null;
         state.currentScreen = 'authenticated';
         console.log('✅ signIn.fulfilled: Login successful, auth state set.');
-        
+
         state.error = null;
       })
       .addCase(signIn.rejected, (state, action) => {
         state.isSigningIn = false;
         state.error = action.error.message || 'Login failed';
       });
-    
+
     // OTP Verification reducers
     builder
       .addCase(verifyOTP.pending, (state) => {
@@ -798,7 +808,7 @@ const authSlice = createSlice({
       })
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.isVerifyingOTP = false;
-        
+
         if (action.payload.requiresPasswordReset) {
           // For forgot password flow
           console.log('✅ OTP verified for password reset');
@@ -813,7 +823,7 @@ const authSlice = createSlice({
           state.pendingUserId = null;
           state.currentScreen = 'authenticated';
         }
-        
+
         state.error = null;
       })
       .addCase(verifyOTP.rejected, (state, action) => {
@@ -866,7 +876,7 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.error = action.error.message || 'OTP login failed';
       });
-    
+
     // Reset Password reducers - NEW
     builder
       .addCase(resetPassword.pending, (state) => {
@@ -888,12 +898,12 @@ const authSlice = createSlice({
 });
 
 export const {
-  clearError, 
-  setCurrentScreen, 
-  logout, 
-  resetLoadingStates, 
-  startForgotPassword, 
-  finishForgotPassword, 
+  clearError,
+  setCurrentScreen,
+  logout,
+  resetLoadingStates,
+  startForgotPassword,
+  finishForgotPassword,
   setOtpChannel,
   updateTokens,
   setUser,

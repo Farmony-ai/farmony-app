@@ -85,17 +85,31 @@ class AddressService {
         throw new Error('User ID is required');
       }
 
-      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/users/${dto.userId}/addresses`, {
+      // Extract userId for URL, don't send it in the body (backend gets it from URL param)
+      const { userId, ...bodyData } = dto;
+
+      console.log('AddressService.createAddress - Sending request to:', `/identity/users/${userId}/addresses`);
+      console.log('AddressService.createAddress - Body:', JSON.stringify(bodyData, null, 2));
+
+      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/identity/users/${userId}/addresses`, {
         method: 'POST',
-        body: JSON.stringify(dto),
+        body: JSON.stringify(bodyData),
       });
 
+      console.log('AddressService.createAddress - Response:', JSON.stringify(result, null, 2));
+
       if (!result.success || !result.data) {
+        console.error('AddressService.createAddress - Failed:', result.error);
         throw new Error(result.error || 'Failed to create address');
       }
 
-      // Extract address from response
-      const address = result.data.address;
+      // Extract address from response - handle both { address: {...} } and direct object
+      const address = result.data.address || result.data;
+
+      if (!address || !address._id) {
+        console.error('AddressService.createAddress - Invalid address response:', result.data);
+        throw new Error('Invalid address response from server');
+      }
 
       // Transform to frontend format
       return {
@@ -124,6 +138,7 @@ class AddressService {
         updatedAt: address.updatedAt,
       };
     } catch (error: any) {
+      console.error('AddressService.createAddress - Error:', error?.message || error);
       throw error;
     }
   }
@@ -131,20 +146,19 @@ class AddressService {
   async getUserAddresses(userId: string): Promise<Address[]> {
     try {
       // Fetch addresses from the correct endpoint
-      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/users/${userId}/addresses`, {
+      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/identity/users/${userId}/addresses`, {
         method: 'GET',
       });
 
       if (!result.success || !result.data) {
-        // If no addresses found, return empty array
-        if (result.error && result.error.includes('404')) {
-          return [];
-        }
-        throw new Error(result.error || 'Failed to fetch addresses');
+        // Return empty array if no addresses found (not an error state)
+        return [];
       }
 
-      // Extract addresses from response
-      const addresses: Address[] = result.data.addresses || [];
+      // Extract addresses from response - handle both array and object with addresses property
+      const addresses: Address[] = Array.isArray(result.data)
+        ? result.data
+        : (result.data.addresses || []);
 
       // Transform backend address format to frontend format
       return addresses.map((addr: any) => ({
@@ -173,17 +187,15 @@ class AddressService {
         updatedAt: addr.updatedAt,
       }));
     } catch (error: any) {
-      // Return empty array instead of throwing for 404 errors
-      if (error?.message?.includes('404') || error?.message?.includes('Not Found')) {
-        return [];
-      }
-      throw error;
+      // Return empty array for any error - the user just has no addresses yet
+      console.log('getUserAddresses error (returning empty array):', error?.message);
+      return [];
     }
   }
 
   async getAddressById(userId: string, addressId: string): Promise<Address> {
     try {
-      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/users/${userId}/addresses/${addressId}`, {
+      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/identity/users/${userId}/addresses/${addressId}`, {
         method: 'GET',
       });
 
@@ -226,7 +238,7 @@ class AddressService {
 
   async updateAddress(userId: string, addressId: string, dto: UpdateAddressDto): Promise<Address> {
     try {
-      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/users/${userId}/addresses/${addressId}`, {
+      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/identity/users/${userId}/addresses/${addressId}`, {
         method: 'PATCH',
         body: JSON.stringify(dto),
       });
@@ -270,7 +282,7 @@ class AddressService {
 
   async deleteAddress(userId: string, addressId: string): Promise<void> {
     try {
-      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/users/${userId}/addresses/${addressId}`, {
+      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/identity/users/${userId}/addresses/${addressId}`, {
         method: 'DELETE',
       });
 
@@ -287,7 +299,7 @@ class AddressService {
     try {
       // Backend has UsersService.setDefaultAddress(userId, addressId) but it's not exposed via REST API
       // TODO: Backend needs to implement PATCH /users/:userId/default-address endpoint
-      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/users/${userId}/default-address`, {
+      const result = await apiInterceptor.makeAuthenticatedRequest<any>(`/identity/users/${userId}/default-address`, {
         method: 'PATCH',
         body: JSON.stringify({ addressId }),
       });

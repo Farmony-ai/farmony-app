@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import {
@@ -20,9 +20,10 @@ import Text from '../components/Text';
 import { COLORS, SHADOWS, FONTS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import CatalogueService, { Category, SubCategory } from '../services/CatalogueService';
 import ListingService, { CreateListingPayload } from '../services/ListingService';
+import AddressService, { Address } from '../services/AddressService';
 import categoryIcons from '../utils/icons';
 import MultiImagePicker from '../components/MultiImagePicker';
 import { ImagePickerResult } from '../services/ImagePickerService';
@@ -57,6 +58,12 @@ const CreateListingScreen = () => {
   const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
   const [availableSubCategories, setAvailableSubCategories] = useState<SubCategory[]>([]);
   const [isDataReady, setIsDataReady] = useState(false);
+
+  // Address state
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const [showAllAddresses, setShowAllAddresses] = useState(false);
 
   const { user, token } = useSelector((state: RootState) => state.auth);
 
@@ -104,7 +111,7 @@ const CreateListingScreen = () => {
 
   useEffect(() => {
     Animated.timing(progressAnim, {
-      toValue: (currentStep - 1) / 3,
+      toValue: (currentStep - 1) / 4,
       duration: 300,
       useNativeDriver: false,
     }).start();
@@ -156,6 +163,44 @@ const CreateListingScreen = () => {
 
     initializeData();
   }, [user, isEditMode, listingId, token]);
+
+  // Fetch addresses when screen is focused
+  const fetchAddresses = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoadingAddresses(true);
+      const userAddresses = await AddressService.getUserAddresses(user.id);
+      setAddresses(userAddresses);
+
+      // Set default address as selected if not already selected
+      if (!selectedAddress) {
+        const defaultAddress = userAddresses.find(addr => addr.isDefault);
+        setSelectedAddress(defaultAddress || userAddresses[0] || null);
+      }
+    } catch (error) {
+      console.error('Error fetching addresses:', error);
+    } finally {
+      setLoadingAddresses(false);
+    }
+  }, [user?.id, selectedAddress]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAddresses();
+    }, [fetchAddresses])
+  );
+
+  // Handle address selection from route params (when returning from AddAddress)
+  useEffect(() => {
+    const selectedAddressId = route.params?.selectedAddressId;
+    if (selectedAddressId && addresses.length > 0) {
+      const address = addresses.find(addr => addr._id === selectedAddressId);
+      if (address) {
+        setSelectedAddress(address);
+      }
+    }
+  }, [route.params?.selectedAddressId, addresses]);
 
   const fetchSubCategories = async (categoryId: string) => {
     try {
@@ -219,6 +264,8 @@ const CreateListingScreen = () => {
         return !!formData.price && !!formData.unitOfMeasure && !!formData.minimumOrder;
       case 4:
         return formData.photos.length > 0;  // Only photos are required, description is optional
+      case 5:
+        return true; // Address is optional - backend uses default if not selected
       default:
         return true;
     }
@@ -226,13 +273,28 @@ const CreateListingScreen = () => {
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      if (currentStep < 4) {
+      if (currentStep < 5) {
         setCurrentStep(currentStep + 1);
       } else {
         handleSubmit();
       }
     } else {
       Alert.alert('Required Fields', 'Please complete all required fields in this step.');
+    }
+  };
+
+  const handleAddNewAddress = () => {
+    navigation.navigate('AddAddress' as never, {
+      fromCreateListing: true,
+    } as never);
+  };
+
+  const getAddressIcon = (tag: string | undefined) => {
+    switch (tag) {
+      case 'home': return 'home-outline';
+      case 'work': return 'business-outline';
+      case 'farm': return 'leaf-outline';
+      default: return 'location-outline';
     }
   };
 
@@ -266,6 +328,8 @@ const CreateListingScreen = () => {
         // Pass mapped names if found; these are optional in the payload
         ...(selectedCategoryName ? { category: selectedCategoryName } : {}),
         ...(selectedSubCategoryName ? { subcategory: selectedSubCategoryName } : {}),
+        // Include addressId if an address is selected (backend will use this for location)
+        ...(selectedAddress?._id ? { addressId: selectedAddress._id } : {}),
         photos: formData.photos,
         coordinates: formData.coordinates,
         price: parseFloat(formData.price),
@@ -279,12 +343,12 @@ const CreateListingScreen = () => {
       };
 
       if (isEditMode) {
-        await ListingService.updateListing(listingId, payload);
+        await ListingService.updateListing(listingId, payload, token);
         Alert.alert('Success', 'Listing updated successfully!', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       } else {
-        await ListingService.createListing(payload);
+        await ListingService.createListing(payload, token);
         Alert.alert('Success', 'Listing created successfully!', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
@@ -609,6 +673,140 @@ const CreateListingScreen = () => {
     </Animated.View>
   );
 
+  // Render Step 5: Service Location
+  const renderStep5 = () => (
+    <Animated.View style={[styles.stepContent, {
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }]
+    }]}>
+      <View style={styles.stepHeader}>
+        <Text style={styles.stepNumber}>05</Text>
+        <View style={styles.stepTitleContainer}>
+          <Text style={styles.stepTitle}>Service Location</Text>
+          <Text style={styles.stepSubtitle}>Where will you provide this service?</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        style={styles.formSection}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+      >
+        {loadingAddresses ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={COLORS.PRIMARY.MAIN} />
+            <Text style={styles.loadingText}>Loading addresses...</Text>
+          </View>
+        ) : addresses.length > 0 ? (
+          <>
+            {/* Selected Address - Compact */}
+            {selectedAddress && (
+              <TouchableOpacity
+                style={styles.compactAddressCard}
+                onPress={() => setShowAllAddresses(!showAllAddresses)}
+              >
+                <View style={styles.compactAddressLeft}>
+                  <Ionicons
+                    name={getAddressIcon(selectedAddress.tag) as any}
+                    size={18}
+                    color={COLORS.PRIMARY.MAIN}
+                  />
+                </View>
+                <View style={styles.compactAddressContent}>
+                  <Text style={styles.compactAddressTag}>
+                    {(selectedAddress.tag || 'Address').charAt(0).toUpperCase() + (selectedAddress.tag || 'address').slice(1)}
+                    {selectedAddress.isDefault && ' • Default'}
+                  </Text>
+                  <Text style={styles.compactAddressText} numberOfLines={2}>
+                    {[
+                      selectedAddress.addressLine1,
+                      selectedAddress.addressLine2,
+                      selectedAddress.village,
+                      selectedAddress.district,
+                      selectedAddress.pincode
+                    ].filter(Boolean).join(', ')}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={showAllAddresses ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={COLORS.TEXT.SECONDARY}
+                />
+              </TouchableOpacity>
+            )}
+
+            {/* Other Addresses (Expandable) */}
+            {showAllAddresses && addresses.length > 0 && (
+              <View style={styles.expandedAddresses}>
+                {addresses.filter(addr => addr._id !== selectedAddress?._id).map((address) => (
+                  <TouchableOpacity
+                    key={address._id}
+                    style={styles.compactAddressOption}
+                    onPress={() => {
+                      setSelectedAddress(address);
+                      setShowAllAddresses(false);
+                    }}
+                  >
+                    <View style={styles.radioButton}>
+                      <View style={styles.radioOuter} />
+                    </View>
+                    <View style={styles.compactAddressContent}>
+                      <Text style={styles.compactAddressTag}>
+                        {(address.tag || 'Address').charAt(0).toUpperCase() + (address.tag || 'address').slice(1)}
+                      </Text>
+                      <Text style={styles.compactAddressText} numberOfLines={2}>
+                        {[
+                          address.addressLine1,
+                          address.village,
+                          address.district,
+                          address.pincode
+                        ].filter(Boolean).join(', ')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+
+                {/* Add New Address Option */}
+                <TouchableOpacity
+                  style={styles.compactAddNewButton}
+                  onPress={handleAddNewAddress}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color={COLORS.PRIMARY.MAIN} />
+                  <Text style={styles.compactAddNewText}>Add New Address</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Info Card */}
+            <View style={[styles.infoCard, { marginTop: SPACING.LG }]}>
+              <Ionicons name="information-circle" size={20} color={COLORS.PRIMARY.MAIN} />
+              <Text style={styles.infoText}>
+                This address will be used as your service location. If you skip this step, your default address will be used.
+              </Text>
+            </View>
+          </>
+        ) : (
+          <View>
+            <TouchableOpacity
+              style={styles.emptyAddressButton}
+              onPress={handleAddNewAddress}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={COLORS.PRIMARY.MAIN} />
+              <Text style={styles.emptyAddressText}>Add Your Address</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.infoCard, { marginTop: SPACING.LG }]}>
+              <Ionicons name="information-circle" size={20} color={COLORS.PRIMARY.MAIN} />
+              <Text style={styles.infoText}>
+                No addresses found. Your default profile address will be used as the service location.
+              </Text>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+    </Animated.View>
+  );
+
   if (!isDataReady) {
     return (
       <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
@@ -652,7 +850,7 @@ const CreateListingScreen = () => {
             />
           </View>
           <View style={styles.progressSteps}>
-            {[1, 2, 3, 4].map((step) => (
+            {[1, 2, 3, 4, 5].map((step) => (
               <View
                 key={step}
                 style={[
@@ -692,6 +890,7 @@ const CreateListingScreen = () => {
             {currentStep === 2 && renderStep2()}
             {currentStep === 3 && renderStep3()}
             {currentStep === 4 && renderStep4()}
+            {currentStep === 5 && renderStep5()}
           </Animated.View>
         </View>
 
@@ -711,9 +910,9 @@ const CreateListingScreen = () => {
             ) : (
               <>
                 <Text style={styles.primaryButtonText}>
-                  {currentStep === 4 ? (isEditMode ? 'Update Listing' : 'Create Listing') : 'Continue'}
+                  {currentStep === 5 ? (isEditMode ? 'Update Listing' : 'Create Listing') : 'Continue'}
                 </Text>
-                {currentStep < 4 && (
+                {currentStep < 5 && (
                   <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
                 )}
               </>
@@ -1171,6 +1370,101 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: FONTS.POPPINS.MEDIUM,
     color: COLORS.TEXT.SECONDARY,
+  },
+
+  // Address Selection Styles
+  compactAddressCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.SM,
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+    borderRadius: BORDER_RADIUS.MD,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
+  },
+  compactAddressLeft: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.SM,
+  },
+  compactAddressContent: {
+    flex: 1,
+    marginRight: SPACING.SM,
+  },
+  compactAddressTag: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+    marginBottom: 2,
+  },
+  compactAddressText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.PRIMARY,
+    lineHeight: 16,
+  },
+  expandedAddresses: {
+    marginTop: SPACING.SM,
+    paddingTop: SPACING.SM,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER.PRIMARY,
+  },
+  compactAddressOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: SPACING.SM,
+    marginBottom: SPACING.XS,
+    borderRadius: BORDER_RADIUS.SM,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
+  radioButton: {
+    marginRight: SPACING.SM,
+    paddingTop: 2,
+  },
+  radioOuter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: COLORS.BORDER.PRIMARY,
+  },
+  compactAddNewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.SM,
+    marginTop: SPACING.XS,
+    borderRadius: BORDER_RADIUS.SM,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
+    borderStyle: 'dashed',
+  },
+  compactAddNewText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+    marginLeft: SPACING.XS,
+  },
+  emptyAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.MD,
+    borderRadius: BORDER_RADIUS.MD,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY.MAIN,
+    borderStyle: 'dashed',
+    backgroundColor: COLORS.PRIMARY.LIGHT,
+  },
+  emptyAddressText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    color: COLORS.PRIMARY.MAIN,
+    marginLeft: SPACING.SM,
   },
 });
 

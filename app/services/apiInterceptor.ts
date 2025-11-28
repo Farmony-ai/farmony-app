@@ -37,13 +37,13 @@ class ApiInterceptor {
         AsyncStorage.getItem('access_token'),
         AsyncStorage.getItem('refresh_token')
       ]);
-      
+
       // Fallback to legacy token if new one doesn't exist
       if (!accessToken) {
         const legacyToken = await AsyncStorage.getItem('token');
         return { accessToken: legacyToken, refreshToken };
       }
-      
+
       return { accessToken, refreshToken };
     } catch (error) {
       console.error('Failed to get stored tokens:', error);
@@ -80,17 +80,31 @@ class ApiInterceptor {
     }
   }
 
-   private async refreshAuthToken(refreshToken: string): Promise<string | null> {
+  private async refreshAuthToken(refreshToken: string): Promise<string | null> {
     if (this.isRefreshing) {
+      console.log('🔄 [ApiInterceptor] Already refreshing, waiting for result...');
+      // Add timeout to prevent infinite waiting
       return new Promise((resolve) => {
-        this.subscribeToRefresh((token) => resolve(token));
+        const timeout = setTimeout(() => {
+          console.warn('⚠️ [ApiInterceptor] Refresh wait timeout, resetting state');
+          this.isRefreshing = false;
+          resolve(null);
+        }, 10000); // 10 second timeout
+
+        this.subscribeToRefresh((token) => {
+          clearTimeout(timeout);
+          resolve(token);
+        });
       });
     }
 
     this.isRefreshing = true;
 
     try {
-      console.log('🔄 Attempting token refresh...');
+      console.log('🔄 [ApiInterceptor] Attempting token refresh via Firebase...');
+
+      // Ensure Firebase Auth is initialized
+      await firebaseTokenHelper.waitForAuthReady();
 
       // Use Firebase SDK to refresh the ID token
       // This is the recommended way for Firebase Authentication
@@ -100,17 +114,17 @@ class ApiInterceptor {
         await this.saveTokens(newIdToken, refreshToken, 3600); // Firebase tokens expire in 1 hour
         this.notifyRefreshSubscribers(newIdToken);
         this.isRefreshing = false;
-        console.log('✅ Token refreshed successfully via Firebase SDK');
+        console.log('✅ [ApiInterceptor] Token refreshed successfully via Firebase SDK');
         return newIdToken;
       } else {
-        console.error('❌ Token refresh failed - no Firebase user');
-        await this.clearTokens();
+        console.error('❌ [ApiInterceptor] Token refresh failed - no Firebase user');
+        this.notifyRefreshSubscribers(''); // Notify with empty to unblock waiters
         this.isRefreshing = false;
         return null;
       }
     } catch (error) {
-      console.error('❌ Token refresh failed:', error);
-      await this.clearTokens();
+      console.error('❌ [ApiInterceptor] Token refresh failed:', error);
+      this.notifyRefreshSubscribers(''); // Notify with empty to unblock waiters
       this.isRefreshing = false;
       return null;
     }
@@ -177,19 +191,30 @@ class ApiInterceptor {
       if (response.ok) {
         return { success: true, data };
       } else if (response.status === 401 && retryCount === 0) {
-        console.log('🔄 Token expired, attempting refresh...');
-        const { refreshToken } = await this.getStoredTokens();
+        console.log('🔄 [ApiInterceptor] Got 401, attempting token refresh...');
 
-        if (refreshToken) {
-          const newAccessToken = await this.refreshAuthToken(refreshToken);
+        // Wait for Firebase Auth to initialize to know if we can refresh via SDK
+        await firebaseTokenHelper.waitForAuthReady();
+
+        const { refreshToken } = await this.getStoredTokens();
+        const isFirebaseAuthenticated = firebaseTokenHelper.isAuthenticated();
+
+        console.log('🔄 [ApiInterceptor] Refresh token available:', !!refreshToken, 'Firebase Auth:', isFirebaseAuthenticated);
+
+        // Check if refreshToken is not null OR if we have an authenticated Firebase user
+        if (refreshToken !== null || isFirebaseAuthenticated) {
+          const newAccessToken = await this.refreshAuthToken(refreshToken || '');
+          console.log('🔄 [ApiInterceptor] New access token received:', !!newAccessToken);
 
           if (newAccessToken) {
             // Retry the request with new token
+            console.log('🔄 [ApiInterceptor] Retrying request with new token...');
             return this.makeAuthenticatedRequest<T>(endpoint, options, 1); // Increment retryCount
           }
         }
 
         // Refresh failed or no refresh token, return error
+        console.error('❌ [ApiInterceptor] Authentication failed - no valid token');
         return { success: false, error: 'Authentication failed' };
       } else {
         const errorMessage = data?.message || (typeof data === 'string' ? data : 'An error occurred');
@@ -220,14 +245,14 @@ class ApiInterceptor {
   // Validate token - Fixed endpoint
   async validateToken(): Promise<{ valid: boolean; user?: any }> {
     try {
-      const result = await this.makeAuthenticatedRequest<any>('/auth/verify-token', {
+      const result = await this.makeAuthenticatedRequest<any>('/identity/auth/verify-token', {
         method: 'GET', // Changed to GET based on your backend
       });
 
       if (result.success && result.data) {
-        return { 
-          valid: result.data.valid || true, 
-          user: result.data.user || result.data 
+        return {
+          valid: result.data.valid || true,
+          user: result.data.user || result.data
         };
       } else {
         return { valid: false };
@@ -242,7 +267,7 @@ class ApiInterceptor {
   async logout(): Promise<void> {
     try {
       // Call backend logout endpoint to revoke Firebase refresh tokens
-      await this.makeAuthenticatedRequest('/auth/logout', {
+      await this.makeAuthenticatedRequest('/identity/auth/logout', {
         method: 'POST',
       });
     } catch (error) {

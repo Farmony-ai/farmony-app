@@ -16,6 +16,29 @@ import './firebase'; // Ensure Firebase is initialized
 
 class FirebaseTokenHelper {
   private readonly auth = getAuth();
+  private initialized = false;
+  private initPromise: Promise<void>;
+
+  constructor() {
+    this.initPromise = new Promise((resolve) => {
+      const unsubscribe = this.auth.onAuthStateChanged((user) => {
+        this.initialized = true;
+        console.log('✅ [FirebaseTokenHelper] Auth state initialized. User:', user ? user.uid : 'null');
+        resolve();
+        unsubscribe(); // We only need to know when it's *first* initialized
+      });
+    });
+  }
+
+  /**
+   * Wait for Firebase Auth to initialize
+   */
+  async waitForAuthReady(): Promise<void> {
+    if (this.initialized) return;
+    console.log('⏳ [FirebaseTokenHelper] Waiting for auth initialization...');
+    await this.initPromise;
+    console.log('✅ [FirebaseTokenHelper] Auth initialization complete');
+  }
 
   /**
    * Exchange a custom token (received from backend) for a Firebase ID token
