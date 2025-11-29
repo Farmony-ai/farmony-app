@@ -57,10 +57,10 @@ interface PendingRequestCardProps {
 const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAccept, onDecline }) => {
   const serviceDate = booking.serviceStartDate
     ? new Date(booking.serviceStartDate).toLocaleDateString('en-IN', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-      })
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    })
     : 'Date TBD';
 
   // Helper: time since request created
@@ -98,9 +98,9 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
         'per_kg': '/kg',
         'per_unit': '/unit'
       };
-      
+
       const displayUnit = unitMap[booking.unitOfMeasure] || '';
-      
+
       if (booking.quantity && booking.quantity > 1) {
         return `${booking.quantity}${displayUnit}`;
       }
@@ -118,7 +118,7 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
         ) : (
           <View style={styles.thumbnailPlaceholder} />
         )}
-        
+
         {/* Time Since Badge - Left */}
         <View style={styles.timeOverlay}>
           <Text style={styles.timeOverlayText}>{getTimeSince(booking.createdAt)}</Text>
@@ -143,11 +143,11 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
             <Text style={styles.title}>{booking.listing?.title || 'Service'}</Text>
             <Text style={styles.customer}>{booking.seeker?.name || 'Customer'}</Text>
           </View>
-          
+
           {/* Price with inline unit */}
           <View style={styles.priceContainer}>
             <Text style={styles.price}>
-              ₹{booking.totalAmount}
+              {booking.totalAmount > 0 ? `₹${booking.totalAmount}` : 'Quote'}
               <Text style={styles.unit}>{getUnitText()}</Text>
             </Text>
           </View>
@@ -257,53 +257,53 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginLeft: 4,
   },
-  content: { 
+  content: {
     padding: 20,
   },
-  headerRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 16,
   },
-  title: { 
-    fontSize: 16, 
-    fontFamily: FONTS.POPPINS.SEMIBOLD, 
+  title: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: '#000000',
     marginBottom: 4,
   },
-  customer: { 
-    fontSize: 14, 
-    fontFamily: FONTS.POPPINS.REGULAR, 
+  customer: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: '#666666',
   },
   priceContainer: {
     alignItems: 'flex-end',
   },
-  price: { 
-    fontSize: 16, 
-    fontFamily: FONTS.POPPINS.MEDIUM, 
+  price: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: '#000000',
   },
-  unit: { 
-    fontSize: 14, 
+  unit: {
+    fontSize: 14,
     color: '#666666',
     fontFamily: FONTS.POPPINS.MEDIUM,
   },
-  infoRow: { 
-    flexDirection: 'row', 
+  infoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
-  infoText: { 
-    fontSize: 13, 
-    color: '#666666', 
+  infoText: {
+    fontSize: 13,
+    color: '#666666',
     marginLeft: 8,
     flex: 1,
     fontFamily: FONTS.POPPINS.REGULAR,
   },
-  actions: { 
-    flexDirection: 'row', 
+  actions: {
+    flexDirection: 'row',
     gap: 12,
     marginTop: 10,
   },
@@ -314,9 +314,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  acceptText: { 
-    color: '#FFFFFF', 
-    fontSize: 14, 
+  acceptText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     letterSpacing: 0.3,
   },
@@ -327,9 +327,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  declineText: { 
-    color: '#666666', 
-    fontSize: 14, 
+  declineText: {
+    color: '#666666',
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     letterSpacing: 0.3,
   },
