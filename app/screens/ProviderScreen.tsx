@@ -17,7 +17,7 @@ import Text from '../components/Text';
 import { COLORS, SHADOWS, FONTS } from '../utils';
 import { scaleFontSize, scaleSize } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ProviderService, { ProviderDashboardResponse } from '../services/ProviderService';
@@ -41,6 +41,7 @@ const MAX_VISIBLE_CARDS = 3;
 
 const ProviderScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { user } = useSelector((state: RootState) => state.auth);
   const [dashboard, setDashboard] = useState<ProviderDashboardResponse | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -215,6 +216,15 @@ const ProviderScreen = () => {
   useEffect(() => {
     fetchDashboard();
   }, [user?.id]);
+
+  // Refresh when navigated back with refresh param
+  useEffect(() => {
+    if (route.params?.refresh) {
+      fetchDashboard();
+      // Clear the param to prevent re-fetching on subsequent renders
+      navigation.setParams({ refresh: undefined });
+    }
+  }, [route.params?.refresh]);
 
   const onRefresh = () => fetchDashboard(true);
 
