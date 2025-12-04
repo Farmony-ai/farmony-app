@@ -15,3 +15,4 @@ export { default as CreateListingScreen } from '../screens/CreateListingScreen';
 export { default as ProviderBookingsScreen } from '../screens/ProviderBookingsScreen';
 export { default as ProviderScreen } from '../screens/ProviderScreen';
 export { default as MyListingsScreen } from '../screens/MyListingsScreen';
+export { default as ServiceRequestDetailScreen } from '../screens/ServiceRequestDetailScreen';

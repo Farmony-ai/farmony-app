@@ -18,6 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import BookingService, { Booking, BookingsResponse } from '../services/BookingService';
 import ServiceRequestService, { ServiceRequest } from '../services/ServiceRequestService';
+import ListingService from '../services/ListingService';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { canTransition, setOrderStatus } from '../services/orderStatus';
@@ -42,6 +43,7 @@ const ProviderBookingsScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [processingAction, setProcessingAction] = useState<'accept' | 'cancel' | null>(null);
+  const [providerListings, setProviderListings] = useState<any[]>([]);
 
   // Accept modal state
   const [showAcceptModal, setShowAcceptModal] = useState(false);
@@ -55,7 +57,18 @@ const ProviderBookingsScreen = () => {
   useEffect(() => {
     fetchBookings();
     fetchOpportunities();
+    fetchProviderListings();
   }, [user?.id]);
+
+  const fetchProviderListings = async () => {
+    if (!user?.id) return;
+    try {
+      const listings = await ListingService.getProviderListings(user.id);
+      setProviderListings(listings);
+    } catch (error) {
+      console.error('Error fetching provider listings:', error);
+    }
+  };
 
   const fetchBookings = async () => {
     try {
@@ -368,11 +381,69 @@ const ProviderBookingsScreen = () => {
     const seeker = typeof request.seekerId === 'object' ? request.seekerId : null;
     const category = typeof request.categoryId === 'object' ? request.categoryId : null;
 
+    const matchingListing = providerListings.find((listing: any) => {
+      const listingCategoryId = typeof listing.categoryId === 'object' 
+        ? listing.categoryId._id 
+        : listing.categoryId;
+      const listingSubCategoryId = typeof listing.subCategoryId === 'object'
+        ? listing.subCategoryId._id
+        : listing.subCategoryId;
+      const reqCategoryId = typeof request.categoryId === 'object'
+        ? request.categoryId._id
+        : request.categoryId;
+      const reqSubCategoryId = typeof request.subCategoryId === 'object'
+        ? request.subCategoryId._id
+        : request.subCategoryId;
+
+      return listingCategoryId === reqCategoryId && 
+             listingSubCategoryId === reqSubCategoryId;
+    });
+
+    let preferredTime = (request.metadata as any)?.preferredTime || '';
+    if (!preferredTime && request.description) {
+      const timeMatch = request.description.match(/Preferred time:\s*([^\n]+)/i);
+      if (timeMatch && timeMatch[1]) {
+        preferredTime = timeMatch[1].trim();
+      }
+    }
+
+    const bookingData = {
+      _id: request._id,
+      status: 'pending',
+      orderType: 'service_request',
+      createdAt: request.createdAt,
+      requestExpiresAt: request.expiresAt,
+      serviceStartDate: request.serviceStartDate,
+      serviceTime: preferredTime,
+      totalAmount: 0,
+      distance: (request as any).distance || ((request as any).distanceMeters ? (request as any).distanceMeters / 1000 : null),
+      seeker: {
+        _id: seeker?._id || (typeof request.seekerId === 'string' ? request.seekerId : ''),
+        name: seeker?.name || 'Customer',
+        phone: undefined,
+        location: 'Location',
+        coordinates: request.location?.coordinates ? [request.location.coordinates[1], request.location.coordinates[0]] : null,
+      },
+      serviceLocation: {
+        coordinates: request.location?.coordinates,
+        address: request.address || '',
+      },
+      listing: {
+        _id: matchingListing?._id || request._id,
+        title: matchingListing?.title || request.title || 'Service Request',
+        description: matchingListing?.description || request.description,
+        price: matchingListing?.price || request.budget?.min || request.budget?.max || 0,
+        thumbnailUrl: matchingListing?.photoUrls?.[0] || matchingListing?.thumbnailUrl,
+      },
+      isServiceRequest: true,
+      originalRequest: request,
+    };
+
     return (
       <TouchableOpacity
         key={request._id}
         style={styles.bookingCard}
-        onPress={() => navigation.navigate('ServiceRequestDetails', { requestId: request._id })}
+        onPress={() => navigation.navigate('ServiceRequestDetail', { booking: bookingData })}
         activeOpacity={0.8}
       >
         <View style={styles.bookingHeader}>

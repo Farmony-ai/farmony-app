@@ -1,8 +1,9 @@
-import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Text from './Text';
 import { COLORS, FONTS } from '../utils';
+import { formatDistance } from '../utils/distance';
 
 interface BookingData {
   _id: string;
@@ -55,12 +56,25 @@ interface PendingRequestCardProps {
 }
 
 const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAccept, onDecline }) => {
+  const [isAccepting, setIsAccepting] = useState(false);
+
+  const handleAccept = async () => {
+    try {
+      setIsAccepting(true);
+      await onAccept(booking._id);
+    } catch (error) {
+      console.error('Error accepting booking:', error);
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
   const serviceDate = booking.serviceStartDate
     ? new Date(booking.serviceStartDate).toLocaleDateString('en-IN', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-      })
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    })
     : 'Date TBD';
 
   // Helper: time since request created
@@ -81,10 +95,9 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
   };
 
   // Helper: format distance
-  const formatDistance = (distance?: number | null) => {
-    if (!distance) return '';
-    if (distance < 1) return `${Math.round(distance * 1000)}m away`;
-    return `${distance.toFixed(1)} km away`;
+  const getDistanceText = (distance?: number | null) => {
+    if (!distance && distance !== 0) return '';
+    return formatDistance(distance);
   };
 
   // Convert backend unit format to clean display
@@ -98,9 +111,9 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
         'per_kg': '/kg',
         'per_unit': '/unit'
       };
-      
+
       const displayUnit = unitMap[booking.unitOfMeasure] || '';
-      
+
       if (booking.quantity && booking.quantity > 1) {
         return `${booking.quantity}${displayUnit}`;
       }
@@ -118,7 +131,7 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
         ) : (
           <View style={styles.thumbnailPlaceholder} />
         )}
-        
+
         {/* Time Since Badge - Left */}
         <View style={styles.timeOverlay}>
           <Text style={styles.timeOverlayText}>{getTimeSince(booking.createdAt)}</Text>
@@ -143,22 +156,24 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
             <Text style={styles.title}>{booking.listing?.title || 'Service'}</Text>
             <Text style={styles.customer}>{booking.seeker?.name || 'Customer'}</Text>
           </View>
-          
-          {/* Price with inline unit */}
-          <View style={styles.priceContainer}>
-            <Text style={styles.price}>
-              ₹{booking.totalAmount}
-              <Text style={styles.unit}>{getUnitText()}</Text>
-            </Text>
-          </View>
+
+            {/* Price with inline unit */}
+          {booking.totalAmount > 0 && (
+            <View style={styles.priceContainer}>
+              <Text style={styles.price}>
+                ₹{booking.totalAmount}
+                <Text style={styles.unit}>{getUnitText()}</Text>
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Service Location */}
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={14} color="#666666" />
           <Text style={styles.infoText} numberOfLines={1}>
-            {booking.serviceLocation?.city || booking.serviceLocation?.address || booking.seeker?.city || 'Service Location'}
-            {booking.distance ? ` • ${formatDistance(booking.distance)}` : ''}
+          {booking.serviceLocation?.city || booking.serviceLocation?.address || booking.seeker?.city || ''}
+            {booking.distance !== null && booking.distance !== undefined ? ` ${getDistanceText(booking.distance)}` : ''}
           </Text>
         </View>
 
@@ -183,16 +198,25 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
         {/* Action Buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
-            style={styles.acceptBtn}
-            onPress={() => onAccept(booking._id)}
+            style={[styles.acceptBtn, isAccepting && styles.acceptBtnDisabled]}
+            onPress={handleAccept}
             activeOpacity={0.7}
+            disabled={isAccepting}
           >
-            <Text style={styles.acceptText}>Accept</Text>
+            {isAccepting ? (
+              <View style={styles.acceptingContainer}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.acceptText}>Accepting...</Text>
+              </View>
+            ) : (
+              <Text style={styles.acceptText}>Accept</Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.declineBtn}
             onPress={() => onDecline(booking._id)}
             activeOpacity={0.7}
+            disabled={isAccepting}
           >
             <Text style={styles.declineText}>Decline</Text>
           </TouchableOpacity>
@@ -257,53 +281,53 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginLeft: 4,
   },
-  content: { 
+  content: {
     padding: 20,
   },
-  headerRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 16,
   },
-  title: { 
-    fontSize: 16, 
-    fontFamily: FONTS.POPPINS.SEMIBOLD, 
+  title: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: '#000000',
     marginBottom: 4,
   },
-  customer: { 
-    fontSize: 14, 
-    fontFamily: FONTS.POPPINS.REGULAR, 
+  customer: {
+    fontSize: 14,
+    fontFamily: FONTS.POPPINS.REGULAR,
     color: '#666666',
   },
   priceContainer: {
     alignItems: 'flex-end',
   },
-  price: { 
-    fontSize: 16, 
-    fontFamily: FONTS.POPPINS.MEDIUM, 
+  price: {
+    fontSize: 16,
+    fontFamily: FONTS.POPPINS.MEDIUM,
     color: '#000000',
   },
-  unit: { 
-    fontSize: 14, 
+  unit: {
+    fontSize: 14,
     color: '#666666',
     fontFamily: FONTS.POPPINS.MEDIUM,
   },
-  infoRow: { 
-    flexDirection: 'row', 
+  infoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
-  infoText: { 
-    fontSize: 13, 
-    color: '#666666', 
+  infoText: {
+    fontSize: 13,
+    color: '#666666',
     marginLeft: 8,
     flex: 1,
     fontFamily: FONTS.POPPINS.REGULAR,
   },
-  actions: { 
-    flexDirection: 'row', 
+  actions: {
+    flexDirection: 'row',
     gap: 12,
     marginTop: 10,
   },
@@ -313,10 +337,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  acceptText: { 
-    color: '#FFFFFF', 
-    fontSize: 14, 
+  acceptBtnDisabled: {
+    opacity: 0.7,
+  },
+  acceptingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  acceptText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     letterSpacing: 0.3,
   },
@@ -327,9 +360,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  declineText: { 
-    color: '#666666', 
-    fontSize: 14, 
+  declineText: {
+    color: '#666666',
+    fontSize: 14,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     letterSpacing: 0.3,
   },
