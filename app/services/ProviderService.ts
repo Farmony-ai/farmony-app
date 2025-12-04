@@ -27,6 +27,7 @@ export interface ProviderDashboardResponse {
   pendingBookings: ProviderRecentBooking[];
   upcomingBookings: ProviderRecentBooking[];
   recentBookings: ProviderRecentBooking[]; // Keep for backward compatibility
+  availableServiceRequests: any[]; // TODO: Define strict type
 }
 
 export interface ProviderPreferencesPayload {

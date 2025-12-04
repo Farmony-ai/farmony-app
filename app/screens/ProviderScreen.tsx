@@ -10,13 +10,14 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Alert,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
 import { COLORS, SHADOWS, FONTS } from '../utils';
 import { scaleFontSize, scaleSize } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ProviderService, { ProviderDashboardResponse } from '../services/ProviderService';
@@ -40,9 +41,47 @@ const MAX_VISIBLE_CARDS = 3;
 
 const ProviderScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { user } = useSelector((state: RootState) => state.auth);
   const [dashboard, setDashboard] = useState<ProviderDashboardResponse | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Merge pending bookings with available service requests
+  const pendingBookings = useMemo(() => {
+    const bookings = dashboard?.pendingBookings || [];
+    const requests = dashboard?.availableServiceRequests || [];
+
+    const mappedRequests = requests.map((req: any) => ({
+      _id: req._id,
+      status: 'pending',
+      orderType: 'service_request',
+      createdAt: req.createdAt,
+      requestExpiresAt: req.expiresAt,
+      serviceStartDate: req.serviceStartDate,
+      totalAmount: 0,
+      distance: req.distance,
+      seeker: {
+        _id: req.seekerId?._id,
+        name: req.seekerId?.name || 'Seeker',
+        phone: undefined, // Hide phone until accepted
+        location: 'Location',
+      },
+      serviceLocation: {
+        coordinates: req.location?.coordinates,
+        address: 'View on Map',
+      },
+      listing: {
+        _id: req._id,
+        title: req.title || 'Service Request',
+        description: req.description,
+        price: 0,
+        thumbnailUrl: undefined,
+      },
+      isServiceRequest: true,
+    }));
+
+    return [...mappedRequests, ...bookings];
+  }, [dashboard]);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
@@ -73,7 +112,7 @@ const ProviderScreen = () => {
         label: 'Rating',
         value: String(summary?.averageRating ?? 0),
         icon: ratingsIcon,
-        onPress: () => {},
+        onPress: () => { },
       },
     ];
   }, [dashboard, navigation]);
@@ -121,9 +160,18 @@ const ProviderScreen = () => {
   ).current;
 
   const handleAcceptBooking = async (bookingId: string) => {
+    const booking = pendingBookings.find(b => b._id === bookingId);
+    if (!booking) return;
+
+    if ((booking as any).isServiceRequest) {
+      console.log('Accepting service request:', bookingId);
+      // TODO: Implement service request acceptance
+      Alert.alert('Coming Soon', 'Accepting service request feature coming soon!');
+      return;
+    }
+
     try {
-      const current = dashboard?.pendingBookings?.find(b => b._id === bookingId)?.status || 'pending';
-      if (!canTransition(current as any, 'accepted')) return;
+      if (!canTransition(booking.status as any, 'accepted')) return;
       await setOrderStatus({ orderId: bookingId, status: 'accepted' });
       fetchDashboard();
     } catch (error) {
@@ -132,9 +180,17 @@ const ProviderScreen = () => {
   };
 
   const handleRejectBooking = async (bookingId: string) => {
+    const booking = pendingBookings.find(b => b._id === bookingId);
+    if (!booking) return;
+
+    if ((booking as any).isServiceRequest) {
+      console.log('Rejecting service request:', bookingId);
+      // TODO: Implement service request rejection
+      return;
+    }
+
     try {
-      const current = dashboard?.pendingBookings?.find(b => b._id === bookingId)?.status || 'pending';
-      if (!canTransition(current as any, 'canceled')) return;
+      if (!canTransition(booking.status as any, 'canceled')) return;
       await setOrderStatus({ orderId: bookingId, status: 'canceled' });
       fetchDashboard();
     } catch (error) {
@@ -161,6 +217,15 @@ const ProviderScreen = () => {
     fetchDashboard();
   }, [user?.id]);
 
+  // Refresh when navigated back with refresh param
+  useEffect(() => {
+    if (route.params?.refresh) {
+      fetchDashboard();
+      // Clear the param to prevent re-fetching on subsequent renders
+      navigation.setParams({ refresh: undefined });
+    }
+  }, [route.params?.refresh]);
+
   const onRefresh = () => fetchDashboard(true);
 
   useEffect(() => {
@@ -168,7 +233,7 @@ const ProviderScreen = () => {
     return unsubscribe;
   }, [navigation, user?.id]);
 
-  const pendingBookings = dashboard?.pendingBookings || [];
+
 
   // Render stacked cards
   const renderCards = () => {
@@ -182,27 +247,27 @@ const ProviderScreen = () => {
 
       const cardStyle = isTop
         ? {
-            transform: [
-              { translateX },
-              {
-                rotate: translateX.interpolate({
-                  inputRange: [-screenWidth / 2, 0, screenWidth / 2],
-                  outputRange: ['-15deg', '0deg', '15deg'],
-                  extrapolate: 'clamp',
-                }),
-              },
-            ],
-            opacity: translateX.interpolate({
-              inputRange: [-screenWidth / 2, 0, screenWidth / 2],
-              outputRange: [0.7, 1, 0.7],
-              extrapolate: 'clamp',
-            }),
-          }
+          transform: [
+            { translateX },
+            {
+              rotate: translateX.interpolate({
+                inputRange: [-screenWidth / 2, 0, screenWidth / 2],
+                outputRange: ['-15deg', '0deg', '15deg'],
+                extrapolate: 'clamp',
+              }),
+            },
+          ],
+          opacity: translateX.interpolate({
+            inputRange: [-screenWidth / 2, 0, screenWidth / 2],
+            outputRange: [0.7, 1, 0.7],
+            extrapolate: 'clamp',
+          }),
+        }
         : {
-            transform: [{ scale: 1 - i * 0.05 }],
-            top: i * 10,
-            opacity: 1 - i * 0.1,
-          };
+          transform: [{ scale: 1 - i * 0.05 }],
+          top: i * 10,
+          opacity: 1 - i * 0.1,
+        };
 
       cards.push(
         <Animated.View
@@ -211,7 +276,7 @@ const ProviderScreen = () => {
           {...(isTop ? panResponder.panHandlers : {})}
         >
           <PendingRequestCard
-            booking={booking}
+            booking={booking as any}
             onAccept={handleAcceptBooking}
             onDecline={handleRejectBooking}
           />
