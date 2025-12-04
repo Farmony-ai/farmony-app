@@ -10,20 +10,27 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  ActivityIndicator,
   Alert,
 } from 'react-native';
 import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import Text from '../components/Text';
+import Button from '../components/Button';
 import { COLORS, SHADOWS, FONTS } from '../utils';
 import { scaleFontSize, scaleSize } from '../utils/fonts';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ProviderService, { ProviderDashboardResponse } from '../services/ProviderService';
 import BookingService from '../services/BookingService';
+import ListingService from '../services/ListingService';
+import ServiceRequestService from '../services/ServiceRequestService';
 import { canTransition, setOrderStatus } from '../services/orderStatus';
 import PendingRequestCard from '../components/PendingRequestCard';
+import { calculateDistance, formatDistance } from '../utils/distance';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../store';
 
 const { width: screenWidth } = Dimensions.get('window');
 const backgroundImg = require('../assets/provider-bg.png');
@@ -41,46 +48,107 @@ const MAX_VISIBLE_CARDS = 3;
 
 const ProviderScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute();
+  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { latitude, longitude } = useSelector((state: RootState) => state.location);
   const [dashboard, setDashboard] = useState<ProviderDashboardResponse | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [providerListings, setProviderListings] = useState<any[]>([]);
+  const [dashboardLoaded, setDashboardLoaded] = useState<boolean>(false);
+  const [listingsLoaded, setListingsLoaded] = useState<boolean>(false);
+
+  useEffect(() => {
+    const fetchListings = async () => {
+      if (!user?.id) {
+        setListingsLoaded(true);
+        return;
+      }
+      try {
+        const listings = await ListingService.getProviderListings(user.id);
+        setProviderListings(listings);
+      } catch (error) {
+        console.error('Error fetching provider listings:', error);
+      } finally {
+        setListingsLoaded(true);
+      }
+    };
+    setListingsLoaded(false);
+    fetchListings();
+  }, [user?.id]);
 
   // Merge pending bookings with available service requests
   const pendingBookings = useMemo(() => {
     const bookings = dashboard?.pendingBookings || [];
     const requests = dashboard?.availableServiceRequests || [];
 
-    const mappedRequests = requests.map((req: any) => ({
-      _id: req._id,
-      status: 'pending',
-      orderType: 'service_request',
-      createdAt: req.createdAt,
-      requestExpiresAt: req.expiresAt,
-      serviceStartDate: req.serviceStartDate,
-      totalAmount: 0,
-      distance: req.distance,
-      seeker: {
-        _id: req.seekerId?._id,
-        name: req.seekerId?.name || 'Seeker',
-        phone: undefined, // Hide phone until accepted
-        location: 'Location',
-      },
-      serviceLocation: {
-        coordinates: req.location?.coordinates,
-        address: 'View on Map',
-      },
-      listing: {
+    const mappedRequests = requests.map((req: any) => {
+      const matchingListing = providerListings.find((listing: any) => {
+        const listingCategoryId = typeof listing.categoryId === 'object' 
+          ? listing.categoryId._id 
+          : listing.categoryId;
+        const listingSubCategoryId = typeof listing.subCategoryId === 'object'
+          ? listing.subCategoryId._id
+          : listing.subCategoryId;
+        const reqCategoryId = typeof req.categoryId === 'object'
+          ? req.categoryId._id
+          : req.categoryId;
+        const reqSubCategoryId = typeof req.subCategoryId === 'object'
+          ? req.subCategoryId._id
+          : req.subCategoryId;
+
+        return listingCategoryId === reqCategoryId && 
+               listingSubCategoryId === reqSubCategoryId;
+      });
+
+      let calculatedDistance: number | null = req.distance || null;
+      if (latitude && longitude && req.location?.coordinates) {
+        const [reqLng, reqLat] = req.location.coordinates;
+        calculatedDistance = calculateDistance(latitude, longitude, reqLat, reqLng);
+      }
+      let preferredTime = req.metadata?.preferredTime || '';
+      if (!preferredTime && req.description) {
+        const timeMatch = req.description.match(/Preferred time:\s*([^\n]+)/i);
+        if (timeMatch && timeMatch[1]) {
+          preferredTime = timeMatch[1].trim();
+        }
+      }
+
+      return {
         _id: req._id,
-        title: req.title || 'Service Request',
-        description: req.description,
-        price: 0,
-        thumbnailUrl: undefined,
-      },
-      isServiceRequest: true,
-    }));
+        status: 'pending',
+        orderType: 'service_request',
+        createdAt: req.createdAt,
+        requestExpiresAt: req.expiresAt,
+        serviceStartDate: req.serviceStartDate,
+        serviceTime: preferredTime,
+        totalAmount: 0,
+        distance:  req.distance || calculatedDistance,
+        seeker: {
+          _id: req.seekerId?._id || (typeof req.seekerId === 'object' ? req.seekerId._id : req.seekerId),
+          name: typeof req.seekerId === 'object' ? (req.seekerId?.name || 'Seeker') : 'Seeker',
+          phone: undefined, // Hide phone until accepted
+          location: 'Location',
+          coordinates: req.location?.coordinates ? [req.location.coordinates[1], req.location.coordinates[0]] : null,
+        },
+        serviceLocation: {
+          coordinates: req.location?.coordinates,
+          address: req.address || '',
+        },
+        listing: {
+          _id: matchingListing?._id || req._id,
+          title: matchingListing?.title || req.title || 'Service Request',
+          description: matchingListing?.description || req.description,
+          price: matchingListing?.price || 0,
+          thumbnailUrl: matchingListing?.photoUrls?.[0] || matchingListing?.thumbnailUrl,
+        },
+        isServiceRequest: true,
+        originalRequest: req,
+      };
+    });
 
     return [...mappedRequests, ...bookings];
-  }, [dashboard]);
+  }, [dashboard, providerListings, latitude, longitude]);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
@@ -91,6 +159,7 @@ const ProviderScreen = () => {
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';
   };
+
 
   const stats = useMemo(() => {
     const summary = dashboard?.summary;
@@ -141,8 +210,10 @@ const ProviderScreen = () => {
           }).start(() => {
             setActiveIndex((prev) => {
               let next = prev + (direction === 1 ? -1 : 1);
-              if (next < 0) next = (dashboard?.pendingBookings?.length || 1) - 1;
-              if (next >= (dashboard?.pendingBookings?.length || 1)) next = 0;
+              const total = pendingBookings.length;
+              if (total === 0) return 0;
+              if (next < 0) next = total - 1;
+              if (next >= total) next = 0;
               return next;
             });
             translateX.setValue(0);
@@ -163,9 +234,7 @@ const ProviderScreen = () => {
     if (!booking) return;
 
     if ((booking as any).isServiceRequest) {
-      console.log('Accepting service request:', bookingId);
-      // TODO: Implement service request acceptance
-      Alert.alert('Coming Soon', 'Accepting service request feature coming soon!');
+      navigation.navigate('ServiceRequestDetail', { booking });
       return;
     }
 
@@ -183,8 +252,34 @@ const ProviderScreen = () => {
     if (!booking) return;
 
     if ((booking as any).isServiceRequest) {
-      console.log('Rejecting service request:', bookingId);
-      // TODO: Implement service request rejection
+      Alert.alert(
+        'Decline Request',
+        'Are you sure you want to decline this service request?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Decline',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await ServiceRequestService.declineRequest(bookingId);
+                Alert.alert('Success', 'Service request declined successfully', [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      // Refresh dashboard to update the list
+                      fetchDashboard(true);
+                    },
+                  },
+                ]);
+              } catch (error: any) {
+                console.error('Error declining service request:', error);
+                Alert.alert('Error', error.message || 'Failed to decline request. Please try again.');
+              }
+            },
+          },
+        ]
+      );
       return;
     }
 
@@ -200,28 +295,54 @@ const ProviderScreen = () => {
   const fetchDashboard = async (isRefresh = false) => {
     if (!user?.id) {
       if (isRefresh) setRefreshing(false);
+      setDashboardLoaded(true);
       return;
     }
     try {
-      if (isRefresh) setRefreshing(true);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setDashboardLoaded(false);
+      }
       const data = await ProviderService.getDashboard(user.id);
       console.log('Provider Dashboard Data:', data);
       setDashboard(data);
+    } catch (error) {
+      console.error('Error fetching dashboard:', error);
     } finally {
-      if (isRefresh) setRefreshing(false);
+      if (isRefresh) {
+        setRefreshing(false);
+      } else {
+        setDashboardLoaded(true);
+      }
     }
   };
 
   useEffect(() => {
-    fetchDashboard();
+    if (user?.id) {
+      setDashboardLoaded(false);
+      fetchDashboard();
+    }
   }, [user?.id]);
 
   const onRefresh = () => fetchDashboard(true);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => fetchDashboard());
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user?.id) {
+        fetchDashboard(true);
+      }
+    });
     return unsubscribe;
   }, [navigation, user?.id]);
+
+  useEffect(() => {
+    const params = (route.params as any);
+    if (params?.refresh && user?.id) {
+      fetchDashboard(true);
+      navigation.setParams({ refresh: false });
+    }
+  }, [route.params, navigation, user?.id]);
 
 
 
@@ -277,41 +398,49 @@ const ProviderScreen = () => {
     return cards.reverse();
   };
 
+  const isInitialLoading = !dashboardLoaded || !listingsLoaded;
+
   return (
     <SafeAreaWrapper backgroundColor="#FFFFFF" style={styles.flex}>
       <View style={styles.backgroundImageContainer}>
         <Image source={backgroundImg} style={styles.backgroundImage} resizeMode="cover" />
       </View>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[COLORS.PRIMARY.MAIN]}
-            tintColor={COLORS.PRIMARY.MAIN}
-          />
-        }
-      >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
-            <Text style={styles.userName}>Service Provider</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('CreateListing')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={scaleSize(20)} color={COLORS.TEXT.PRIMARY} />
-          </TouchableOpacity>
+      {isInitialLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
+          <Text style={styles.loadingText}>Loading opportunities...</Text>
         </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.PRIMARY.MAIN]}
+              tintColor={COLORS.PRIMARY.MAIN}
+            />
+          }
+        >
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
+              <Text style={styles.userName}>Service Provider</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => navigation.navigate('CreateListing')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={scaleSize(20)} color={COLORS.TEXT.PRIMARY} />
+            </TouchableOpacity>
+          </View>
 
         {pendingBookings.length > 0 && (
           <View style={styles.stackedCardsSection}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Pending Requests</Text>
+              <Text style={styles.sectionTitle}>New Opportunities</Text>
               <View style={styles.cardCounterContainer}>
                 <Text style={styles.cardCounter}>
                   {pendingBookings.length} {pendingBookings.length === 1 ? 'Request' : 'Requests'}
@@ -333,8 +462,7 @@ const ProviderScreen = () => {
           </View>
         )}
 
-        {/* Empty state for no pending requests */}
-        {pendingBookings.length === 0 && (
+        {dashboardLoaded && listingsLoaded && !refreshing && pendingBookings.length === 0 && (
           <View style={styles.emptyRequestsContainer}>
             <View style={styles.emptyRequestsCard}>
               <View style={styles.emptyIconContainer}>
@@ -371,8 +499,9 @@ const ProviderScreen = () => {
           </View>
         </View>
 
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+      )}
     </SafeAreaWrapper>
   );
 };
@@ -380,6 +509,18 @@ const ProviderScreen = () => {
 // Styles
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  loadingText: {
+    marginTop: scaleSize(16),
+    fontSize: scaleFontSize(14),
+    fontFamily: FONTS.POPPINS.REGULAR,
+    color: COLORS.TEXT.SECONDARY,
+  },
   container: { flexGrow: 1, backgroundColor: 'transparent' },
   backgroundImageContainer: {
     position: 'absolute',

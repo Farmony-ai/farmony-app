@@ -4,6 +4,7 @@ import ProviderScreen from '../screens/ProviderScreen';
 import CreateListingScreen from '../screens/CreateListingScreen';
 import MyListingsScreen from '../screens/MyListingsScreen';
 import ProviderBookingsScreen from '../screens/ProviderBookingsScreen';
+import ServiceRequestDetailScreen from '../screens/ServiceRequestDetailScreen';
 
 const Stack = createStackNavigator();
 
@@ -14,6 +15,7 @@ const ProviderNavigator = () => {
       <Stack.Screen name="CreateListing" component={CreateListingScreen} />
       <Stack.Screen name="MyListings" component={MyListingsScreen} />
       <Stack.Screen name="ProviderBookings" component={ProviderBookingsScreen} />
+      <Stack.Screen name="ServiceRequestDetail" component={ServiceRequestDetailScreen} />
     </Stack.Navigator>
   );
 };

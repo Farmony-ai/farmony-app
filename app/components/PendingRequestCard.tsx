@@ -1,8 +1,9 @@
-import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Text from './Text';
 import { COLORS, FONTS } from '../utils';
+import { formatDistance } from '../utils/distance';
 
 interface BookingData {
   _id: string;
@@ -55,6 +56,19 @@ interface PendingRequestCardProps {
 }
 
 const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAccept, onDecline }) => {
+  const [isAccepting, setIsAccepting] = useState(false);
+
+  const handleAccept = async () => {
+    try {
+      setIsAccepting(true);
+      await onAccept(booking._id);
+    } catch (error) {
+      console.error('Error accepting booking:', error);
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
   const serviceDate = booking.serviceStartDate
     ? new Date(booking.serviceStartDate).toLocaleDateString('en-IN', {
       weekday: 'short',
@@ -81,10 +95,9 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
   };
 
   // Helper: format distance
-  const formatDistance = (distance?: number | null) => {
-    if (!distance) return '';
-    if (distance < 1) return `${Math.round(distance * 1000)}m away`;
-    return `${distance.toFixed(1)} km away`;
+  const getDistanceText = (distance?: number | null) => {
+    if (!distance && distance !== 0) return '';
+    return formatDistance(distance);
   };
 
   // Convert backend unit format to clean display
@@ -144,21 +157,23 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
             <Text style={styles.customer}>{booking.seeker?.name || 'Customer'}</Text>
           </View>
 
-          {/* Price with inline unit */}
-          <View style={styles.priceContainer}>
-            <Text style={styles.price}>
-              {booking.totalAmount > 0 ? `₹${booking.totalAmount}` : 'Quote'}
-              <Text style={styles.unit}>{getUnitText()}</Text>
-            </Text>
-          </View>
+            {/* Price with inline unit */}
+          {booking.totalAmount > 0 && (
+            <View style={styles.priceContainer}>
+              <Text style={styles.price}>
+                ₹{booking.totalAmount}
+                <Text style={styles.unit}>{getUnitText()}</Text>
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Service Location */}
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={14} color="#666666" />
           <Text style={styles.infoText} numberOfLines={1}>
-            {booking.serviceLocation?.city || booking.serviceLocation?.address || booking.seeker?.city || 'Service Location'}
-            {booking.distance ? ` • ${formatDistance(booking.distance)}` : ''}
+          {booking.serviceLocation?.city || booking.serviceLocation?.address || booking.seeker?.city || ''}
+            {booking.distance !== null && booking.distance !== undefined ? ` ${getDistanceText(booking.distance)}` : ''}
           </Text>
         </View>
 
@@ -183,16 +198,25 @@ const PendingRequestCard: React.FC<PendingRequestCardProps> = ({ booking, onAcce
         {/* Action Buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
-            style={styles.acceptBtn}
-            onPress={() => onAccept(booking._id)}
+            style={[styles.acceptBtn, isAccepting && styles.acceptBtnDisabled]}
+            onPress={handleAccept}
             activeOpacity={0.7}
+            disabled={isAccepting}
           >
-            <Text style={styles.acceptText}>Accept</Text>
+            {isAccepting ? (
+              <View style={styles.acceptingContainer}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.acceptText}>Accepting...</Text>
+              </View>
+            ) : (
+              <Text style={styles.acceptText}>Accept</Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.declineBtn}
             onPress={() => onDecline(booking._id)}
             activeOpacity={0.7}
+            disabled={isAccepting}
           >
             <Text style={styles.declineText}>Decline</Text>
           </TouchableOpacity>
@@ -313,6 +337,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptBtnDisabled: {
+    opacity: 0.7,
+  },
+  acceptingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   acceptText: {
     color: '#FFFFFF',

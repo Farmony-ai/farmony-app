@@ -92,7 +92,12 @@ export interface ServiceRequestsResponse {
 
 export interface AcceptRequestResponse {
   request: ServiceRequest;
-  orderId: string;
+  order?: {
+    _id: string;
+    id?: string;
+    [key: string]: any;
+  };
+  orderId?: string;
 }
 
 class ServiceRequestService {
@@ -214,7 +219,8 @@ class ServiceRequestService {
         throw new Error(result.error || 'Failed to accept request');
       }
 
-      console.log('[ServiceRequestService] Request accepted successfully, orderId:', result.data.orderId);
+      const orderId = (result.data as any).orderId || (result.data as any).order?._id || (result.data as any).order?.id;
+      console.log('[ServiceRequestService] Request accepted successfully, orderId:', orderId);
       return result.data;
     } catch (error) {
       console.error('[ServiceRequestService] Error accepting request:', error);
@@ -246,6 +252,29 @@ class ServiceRequestService {
       return result.data;
     } catch (error) {
       console.error('[ServiceRequestService] Error updating request:', error);
+      throw error;
+    }
+  }
+
+  async declineRequest(requestId: string, reason?: string): Promise<void> {
+    try {
+      console.log('[ServiceRequestService] Declining request:', requestId);
+
+      const result = await apiInterceptor.makeAuthenticatedRequest(
+        `/service-requests/${requestId}/decline`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ reason }),
+        }
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to decline request');
+      }
+
+      console.log('[ServiceRequestService] Request declined successfully');
+    } catch (error) {
+      console.error('[ServiceRequestService] Error declining request:', error);
       throw error;
     }
   }

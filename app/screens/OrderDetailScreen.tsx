@@ -28,7 +28,8 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const OrderDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<any>();
-  const { bookingId } = route.params;
+  const { bookingId, orderId } = route.params;
+  const orderIdentifier = bookingId || orderId;
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,6 +66,12 @@ const OrderDetailScreen = () => {
   }, []);
 
   const fetchBookingDetails = async () => {
+    if (!orderIdentifier) {
+      Alert.alert('Error', 'Order ID is required.');
+      navigation.goBack();
+      return;
+    }
+
     try {
       setLoading(true);
       const data = await BookingService.getBookingById(bookingId);
