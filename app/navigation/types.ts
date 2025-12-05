@@ -2,27 +2,13 @@ import { NavigatorScreenParams } from '@react-navigation/native';
 
 export type RootStackParamList = {
   Main: NavigatorScreenParams<BottomTabParamList>;
-  Auth: undefined;
   SignIn: undefined;
   SignUp: undefined;
   OTPVerification: undefined;
-  ForgotPassword: undefined;
   CategoryBrowser: { selectedCategoryId?: string; searchQuery?: string; dateRange?: { startDate: string | null; endDate: string | null; } };
   ListingDetail: { listingId: string };
-  Listings: undefined;
-  SearchResults: { 
-    searchQuery?: string; 
-    location?: string; 
-    dateRange?: { startDate: string | null; endDate: string | null; };
-    categoryId?: string;
-    subCategoryId?: string;
-    latitude?: number;
-    longitude?: number;
-    radius?: number;
-  };
-  OrderDetail: undefined;
+  OrderDetail: { orderId?: string; bookingId?: string };
   Chat: undefined;
-  Profile: undefined;
   CreateListing: { listingId?: string };
 };
 

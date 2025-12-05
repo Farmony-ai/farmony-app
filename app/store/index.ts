@@ -4,6 +4,7 @@ import dateRangeReducer from './slices/dateRangeSlice';
 import listingReducer from './slices/listingSlice';
 import locationReducer from './slices/locationSlice';
 import serviceRequestsReducer from './slices/serviceRequestsSlice';
+import notificationReducer from './slices/notificationSlice';
 
 export const store = configureStore({
   reducer: {
@@ -12,6 +13,7 @@ export const store = configureStore({
     listing: listingReducer,
     location: locationReducer,
     serviceRequests: serviceRequestsReducer,
+    notifications: notificationReducer,
   },
 });
 
