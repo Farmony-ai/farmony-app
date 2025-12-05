@@ -48,14 +48,14 @@ const COLORS_NEW = {
 };
 
 // Import icons
-const tractorIcon = require('../assets/Icons/Categories/tractor.png');
-const harvesterIcon = require('../assets/Icons/Categories/harvester.png');
-const seedIcon = require('../assets/Icons/Categories/seed.png');
-const dripIcon = require('../assets/Icons/Categories/drip.png');
-const ploughIcon = require('../assets/Icons/Categories/plough.png');
-const sprayerIcon = require('../assets/Icons/Categories/sprayer.png');
-const pumpIcon = require('../assets/Icons/Categories/pump.png');
-const mechanicalIcon = require('../assets/mechanical.png');
+const tractorIcon = require('../../assets/Icons/Categories/tractor.png');
+const harvesterIcon = require('../../assets/Icons/Categories/harvester.png');
+const seedIcon = require('../../assets/Icons/Categories/seed.png');
+const dripIcon = require('../../assets/Icons/Categories/drip.png');
+const ploughIcon = require('../../assets/Icons/Categories/plough.png');
+const sprayerIcon = require('../../assets/Icons/Categories/sprayer.png');
+const pumpIcon = require('../../assets/Icons/Categories/pump.png');
+const mechanicalIcon = require('../../assets/mechanical.png');
 
 type CategoryHierarchyEntry = {
   category: Category;

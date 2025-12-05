@@ -33,12 +33,12 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../store';
 
 const { width: screenWidth } = Dimensions.get('window');
-const backgroundImg = require('../assets/provider-bg.png');
+const backgroundImg = require('../../assets/provider-bg.png');
 
 // Import custom icons
-const bookingsIcon = require('../assets/bookings.png');
-const listingsIcon = require('../assets/listings.png');
-const ratingsIcon = require('../assets/ratings.png');
+const bookingsIcon = require('../../assets/bookings.png');
+const listingsIcon = require('../../assets/listings.png');
+const ratingsIcon = require('../../assets/ratings.png');
 
 // Animation constants
 const HORIZONTAL_SWIPE_THRESHOLD = 80;

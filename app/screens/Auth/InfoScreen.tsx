@@ -40,17 +40,17 @@ const languages: Language[] = [
 
 const carouselData = [
   {
-    image: require('../assets/slide1.png'),
+    image: require('../../assets/slide1.png'),
     title: 'Welcome to Farmony!',
     subtitle: 'Rent machines, hire trusted workers, and pay safely with UPI escrow.',
   },
   {
-    image: require('../assets/slide2.png'),
+    image: require('../../assets/slide2.png'),
     title: 'Book the help you need',
     subtitle: 'Tractor with driver, spraying crew, or water pump—nearby and ready when you are.',
   },
   {
-    image: require('../assets/slide3.png'),
+    image: require('../../assets/slide3.png'),
     title: 'Fair price. Trusted work.',
     subtitle: 'See ratings and clear rates, start on time, and pay easily after the job is done—no surprises.',
   },
@@ -247,7 +247,7 @@ const InfoScreen = () => {
         <View style={styles.header}>
           <View style={styles.logoContainer}>
             <Image
-              source={require('../assets/logo.png')}
+              source={require('../../assets/logo.png')}
               style={styles.logo}
               resizeMode="contain"
             />
