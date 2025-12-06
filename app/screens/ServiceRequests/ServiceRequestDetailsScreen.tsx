@@ -920,7 +920,18 @@ const ServiceRequestDetailsScreen = () => {
               {/* Provider Matched Card - Uber-style */}
               {requestStatus.toLowerCase() === 'accepted' && currentRequest?.lifecycle?.order?.providerId && (
                 <View style={styles.providerMatchedCard}>
-                  <View style={styles.providerMatchedRow}>
+                  <TouchableOpacity
+                    style={styles.providerMatchedRow}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      const listingId = currentRequest.lifecycle?.order?.listingId?._id ||
+                                        currentRequest.lifecycle?.order?.listingId ||
+                                        currentRequest.listingId;
+                      if (listingId) {
+                        navigation.navigate('ListingDetail', { listingId });
+                      }
+                    }}
+                  >
                     <View style={styles.providerAvatarWrap}>
                       <View style={styles.providerAvatar}>
                         <Text style={styles.providerAvatarText}>
@@ -944,14 +955,19 @@ const ServiceRequestDetailsScreen = () => {
                       </View>
                     </View>
 
-                    {currentRequest.lifecycle.order.agreedPrice && (
-                      <View style={styles.priceTag}>
-                        <Text style={styles.priceTagText}>
-                          ₹{currentRequest.lifecycle.order.agreedPrice.toLocaleString('en-IN')}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
+                    <View style={styles.providerChevron}>
+                      <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {currentRequest.lifecycle.order.agreedPrice && (
+                    <View style={styles.providerPriceRow}>
+                      <Text style={styles.providerPriceLabel}>Agreed Price</Text>
+                      <Text style={styles.providerPriceValue}>
+                        ₹{currentRequest.lifecycle.order.agreedPrice.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  )}
 
                   <View style={styles.providerActions}>
                     <TouchableOpacity
@@ -1843,6 +1859,29 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginLeft: 8,
     fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  providerChevron: {
+    marginLeft: 8,
+  },
+  providerPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  providerPriceLabel: {
+    fontSize: 14,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  providerPriceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
   },
   matchedTimelineSection: {
     marginHorizontal: 12,

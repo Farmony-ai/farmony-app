@@ -153,17 +153,6 @@ const ListingDetailScreen = () => {
     }
   };
 
-  const handleProceedToCheckout = () => {
-    if (!listing) return;
-    
-    const bookingData = {
-      listing: listing,
-      listingId: listing._id,
-    };
-    
-    navigation.navigate('Checkout', bookingData);
-  };
-
   const getUnitLabel = (unit: string) => {
     const unitLabels: { [key: string]: string } = {
       per_hour: '/hr',
@@ -243,10 +232,7 @@ const ListingDetailScreen = () => {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            !isOwner && { paddingBottom: 100 }
-          ]}
+          contentContainerStyle={styles.scrollContent}
         >
           {/* Main Card Container */}
           <View style={styles.mainCard}>
@@ -410,24 +396,6 @@ const ListingDetailScreen = () => {
             </View>
           </View>
         </ScrollView>
-
-        {/* Bottom CTA for Non-Owners */}
-        {!isOwner && listing.isActive && (
-          <View style={styles.bottomCTA}>
-            <View style={styles.ctaContent}>
-              <View>
-                <Text style={styles.ctaPriceLabel}>Starting from</Text>
-                <Text style={styles.ctaPrice}>
-                  ₹{listing.price.toLocaleString()}
-                  <Text style={styles.ctaPriceUnit}>{getUnitLabel(listing.unitOfMeasure)}</Text>
-                </Text>
-              </View>
-              <TouchableOpacity style={styles.proceedButton} onPress={handleProceedToCheckout}>
-                <Text style={styles.proceedButtonText}>Book Now</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </Animated.View>
     </SafeAreaWrapper>
   );
@@ -684,50 +652,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: COLORS.TEXT.PRIMARY,
-  },
-  bottomCTA: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.BORDER.PRIMARY,
-    paddingVertical: SPACING.MD,
-    paddingHorizontal: SPACING.MD,
-    ...SHADOWS.MD,
-  },
-  ctaContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  ctaPriceLabel: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-  },
-  ctaPrice: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.BOLD,
-    color: COLORS.TEXT.PRIMARY,
-  },
-  ctaPriceUnit: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: COLORS.TEXT.SECONDARY,
-  },
-  proceedButton: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
-    paddingHorizontal: SPACING.XL,
-    paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MD,
-    ...SHADOWS.SM,
-  },
-  proceedButtonText: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: COLORS.NEUTRAL.WHITE,
   },
 });
 
