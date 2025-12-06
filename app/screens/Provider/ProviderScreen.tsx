@@ -77,9 +77,7 @@ const ProviderScreen = () => {
     fetchListings();
   }, [user?.id]);
 
-  // Merge pending bookings with available service requests
-  const pendingBookings = useMemo(() => {
-    const bookings = dashboard?.pendingBookings || [];
+  const newOpportunities = useMemo(() => {
     const requests = dashboard?.availableServiceRequests || [];
 
     const mappedRequests = requests.map((req: any) => {
@@ -147,7 +145,7 @@ const ProviderScreen = () => {
       };
     });
 
-    return [...mappedRequests, ...bookings];
+    return mappedRequests;
   }, [dashboard, providerListings, latitude, longitude]);
 
   const [activeIndex, setActiveIndex] = useState(0);
@@ -210,7 +208,7 @@ const ProviderScreen = () => {
           }).start(() => {
             setActiveIndex((prev) => {
               let next = prev + (direction === 1 ? -1 : 1);
-              const total = pendingBookings.length;
+              const total = newOpportunities.length;
               if (total === 0) return 0;
               if (next < 0) next = total - 1;
               if (next >= total) next = 0;
@@ -230,7 +228,7 @@ const ProviderScreen = () => {
   ).current;
 
   const handleAcceptBooking = async (bookingId: string) => {
-    const booking = pendingBookings.find(b => b._id === bookingId);
+    const booking = newOpportunities.find(b => b._id === bookingId);
     if (!booking) return;
 
     if ((booking as any).isServiceRequest) {
@@ -248,7 +246,7 @@ const ProviderScreen = () => {
   };
 
   const handleRejectBooking = async (bookingId: string) => {
-    const booking = pendingBookings.find(b => b._id === bookingId);
+    const booking = newOpportunities.find(b => b._id === bookingId);
     if (!booking) return;
 
     if ((booking as any).isServiceRequest) {
@@ -348,12 +346,12 @@ const ProviderScreen = () => {
 
   // Render stacked cards
   const renderCards = () => {
-    if (pendingBookings.length === 0) return null;
+    if (newOpportunities.length === 0) return null;
 
     const cards = [];
-    for (let i = 0; i < Math.min(MAX_VISIBLE_CARDS, pendingBookings.length); i++) {
-      const cardIndex = (activeIndex + i) % pendingBookings.length;
-      const booking = pendingBookings[cardIndex];
+    for (let i = 0; i < Math.min(MAX_VISIBLE_CARDS, newOpportunities.length); i++) {
+      const cardIndex = (activeIndex + i) % newOpportunities.length;
+      const booking = newOpportunities[cardIndex];
       const isTop = i === 0;
 
       const cardStyle = isTop
@@ -437,13 +435,13 @@ const ProviderScreen = () => {
             </TouchableOpacity>
           </View>
 
-        {pendingBookings.length > 0 && (
+        {newOpportunities.length > 0 && (
           <View style={styles.stackedCardsSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>New Opportunities</Text>
               <View style={styles.cardCounterContainer}>
                 <Text style={styles.cardCounter}>
-                  {pendingBookings.length} {pendingBookings.length === 1 ? 'Request' : 'Requests'}
+                  {newOpportunities.length} {newOpportunities.length === 1 ? 'Request' : 'Requests'}
                 </Text>
               </View>
             </View>
@@ -451,7 +449,7 @@ const ProviderScreen = () => {
             <View style={styles.stackedCardsContainer}>{renderCards()}</View>
 
             {/* Swipe hint with better spacing */}
-            {pendingBookings.length > 1 && (
+            {newOpportunities.length > 1 && (
               <View style={styles.swipeHintContainer}>
                 <Text style={styles.swipeHint}>
                   <Ionicons name="arrow-back" size={scaleFontSize(12)} color="#9CA3AF" /> Swipe to browse{' '}
@@ -462,7 +460,7 @@ const ProviderScreen = () => {
           </View>
         )}
 
-        {dashboardLoaded && listingsLoaded && !refreshing && pendingBookings.length === 0 && (
+        {dashboardLoaded && listingsLoaded && !refreshing && newOpportunities.length === 0 && (
           <View style={styles.emptyRequestsContainer}>
             <View style={styles.emptyRequestsCard}>
               <View style={styles.emptyIconContainer}>
@@ -476,7 +474,7 @@ const ProviderScreen = () => {
           </View>
         )}
 
-        {(pendingBookings.length > 0 || (dashboard?.summary?.activeListings || 0) > 0) && (
+        {(newOpportunities.length > 0 || (dashboard?.summary?.activeListings || 0) > 0) && (
           <View style={styles.sectionDivider} />
         )}
 

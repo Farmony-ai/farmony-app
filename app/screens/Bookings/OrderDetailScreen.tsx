@@ -23,6 +23,105 @@ import { canTransition, setOrderStatus } from '../../services/orderStatus';
 import apiInterceptor from '../../services/apiInterceptor';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
+const UBER_MAP_STYLE = [
+  {
+    elementType: 'geometry',
+    stylers: [{ color: '#f5f5f5' }],
+  },
+  {
+    elementType: 'labels.icon',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#616161' }],
+  },
+  {
+    elementType: 'labels.text.stroke',
+    stylers: [{ color: '#f5f5f5' }],
+  },
+  {
+    featureType: 'administrative.land_parcel',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'geometry',
+    stylers: [{ color: '#eeeeee' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#757575' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'geometry',
+    stylers: [{ color: '#e5e5e5' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#6b6b6b' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry',
+    stylers: [{ color: '#ffffff' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'labels.icon',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'road.arterial',
+    elementType: 'geometry',
+    stylers: [{ color: '#fdfdfd' }],
+  },
+  {
+    featureType: 'road.arterial',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#737373' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry',
+    stylers: [{ color: '#dadada' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#616161' }],
+  },
+  {
+    featureType: 'road.local',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#9e9e9e' }],
+  },
+  {
+    featureType: 'transit.line',
+    elementType: 'geometry',
+    stylers: [{ color: '#e5e5e5' }],
+  },
+  {
+    featureType: 'transit.station',
+    elementType: 'geometry',
+    stylers: [{ color: '#eeeeee' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'geometry',
+    stylers: [{ color: '#c9c9c9' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#9e9e9e' }],
+  },
+];
+
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const OrderDetailScreen = () => {
@@ -34,35 +133,10 @@ const OrderDetailScreen = () => {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState<'accept' | 'cancel' | null>(null);
-  
-  // Subtle animations
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const [showOrderDetails, setShowOrderDetails] = useState(true);
 
   useEffect(() => {
     fetchBookingDetails();
-    
-    // Gentle entrance animations
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        damping: 20,
-        stiffness: 90,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
   }, []);
 
   const fetchBookingDetails = async () => {
@@ -74,8 +148,8 @@ const OrderDetailScreen = () => {
 
     try {
       setLoading(true);
-      const data = await BookingService.getBookingById(bookingId);
-      
+      const data = await BookingService.getBookingById(orderIdentifier);
+
       // Hydrate seeker details if needed
       if (typeof data.seekerId === 'string') {
         try {
@@ -95,7 +169,7 @@ const OrderDetailScreen = () => {
           console.error('Error fetching seeker details:', error);
         }
       }
-      
+
       // Hydrate listing details if needed
       if (typeof data.listingId === 'string') {
         try {
@@ -119,7 +193,7 @@ const OrderDetailScreen = () => {
           console.error('Error fetching listing details:', error);
         }
       }
-      
+
       setBooking(data);
     } catch (error) {
       console.error('Error loading booking details:', error);
@@ -151,10 +225,6 @@ const OrderDetailScreen = () => {
     Linking.openURL(`tel:${phone}`);
   };
 
-  const handleEmail = (email: string) => {
-    Linking.openURL(`mailto:${email}`);
-  };
-
   const getCleanServiceName = (listing: any) => {
     if (!listing?.title) {
       return listing?.subCategory || 'Service Booking';
@@ -170,14 +240,14 @@ const OrderDetailScreen = () => {
     if (!url || typeof url !== 'string') {
       return 'https://via.placeholder.com/80x80';
     }
-    
+
     let cleanedUrl = url
       .replace(/https:\/\/"([^"]+)"/g, 'https://$1')
       .replace(/"([^"]+)"/g, '$1')
       .replace(/([^/])en\/listings/g, '$1/listings')
       .replace(/\/\/+/g, '/')
       .replace(/https:\/([^/])/, 'https://$1');
-    
+
     try {
       new URL(cleanedUrl);
       return cleanedUrl;
@@ -197,11 +267,9 @@ const OrderDetailScreen = () => {
   };
 
   const formatQuantityUnit = (quantity: number, unit: string) => {
-    // Convert "per_hour" to "hours"
     if (unit === 'per_hour') {
       return `${quantity} ${quantity === 1 ? 'hour' : 'hours'}`;
     }
-    // Handle other units
     return `${quantity} ${unit}`;
   };
 
@@ -269,12 +337,71 @@ const OrderDetailScreen = () => {
     );
   };
 
+  // Get status badge configuration
+  const getStatusBadgeConfig = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return {
+          text: 'Pending',
+          backgroundColor: '#FEF3C7',
+          textColor: '#F59E0B',
+        };
+      case 'accepted':
+        return {
+          text: 'Accepted',
+          backgroundColor: '#E8F5E9',
+          textColor: '#4CAF50',
+        };
+      case 'completed':
+        return {
+          text: 'Completed',
+          backgroundColor: '#F5F5F5',
+          textColor: '#757575',
+        };
+      case 'canceled':
+        return {
+          text: 'Cancelled',
+          backgroundColor: '#FFEBEE',
+          textColor: '#D32F2F',
+        };
+      default:
+        return {
+          text: status.charAt(0).toUpperCase() + status.slice(1),
+          backgroundColor: '#FFF3E0',
+          textColor: '#FF9800',
+        };
+    }
+  };
+
+  // Format header subtitle
+  const formatHeaderSubtitle = () => {
+    if (!booking) return 'Order Details';
+    const parts = [];
+
+    if (booking.serviceStartDate) {
+      try {
+        const date = new Date(booking.serviceStartDate);
+        if (!isNaN(date.getTime())) {
+          const formatted = date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+          parts.push(formatted);
+        }
+      } catch (e) {
+        console.error('Error formatting service start date:', e);
+      }
+    }
+
+    if (booking.quantity && booking.unitOfMeasure) {
+      parts.push(formatQuantityUnit(booking.quantity, booking.unitOfMeasure));
+    }
+
+    return parts.length > 0 ? parts.join(' • ') : `#${booking._id.slice(-6).toUpperCase()}`;
+  };
+
   if (loading) {
     return (
-      <SafeAreaWrapper backgroundColor="#FFFFFF">
+      <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10B981" />
-          <Text style={styles.loadingText}>Loading...</Text>
+          <ActivityIndicator size="large" color={COLORS.PRIMARY.MAIN} />
         </View>
       </SafeAreaWrapper>
     );
@@ -284,462 +411,474 @@ const OrderDetailScreen = () => {
 
   const listing = typeof booking.listingId === 'object' ? booking.listingId : null;
   const seeker = typeof booking.seekerId === 'object' ? booking.seekerId : null;
+  const statusBadge = getStatusBadgeConfig(booking.status);
+
+  const hasCoordinates = booking.coordinates &&
+    Array.isArray(booking.coordinates) &&
+    booking.coordinates.length === 2;
+
+  const mapCenter = hasCoordinates ? {
+    latitude: booking.coordinates[1],
+    longitude: booking.coordinates[0],
+  } : null;
 
   return (
-    <SafeAreaWrapper backgroundColor="#FFFFFF">
-      {/* Minimal Elegant Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#1F2937" />
-        </TouchableOpacity>
-        
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Order Details</Text>
-          <Text style={styles.orderId}>#{booking._id.slice(-6).toUpperCase()}</Text>
-        </View>
-        
-        <View style={[styles.statusIndicator, 
-          booking.status === 'pending' && styles.statusPending,
-          booking.status === 'accepted' && styles.statusAccepted,
-          booking.status === 'canceled' && styles.statusCanceled
-        ]}>
-          <View style={[styles.statusDot,
-            booking.status === 'pending' && styles.dotPending,
-            booking.status === 'accepted' && styles.dotAccepted,
-            booking.status === 'canceled' && styles.dotCanceled
-          ]} />
-        </View>
-      </View>
-
-      <ScrollView 
-        contentContainerStyle={[
-          styles.scrollContent,
-          booking.status === 'pending' && { paddingBottom: 100 }
-        ]} 
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Elegant Service Card */}
-        <Animated.View style={[
-          styles.serviceCard,
-          {
-            opacity: fadeAnim,
-            transform: [
-              { translateY: slideAnim },
-              { scale: scaleAnim }
-            ]
-          }
-        ]}>
-          <View style={styles.serviceHeader}>
-            {listing?.photoUrls && listing.photoUrls.length > 0 ? (
-              <Image 
-                source={{ uri: cleanImageUrl(listing.photoUrls[0]) }} 
-                style={styles.serviceImage}
-              />
-            ) : (
-              <View style={styles.imagePlaceholder}>
-                <Ionicons name="cube-outline" size={28} color="#CBD5E1" />
-              </View>
-            )}
-            
-            <View style={styles.serviceInfo}>
-              <Text style={styles.serviceTitle}>
+    <SafeAreaWrapper backgroundColor={COLORS.BACKGROUND.PRIMARY}>
+      <View style={styles.container}>
+        {/* Header - Figma Design */}
+        <View style={styles.header}>
+          <View style={styles.appBar}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Ionicons name="chevron-back" size={24} color="#0F172A" />
+            </TouchableOpacity>
+            <View style={styles.headerTextGroup}>
+              <Text style={styles.headerTitle}>
                 {getCleanServiceName(listing)}
               </Text>
-              <Text style={styles.serviceCategory}>
-                {listing?.categoryId?.name|| 'Service'}
-              </Text>
-              
-              
-              <View style={styles.priceSection}>
-                <Text style={styles.price}>₹{booking.totalAmount.toLocaleString()}</Text>
-                <Text style={styles.quantity}>
-                  {formatQuantityUnit(booking.quantity || 2, booking.unitOfMeasure || 'per_hour')}
+              <Text style={styles.headerSubtitle}>{formatHeaderSubtitle()}</Text>
+            </View>
+            <View style={styles.appBarRight}>
+              <View style={[styles.statusBadge, { backgroundColor: statusBadge.backgroundColor }]}>
+                <Text style={[styles.statusText, { color: statusBadge.textColor }]}>
+                  {statusBadge.text}
                 </Text>
               </View>
             </View>
           </View>
-        </Animated.View>
+        </View>
 
-        {/* Status Card - Only for pending */}
-        {booking.status === 'pending' && booking.requestExpiresAt && (
-          <Animated.View style={[
-            styles.alertCard,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: Animated.add(slideAnim, 5) }]
-            }
-          ]}>
-            <View style={styles.alertIcon}>
-              <Ionicons name="time" size={20} color="#F59E0B" />
-            </View>
-            <View style={styles.alertContent}>
-              <Text style={styles.alertTitle}>Response Required</Text>
-              <Text style={styles.alertText}>
-                By {formatDate(booking.requestExpiresAt)} at {formatTime(booking.requestExpiresAt)}
-              </Text>
-            </View>
-          </Animated.View>
-        )}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollContent}
+          contentContainerStyle={booking.status === 'pending' ? { paddingBottom: 100 } : undefined}
+        >
+          {/* Map Section */}
+          {mapCenter && (
+            <View style={styles.mapSection}>
+              <View style={styles.mapContainer}>
+                <MapView
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: mapCenter.latitude,
+                    longitude: mapCenter.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  rotateEnabled={false}
+                  pitchEnabled={false}
+                  customMapStyle={UBER_MAP_STYLE}
+                >
+                  <Marker coordinate={mapCenter} anchor={{ x: 0.5, y: 0.5 }}>
+                    <View style={styles.mapMarker}>
+                      <Ionicons name="location-sharp" size={34} color="#0F172A" />
+                    </View>
+                  </Marker>
+                </MapView>
+              </View>
 
-        {/* Timeline Section */}
-        <Animated.View style={[
-          styles.sectionCard,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: Animated.add(slideAnim, 10) }]
-          }
-        ]}>
-          <Text style={styles.sectionTitle}>Timeline</Text>
-          
-          <View style={styles.timeline}>
-            <View style={styles.timelineItem}>
-              <View style={styles.timelineIconWrapper}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-              </View>
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineLabel}>Booking Created</Text>
-                <Text style={styles.timelineDate}>{formatDate(booking.createdAt)}</Text>
-                <Text style={styles.timelineTime}>{formatTime(booking.createdAt)}</Text>
-              </View>
-            </View>
-            
-            {booking.serviceStartDate && (
-              <>
-                <View style={styles.timelineConnector} />
-                <View style={styles.timelineItem}>
-                  <View style={styles.timelineIconWrapper}>
-                    <Ionicons name="calendar" size={20} color="#10B981" />
+              {/* Service Info Card */}
+              <View style={styles.serviceInfoSection}>
+                <View style={styles.serviceInfoRow}>
+                  {listing?.photoUrls && listing.photoUrls.length > 0 ? (
+                    <Image
+                      source={{ uri: cleanImageUrl(listing.photoUrls[0]) }}
+                      style={styles.serviceImage}
+                    />
+                  ) : (
+                    <View style={styles.serviceImagePlaceholder}>
+                      <Ionicons name="cube-outline" size={24} color="#94A3B8" />
+                    </View>
+                  )}
+                  <View style={styles.serviceInfoContent}>
+                    <Text style={styles.serviceTitle}>{getCleanServiceName(listing)}</Text>
+                    <Text style={styles.serviceCategory}>
+                      {listing?.categoryId?.name || 'Service'}
+                    </Text>
                   </View>
-                  <View style={styles.timelineContent}>
-                    <Text style={styles.timelineLabel}>Service Scheduled</Text>
-                    <Text style={styles.timelineDate}>{formatDate(booking.serviceStartDate)}</Text>
-                    <Text style={styles.timelineTime}>{getStatusLabel(booking.status)}</Text>
+                  <View style={styles.priceTag}>
+                    <Text style={styles.priceTagText}>₹{booking.totalAmount.toLocaleString()}</Text>
                   </View>
                 </View>
-              </>
-            )}
-          </View>
-        </Animated.View>
 
-        {/* Map Section */}
-        {booking.coordinates && (
-          <Animated.View style={[
-            styles.sectionCard,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: Animated.add(slideAnim, 15) }]
-            }
-          ]}>
-            <Text style={styles.sectionTitle}>Location</Text>
-            <View style={styles.mapWrapper}>
-              <MapView
-                provider={PROVIDER_GOOGLE}
-                style={styles.map}
-                initialRegion={{
-                  latitude: booking.coordinates[1],
-                  longitude: booking.coordinates[0],
-                  latitudeDelta: 0.006,
-                  longitudeDelta: 0.006,
-                }}
-                scrollEnabled={false}
-                zoomEnabled={false}
-                pitchEnabled={false}
-                rotateEnabled={false}
-              >
-                <Marker
-                  coordinate={{
-                    latitude: booking.coordinates[1],
-                    longitude: booking.coordinates[0],
+                {/* Get Directions Button */}
+                <TouchableOpacity
+                  style={styles.directionsButton}
+                  onPress={() => {
+                    const [lng, lat] = booking.coordinates;
+                    const scheme = Platform.OS === 'ios' ? 'maps:' : 'geo:';
+                    const url = Platform.OS === 'ios'
+                      ? `${scheme}${lat},${lng}`
+                      : `${scheme}${lat},${lng}?q=${lat},${lng}`;
+                    Linking.openURL(url);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="navigate-outline" size={20} color="#0F172A" />
+                  <Text style={styles.directionsText}>Get Directions</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Response Required Alert - Only for pending */}
+          {booking.status === 'pending' && booking.requestExpiresAt && (
+            <View style={styles.alertCard}>
+              <View style={styles.alertIconWrap}>
+                <Ionicons name="time-outline" size={20} color="#EA580C" />
+              </View>
+              <View style={styles.alertContent}>
+                <Text style={styles.alertTitle}>Response Required</Text>
+                <Text style={styles.alertText}>
+                  By {formatDate(booking.requestExpiresAt)} at {formatTime(booking.requestExpiresAt)}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Customer Card */}
+          {seeker && (
+            <View style={styles.customerCard}>
+              <View style={styles.customerRow}>
+                <View style={styles.customerAvatarWrap}>
+                  <View style={styles.customerAvatar}>
+                    <Text style={styles.customerAvatarText}>
+                      {seeker?.name?.charAt(0)?.toUpperCase() || 'U'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.customerInfo}>
+                  <Text style={styles.customerName}>
+                    {seeker?.name || 'Unknown Customer'}
+                  </Text>
+                  <View style={styles.customerMetaRow}>
+                    <Text style={styles.customerMetaText}>Customer</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.customerActions}>
+                {seeker?.phone && (
+                  <TouchableOpacity
+                    style={styles.customerActionBtn}
+                    onPress={() => handleCall(seeker.phone)}
+                  >
+                    <Ionicons name="call-outline" size={22} color="#0F172A" />
+                    <Text style={styles.customerActionLabel}>Call</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.customerActionBtn, !seeker?.phone && styles.customerActionBtnLast]}
+                  onPress={() => {
+                    navigation.navigate('Chat' as never, {
+                      recipientId: seeker._id,
+                      recipientName: seeker.name,
+                      orderId: booking._id,
+                    } as never);
                   }}
                 >
-                  <View style={styles.marker}>
-                    <View style={styles.markerInner} />
+                  <Ionicons name="chatbubble-outline" size={22} color="#0F172A" />
+                  <Text style={styles.customerActionLabel}>Chat</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Order Details Card */}
+          <View style={styles.orderDetailsCard}>
+            <TouchableOpacity
+              style={styles.orderDetailsHeader}
+              onPress={() => setShowOrderDetails(!showOrderDetails)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.orderDetailsTitle}>Order details</Text>
+              <View style={styles.orderDetailsToggle}>
+                <Ionicons
+                  name={showOrderDetails ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#0F172A"
+                />
+              </View>
+            </TouchableOpacity>
+
+            {showOrderDetails && (
+              <View style={styles.orderDetailsBody}>
+                {/* Service Summary */}
+                <View style={styles.orderSummaryRow}>
+                  <View style={styles.orderSummaryInfo}>
+                    <Text style={styles.orderSummaryTitle}>{getCleanServiceName(listing)}</Text>
+                    <Text style={styles.orderSummaryMeta}>
+                      {booking.serviceStartDate && formatDate(booking.serviceStartDate)}
+                      {booking.quantity && booking.unitOfMeasure &&
+                        ` • ${formatQuantityUnit(booking.quantity, booking.unitOfMeasure)}`}
+                    </Text>
                   </View>
-                </Marker>
-              </MapView>
-              
-              <TouchableOpacity 
-                style={styles.directionsButton}
-                onPress={() => {
-                  const [lng, lat] = booking.coordinates;
-                  const scheme = Platform.OS === 'ios' ? 'maps:' : 'geo:';
-                  const url = Platform.OS === 'ios'
-                    ? `${scheme}${lat},${lng}`
-                    : `${scheme}${lat},${lng}?q=${lat},${lng}`;
-                  Linking.openURL(url);
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="navigate" size={16} color="#10B981" />
-                <Text style={styles.directionsText}>Get Directions</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        )}
+                  <Text style={styles.orderSummaryPrice}>₹{booking.totalAmount.toLocaleString()}</Text>
+                </View>
 
-        {/* Notes Section */}
-        {booking.notes && (
-          <Animated.View style={[
-            styles.notesCard,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: Animated.add(slideAnim, 20) }]
-            }
-          ]}>
-            <View style={styles.notesHeader}>
-              <Ionicons name="document-text-outline" size={18} color="#6B7280" />
-              <Text style={styles.notesTitle}>Customer Notes</Text>
-            </View>
-            <Text style={styles.notesText}>{booking.notes}</Text>
-          </Animated.View>
-        )}
+                {/* Timeline */}
+                <View style={styles.orderDetailsDivider} />
+                <View style={styles.orderBlock}>
+                  <Text style={styles.orderBlockLabel}>Timeline</Text>
+                  <View style={styles.timelineCompact}>
+                    <View style={styles.timelineCompactItem}>
+                      <View style={[styles.timelineCompactDot, styles.timelineCompactDotCompleted]} />
+                      <Text style={styles.timelineCompactText}>
+                        Created: {formatDate(booking.createdAt)} at {formatTime(booking.createdAt)}
+                      </Text>
+                    </View>
+                    {booking.serviceStartDate && (
+                      <View style={styles.timelineCompactItem}>
+                        <View style={[styles.timelineCompactDot,
+                          booking.status === 'completed' ? styles.timelineCompactDotCompleted : styles.timelineCompactDotPending
+                        ]} />
+                        <Text style={styles.timelineCompactText}>
+                          Scheduled: {formatDate(booking.serviceStartDate)} • {getStatusLabel(booking.status)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
 
-        {/* Customer Section */}
-        <Animated.View style={[
-          styles.sectionCard,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: Animated.add(slideAnim, 25) }]
-          }
-        ]}>
-          <Text style={styles.sectionTitle}>Customer</Text>
-          
-          <View style={styles.customerRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {seeker?.name?.charAt(0)?.toUpperCase() || 'U'}
-              </Text>
-            </View>
-            
-            <View style={styles.customerInfo}>
-              <Text style={styles.customerName}>
-                {seeker?.name || 'Unknown Customer'}
-              </Text>
-              {seeker?.phone && (
-                <Text style={styles.customerDetail}>{seeker.phone}</Text>
-              )}
-              {seeker?.email && (
-                <Text style={styles.customerDetail}>{seeker.email}</Text>
-              )}
-            </View>
-            
-            <View style={styles.contactButtons}>
-              {seeker?.phone && (
-                <TouchableOpacity 
-                  style={styles.contactBtn} 
-                  onPress={() => handleCall(seeker.phone)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="call-outline" size={20} color="#10B981" />
-                </TouchableOpacity>
-              )}
-              {seeker?.email && (
-                <TouchableOpacity 
-                  style={styles.contactBtn} 
-                  onPress={() => handleEmail(seeker.email)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="mail-outline" size={20} color="#10B981" />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </Animated.View>
+                {/* Category */}
+                {listing?.categoryId?.name && (
+                  <>
+                    <View style={styles.orderDetailsDivider} />
+                    <View style={styles.orderBlock}>
+                      <Text style={styles.orderBlockLabel}>Service type</Text>
+                      <Text style={styles.orderBlockValue}>{listing.categoryId.name}</Text>
+                    </View>
+                  </>
+                )}
 
-        <View style={{ height: 30 }} />
-      </ScrollView>
+                {/* Notes */}
+                {booking.notes && (
+                  <>
+                    <View style={styles.orderDetailsDivider} />
+                    <View style={styles.orderBlock}>
+                      <Text style={styles.orderBlockLabel}>Customer notes</Text>
+                      <Text style={styles.orderBlockValue}>{booking.notes}</Text>
+                    </View>
+                  </>
+                )}
 
-      {/* Elegant Bottom Actions */}
-      {booking.status === 'pending' && (
-        <Animated.View style={[
-          styles.bottomActions,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: Animated.multiply(slideAnim, -0.5) }]
-          }
-        ]}>
-          <TouchableOpacity 
-            style={styles.declineBtn} 
-            onPress={handleRejectBooking}
-            disabled={isProcessing === 'cancel'}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.declineBtnText}>Decline</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.acceptBtn} 
-            onPress={handleAcceptBooking}
-            disabled={isProcessing === 'accept'}
-            activeOpacity={0.8}
-          >
-            {isProcessing === 'accept' ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.acceptBtnText}>Accept Booking</Text>
+                {/* Order ID */}
+                <View style={styles.orderDetailsDivider} />
+                <View style={styles.orderBlock}>
+                  <Text style={styles.orderBlockLabel}>Order ID</Text>
+                  <Text style={styles.orderBlockValue}>#{booking._id.slice(-8).toUpperCase()}</Text>
+                </View>
+              </View>
             )}
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+          </View>
+        </ScrollView>
+
+        {/* Bottom Actions */}
+        {booking.status === 'pending' && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.declineBtn}
+              onPress={handleRejectBooking}
+              disabled={isProcessing === 'cancel'}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.declineBtnText}>Decline</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.acceptBtn}
+              onPress={handleAcceptBooking}
+              disabled={isProcessing === 'accept'}
+              activeOpacity={0.8}
+            >
+              {isProcessing === 'accept' ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.acceptBtnText}>Accept Booking</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.BACKGROUND.PRIMARY,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16, // Increased from 14
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
-  },
+  // Header styles
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: SPACING.MD,
+    paddingTop: SPACING.MD,
+    paddingBottom: SPACING.SM,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#E2E8F0',
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#eaedf1',
-    justifyContent: 'center',
+  appBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerCenter: {
+  appBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTextGroup: {
     flex: 1,
-    alignItems: 'center',
+    marginHorizontal: 12,
+  },
+  backButton: {
+    paddingVertical: 4,
+    paddingRight: 12,
   },
   headerTitle: {
-    fontSize: 18, // Increased from 16
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#000',
+    marginBottom: 1,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#111827',
   },
-  orderId: {
-    fontSize: 14, // Increased from 12
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
-    marginTop: 2,
   },
-  statusIndicator: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F9FAFB',
-    justifyContent: 'center',
-    alignItems: 'center',
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
-  statusPending: {
-    backgroundColor: '#FEF3C7',
+  statusText: {
+    fontSize: 13,
+    fontWeight: '500',
+    fontFamily: FONTS.POPPINS.MEDIUM,
   },
-  statusAccepted: {
-    backgroundColor: '#D1FAE5',
-  },
-  statusCanceled: {
-    backgroundColor: '#FEE2E2',
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#9CA3AF',
-  },
-  dotPending: {
-    backgroundColor: '#F59E0B',
-  },
-  dotAccepted: {
-    backgroundColor: '#10B981',
-  },
-  dotCanceled: {
-    backgroundColor: '#EF4444',
-  },
+  // Scroll content
   scrollContent: {
-    paddingTop: 24,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    flex: 1,
   },
-  serviceCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 21,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+  // Map section
+  mapSection: {
+    backgroundColor: '#FFF',
+    marginBottom: 24,
   },
-  serviceHeader: {
+  mapContainer: {
+    position: 'relative',
+    height: 280,
+    width: '100%',
+    backgroundColor: '#E5E7EB',
+    overflow: 'hidden',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  mapMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Service info section
+  serviceInfoSection: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#FFF',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  serviceInfoRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   serviceImage: {
-    width: 85,
-    height: 85,
+    width: 52,
+    height: 52,
     borderRadius: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F1F5F9',
   },
-  imagePlaceholder: {
-    width: 85,
-    height: 85,
+  serviceImagePlaceholder: {
+    width: 52,
+    height: 52,
     borderRadius: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  serviceInfo: {
+  serviceInfoContent: {
     flex: 1,
-    marginLeft: 16,
-  },
-  serviceCategory: {
-    fontSize: 12, // Increased from 12
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
+    marginLeft: 12,
   },
   serviceTitle: {
-    fontSize: 20, // Increased from 18
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#111827',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  priceSection: {
+  serviceCategory: {
+    fontSize: 14,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  priceTag: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  priceTagText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  directionsButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 12,
+    borderRadius: 12,
   },
-  price: {
-    fontSize: 22, // Increased from 24
-    fontFamily: FONTS.POPPINS.BOLD,
-    color: '#10B981',
-    marginRight: 8,
+  directionsText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#0F172A',
+    marginLeft: 8,
+    fontFamily: FONTS.POPPINS.MEDIUM,
   },
-  quantity: {
-    fontSize: 15, // Increased from 13
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#9CA3AF',
-  },
+  // Alert card
   alertCard: {
-    backgroundColor: '#fef8e0',
+    marginHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: '#FFF7ED',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  alertIcon: {
+  alertIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFEDD5',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -748,242 +887,243 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   alertTitle: {
-    fontSize: 16, // Increased from 14
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#C2410C',
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#92400E',
     marginBottom: 2,
   },
   alertText: {
-    fontSize: 14, // Increased from 12
+    fontSize: 13,
+    color: '#EA580C',
     fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#B45309',
   },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  sectionTitle: {
-    fontSize: 16, // Increased from 14
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#111827',
-    marginBottom: 16,
-  },
-  timeline: {
-    position: 'relative',
-  },
-  timelineItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  timelineIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  timelineContent: {
-    flex: 1,
-  },
-  timelineLabel: {
-    fontSize: 15, // Increased from 13
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  timelineDate: {
-    fontSize: 16, // Increased from 14
-    fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#111827',
-    marginBottom: 2,
-  },
-  timelineTime: {
-    fontSize: 14, // Increased from 12
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#9CA3AF',
-  },
-  timelineConnector: {
-    position: 'absolute',
-    left: 15,
-    top: 35,
-    bottom: 20,
-    width: 2,
-    backgroundColor: '#E5E7EB',
-  },
-  mapWrapper: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  map: {
-    height: 180,
-    borderRadius: 12,
-  },
-  marker: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#10B981', // Changed from #4F46E5
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#10B981', // Changed from #4F46E5
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  markerInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFFFFF',
-  },
-  directionsButton: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  directionsText: {
-    fontSize: 15, // Increased from 13
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#10B981', // Changed from #4F46E5
-    marginLeft: 6,
-  },
-  notesCard: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  notesHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Customer card
+  customerCard: {
+    marginHorizontal: 12,
     marginBottom: 12,
-  },
-  notesTitle: {
-    fontSize: 15, // Increased from 13
-    fontFamily: FONTS.POPPINS.MEDIUM,
-    color: '#6B7280',
-    marginLeft: 8,
-  },
-  notesText: {
-    fontSize: 16, // Increased from 14
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#374151',
-    lineHeight: 22, // Increased from 20
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ECEFF4',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
+    overflow: 'hidden',
   },
   customerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#DCFCE7', // Changed from #EEF2FF (green tint)
+  customerAvatarWrap: {
+    position: 'relative',
+  },
+  customerAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: {
-    fontSize: 20, // Increased from 18
+  customerAvatarText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#10B981', // Changed from #4F46E5
   },
   customerInfo: {
     flex: 1,
     marginLeft: 12,
   },
   customerName: {
-    fontSize: 17, // Increased from 15
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#111827',
     marginBottom: 2,
   },
-  customerDetail: {
-    fontSize: 15, // Increased from 13
-    fontFamily: FONTS.POPPINS.REGULAR,
-    color: '#6B7280',
-    marginBottom: 1,
-  },
-  contactButtons: {
+  customerMetaRow: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
   },
-  contactBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+  customerMetaText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  customerActions: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  customerActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#F1F5F9',
+  },
+  customerActionBtnLast: {
+    borderRightWidth: 0,
+  },
+  customerActionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#0F172A',
+    marginLeft: 8,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  // Order details card
+  orderDetailsCard: {
+    marginHorizontal: 12,
+    marginVertical: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ECEFF4',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  orderDetailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+  },
+  orderDetailsTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#0F172A',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  orderDetailsToggle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bottomActions: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
+  orderDetailsBody: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: 20,
+  },
+  orderSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  orderSummaryInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  orderSummaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 4,
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  orderSummaryMeta: {
+    fontSize: 13,
+    color: '#475569',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  orderSummaryPrice: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  orderDetailsDivider: {
+    height: 1,
+    backgroundColor: '#EEF2F6',
+    marginVertical: 16,
+  },
+  orderBlock: {},
+  orderBlockLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#94A3B8',
+    marginBottom: 4,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  orderBlockValue: {
+    fontSize: 14,
+    color: '#0F172A',
+    lineHeight: 20,
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  // Compact timeline
+  timelineCompact: {
+    marginTop: 8,
+  },
+  timelineCompactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  timelineCompactDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  timelineCompactDotCompleted: {
+    backgroundColor: '#10B981',
+  },
+  timelineCompactDotPending: {
+    backgroundColor: '#F59E0B',
+  },
+  timelineCompactText: {
+    fontSize: 14,
+    color: '#475569',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  // Footer
+  footer: {
+    flexDirection: 'row',
+    padding: SPACING.MD,
+    paddingBottom: Platform.OS === 'ios' ? 32 : SPACING.MD,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: COLORS.BORDER.PRIMARY,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 5,
   },
   declineBtn: {
     flex: 1,
     paddingVertical: 16,
     borderRadius: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
   },
   declineBtnText: {
-    fontSize: 17, // Increased from 15
+    fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
-    color: '#6B7280',
+    color: '#64748B',
   },
   acceptBtn: {
     flex: 1.5,
     paddingVertical: 16,
     borderRadius: 12,
-    backgroundColor: '#10B981',
+    backgroundColor: '#0F172A',
     alignItems: 'center',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
   acceptBtnText: {
-    fontSize: 17, // Increased from 15
+    fontSize: 16,
     fontFamily: FONTS.POPPINS.SEMIBOLD,
     color: '#FFFFFF',
   },

@@ -531,11 +531,10 @@ const BookingsScreen = () => {
 
     // Navigate to appropriate detail screen
     const handlePress = () => {
-      if (booking.type === 'service_request') {
+      if (booking.type === 'service_request' || (booking.type === 'order' && (booking as any).serviceRequestId)) {
         // All service requests (including matched ones) go to ServiceRequestDetailsScreen
         navigation.navigate('ServiceRequestDetails', {
-          requestId: booking.id,
-          serviceRequest: booking // Pass the entire booking data
+          requestId: (booking as any).serviceRequestId || booking.id,
         });
       } else {
         // Standalone orders (not linked to service requests) go to SeekerOrderDetail

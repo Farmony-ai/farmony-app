@@ -8,12 +8,10 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Modal,
-  TextInput,
 } from 'react-native';
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import Text from '../../components/Text';
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS } from '../../utils';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, FONTS, FONT_SIZES } from '../../utils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import BookingService, { Booking, BookingsResponse } from '../../services/BookingService';
@@ -45,12 +43,6 @@ const ProviderBookingsScreen = () => {
   const [processingAction, setProcessingAction] = useState<'accept' | 'cancel' | null>(null);
   const [providerListings, setProviderListings] = useState<any[]>([]);
 
-  // Accept modal state
-  const [showAcceptModal, setShowAcceptModal] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
-  const [quotePrice, setQuotePrice] = useState('');
-  const [quoteMessage, setQuoteMessage] = useState('');
-  const [accepting, setAccepting] = useState(false);
 
   const { user } = useSelector((state: RootState) => state.auth);
 
@@ -206,57 +198,6 @@ const ProviderBookingsScreen = () => {
     );
   };
 
-  // Opportunity acceptance handlers
-  const handleAcceptOpportunity = (request: ServiceRequest) => {
-    setSelectedRequest(request);
-    setQuotePrice('');
-    setQuoteMessage('');
-    setShowAcceptModal(true);
-  };
-
-  const submitAcceptance = async () => {
-    if (!selectedRequest) return;
-
-    if (!quotePrice || parseFloat(quotePrice) <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price');
-      return;
-    }
-
-    try {
-      setAccepting(true);
-      const result = await ServiceRequestService.acceptRequest(selectedRequest._id, {
-        price: parseFloat(quotePrice),
-        message: quoteMessage,
-      });
-
-      Alert.alert('Success!', 'You have successfully accepted the service request.', [
-        {
-          text: 'View Order',
-          onPress: () => {
-            setShowAcceptModal(false);
-            setSelectedRequest(null);
-            navigation.navigate('OrderDetail', { bookingId: result.orderId });
-          },
-        },
-        {
-          text: 'OK',
-          onPress: () => {
-            setShowAcceptModal(false);
-            setSelectedRequest(null);
-          },
-        },
-      ]);
-
-      // Refresh opportunities list to remove the accepted one
-      fetchOpportunities();
-      fetchBookings(); // Also refresh bookings to show new order
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to accept request. It may have been accepted by another provider.');
-    } finally {
-      setAccepting(false);
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
@@ -297,81 +238,98 @@ const ProviderBookingsScreen = () => {
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => {
     const listing = typeof booking.listingId === 'object' ? booking.listingId : null;
     const seeker = typeof booking.seekerId === 'object' ? booking.seekerId : null;
+    const statusConfig = getStatusBadgeConfig(booking.status);
 
     return (
       <TouchableOpacity
         key={booking._id}
         style={styles.bookingCard}
         onPress={() => navigation.navigate('OrderDetail', { bookingId: booking._id })}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
       >
         <View style={styles.bookingHeader}>
+          <View style={styles.bookingIconWrap}>
+            <Ionicons name="briefcase-outline" size={20} color="#1E293B" />
+          </View>
           <View style={styles.bookingInfo}>
-            <Text variant="body" weight="semibold" numberOfLines={1} style={styles.bookingTitle}>
+            <Text style={styles.bookingTitle} numberOfLines={1}>
               {listing?.title || 'Service Booking'}
             </Text>
-            <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
+            <Text style={styles.bookingCustomer}>
               {seeker?.name || 'Customer'}
             </Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(booking.status)}20` }]}>
-            <Text
-              variant="caption"
-              weight="medium"
-              style={{ color: getStatusColor(booking.status) }}
-            >
-              {booking.status.toUpperCase()}
+          <View style={[styles.statusBadge, { backgroundColor: statusConfig.backgroundColor }]}>
+            <Text style={[styles.statusBadgeText, { color: statusConfig.textColor }]}>
+              {statusConfig.text}
             </Text>
           </View>
         </View>
 
         <View style={styles.bookingDetails}>
-          <View style={styles.detailRow}>
-            <Ionicons name="cash-outline" size={16} color={COLORS.TEXT.SECONDARY} />
-            <Text variant="body" weight="semibold" color={COLORS.PRIMARY.MAIN}>
-              ₹{booking.totalAmount}
-            </Text>
+          <View style={styles.detailItem}>
+            <View style={styles.detailIconWrap}>
+              <Ionicons name="wallet-outline" size={16} color="#64748B" />
+            </View>
+            <Text style={styles.detailAmount}>₹{booking.totalAmount.toLocaleString()}</Text>
           </View>
-          <View style={styles.detailRow}>
-            <Ionicons name="calendar-outline" size={16} color={COLORS.TEXT.SECONDARY} />
-            <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-              {formatDate(booking.createdAt)}
-            </Text>
+          <View style={styles.detailItem}>
+            <View style={styles.detailIconWrap}>
+              <Ionicons name="calendar-outline" size={16} color="#64748B" />
+            </View>
+            <Text style={styles.detailDate}>{formatDate(booking.createdAt)}</Text>
           </View>
         </View>
 
         {showActions && (
           <View style={styles.actionButtons}>
             <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButton]}
+              style={styles.declineBtn}
               disabled={processingId === booking._id && processingAction === 'cancel'}
               onPress={(e) => {
                 e.stopPropagation();
                 handleRejectBooking(booking._id);
               }}
+              activeOpacity={0.8}
             >
-              <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
-              <Text variant="body" weight="medium" color="#EF4444" style={{ marginLeft: 6 }}>
-                Decline
-              </Text>
+              <Text style={styles.declineBtnText}>Decline</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionButton, styles.acceptButton]}
+              style={styles.acceptBtn}
               disabled={processingId === booking._id && processingAction === 'accept'}
               onPress={(e) => {
                 e.stopPropagation();
                 handleAcceptBooking(booking._id);
               }}
+              activeOpacity={0.8}
             >
-              <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.PRIMARY.MAIN} />
-              <Text variant="body" weight="medium" color={COLORS.PRIMARY.MAIN} style={{ marginLeft: 6 }}>
-                Accept
-              </Text>
+              <Text style={styles.acceptBtnText}>Accept</Text>
             </TouchableOpacity>
           </View>
         )}
+
+        <View style={styles.cardChevron}>
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+        </View>
       </TouchableOpacity>
     );
+  };
+
+  const getStatusBadgeConfig = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return { text: 'Pending', backgroundColor: '#FEF3C7', textColor: '#F59E0B' };
+      case 'accepted':
+        return { text: 'Accepted', backgroundColor: '#DCFCE7', textColor: '#16A34A' };
+      case 'paid':
+        return { text: 'Paid', backgroundColor: '#DBEAFE', textColor: '#2563EB' };
+      case 'completed':
+        return { text: 'Completed', backgroundColor: '#F1F5F9', textColor: '#64748B' };
+      case 'canceled':
+        return { text: 'Cancelled', backgroundColor: '#FEE2E2', textColor: '#DC2626' };
+      default:
+        return { text: status, backgroundColor: '#F1F5F9', textColor: '#64748B' };
+    }
   };
 
   const renderOpportunityCard = (request: ServiceRequest) => {
@@ -442,84 +400,77 @@ const ProviderBookingsScreen = () => {
     return (
       <TouchableOpacity
         key={request._id}
-        style={styles.bookingCard}
+        style={styles.opportunityCard}
         onPress={() => navigation.navigate('ServiceRequestDetail', { booking: bookingData })}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
       >
-        <View style={styles.bookingHeader}>
-          <View style={styles.bookingInfo}>
-            <Text variant="body" weight="semibold" numberOfLines={1} style={styles.bookingTitle}>
+        {/* Distance Badge */}
+        <View style={styles.opportunityDistanceBadge}>
+          <Ionicons name="location" size={14} color="#10B981" />
+          <Text style={styles.opportunityDistanceText}>{distanceKm} km away</Text>
+        </View>
+
+        <View style={styles.opportunityHeader}>
+          <View style={styles.opportunityIconWrap}>
+            <Ionicons name="flash" size={20} color="#F59E0B" />
+          </View>
+          <View style={styles.opportunityInfo}>
+            <Text style={styles.opportunityTitle} numberOfLines={1}>
               {request.title}
             </Text>
-            <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
+            <Text style={styles.opportunityCustomer}>
               {seeker?.name || 'Customer'} {category?.name ? `• ${category.name}` : ''}
             </Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: '#E8F5E9' }]}>
-            <Ionicons name="location-outline" size={12} color="#4CAF50" style={{ marginRight: 2 }} />
-            <Text variant="caption" weight="medium" style={{ color: '#4CAF50' }}>
-              {distanceKm} km
-            </Text>
-          </View>
         </View>
 
-        <Text
-          variant="caption"
-          color={COLORS.TEXT.SECONDARY}
-          numberOfLines={2}
-          style={styles.opportunityDescription}
-        >
+        <Text style={styles.opportunityDescription} numberOfLines={2}>
           {request.description}
         </Text>
 
-        <View style={styles.bookingDetails}>
+        <View style={styles.opportunityDetails}>
           {request.budget && (
-            <View style={styles.detailRow}>
-              <Ionicons name="cash-outline" size={16} color={COLORS.TEXT.SECONDARY} />
-              <Text variant="body" weight="semibold" color={COLORS.PRIMARY.MAIN}>
-                ₹{request.budget.min} - ₹{request.budget.max}
+            <View style={styles.opportunityDetailItem}>
+              <Ionicons name="wallet-outline" size={16} color="#64748B" />
+              <Text style={styles.opportunityBudget}>
+                ₹{request.budget.min.toLocaleString()} - ₹{request.budget.max.toLocaleString()}
               </Text>
             </View>
           )}
-          <View style={styles.detailRow}>
-            <Ionicons name="calendar-outline" size={16} color={COLORS.TEXT.SECONDARY} />
-            <Text variant="caption" color={COLORS.TEXT.SECONDARY}>
-              {formatServiceDate(request.serviceStartDate)}
-            </Text>
+          <View style={styles.opportunityDetailItem}>
+            <Ionicons name="calendar-outline" size={16} color="#64748B" />
+            <Text style={styles.opportunityDate}>{formatServiceDate(request.serviceStartDate)}</Text>
           </View>
         </View>
 
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.acceptButton, { flex: 1 }]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleAcceptOpportunity(request);
-            }}
-          >
-            <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.PRIMARY.MAIN} />
-            <Text variant="body" weight="medium" color={COLORS.PRIMARY.MAIN} style={{ marginLeft: 6 }}>
-              Accept Job
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.acceptJobBtn}
+          onPress={(e) => {
+            e.stopPropagation();
+            navigation.navigate('ServiceRequestDetail', { booking: bookingData });
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.acceptJobBtnText}>Accept Job</Text>
+          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
 
   const renderEmptyState = (type: string) => {
     const isOpportunities = type === 'opportunities';
+    const iconName = isOpportunities ? 'briefcase-outline' : type === 'accepted' || type === 'paid' ? 'hourglass-outline' : type === 'completed' ? 'checkmark-done-outline' : 'close-circle-outline';
+
     return (
       <View style={styles.emptyContainer}>
-        <Ionicons
-          name={isOpportunities ? 'briefcase-outline' : type === 'accepted' || type === 'paid' ? 'hourglass-outline' : type === 'completed' ? 'checkmark-done-outline' : 'close-circle-outline'}
-          size={64}
-          color={COLORS.TEXT.SECONDARY}
-        />
-        <Text variant="h4" weight="semibold" style={styles.emptyTitle}>
+        <View style={styles.emptyIconWrap}>
+          <Ionicons name={iconName} size={48} color="#94A3B8" />
+        </View>
+        <Text style={styles.emptyTitle}>
           {isOpportunities ? 'No Open Opportunities' : `No ${type.charAt(0).toUpperCase() + type.slice(1)} Bookings`}
         </Text>
-        <Text variant="body" color={COLORS.TEXT.SECONDARY} align="center" style={styles.emptyText}>
+        <Text style={styles.emptyText}>
           {isOpportunities
             ? 'Service requests matching your skills will appear here'
             : type === 'accepted' || type === 'paid'
@@ -556,71 +507,104 @@ const ProviderBookingsScreen = () => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.TEXT.PRIMARY} />
+          <Ionicons name="chevron-back" size={24} color="#1E293B" />
         </TouchableOpacity>
-        <Text variant="h3" weight="semibold" style={styles.headerTitle}>
-          My Bookings
-        </Text>
+        <View style={styles.headerTextGroup}>
+          <Text style={styles.headerTitle}>My Bookings</Text>
+          <Text style={styles.headerSubtitle}>Manage your service requests</Text>
+        </View>
         <View style={{ width: 40 }} />
       </View>
 
       {/* Tabs: opportunities | accepted | paid | completed | canceled */}
-      <ScrollView style={styles.tabContainer} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'opportunities' && styles.activeTab]} onPress={() => setActiveTab('opportunities')}>
-          <Text variant="body" weight={activeTab === 'opportunities' ? 'semibold' : 'regular'} color={activeTab === 'opportunities' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
-            Opportunities
-          </Text>
-          {openOpportunities.length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">{openOpportunities.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+      <View style={styles.tabContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'opportunities' && styles.activeTab]}
+            onPress={() => setActiveTab('opportunities')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'opportunities' && styles.activeTabText]}>
+              Opportunities
+            </Text>
+            {openOpportunities.length > 0 && (
+              <View style={[styles.tabBadge, activeTab === 'opportunities' && styles.activeTabBadge]}>
+                <Text style={[styles.tabBadgeText, activeTab === 'opportunities' && styles.activeTabBadgeText]}>
+                  {openOpportunities.length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.tab, activeTab === 'accepted' && styles.activeTab]} onPress={() => setActiveTab('accepted')}>
-          <Text variant="body" weight={activeTab === 'accepted' ? 'semibold' : 'regular'} color={activeTab === 'accepted' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
-            Accepted
-          </Text>
-          {bookings.active.filter(b => b.status === 'accepted').length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">{bookings.active.filter(b => b.status === 'accepted').length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'accepted' && styles.activeTab]}
+            onPress={() => setActiveTab('accepted')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'accepted' && styles.activeTabText]}>
+              Accepted
+            </Text>
+            {bookings.active.filter(b => b.status === 'accepted').length > 0 && (
+              <View style={[styles.tabBadge, activeTab === 'accepted' && styles.activeTabBadge]}>
+                <Text style={[styles.tabBadgeText, activeTab === 'accepted' && styles.activeTabBadgeText]}>
+                  {bookings.active.filter(b => b.status === 'accepted').length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.tab, activeTab === 'paid' && styles.activeTab]} onPress={() => setActiveTab('paid')}>
-          <Text variant="body" weight={activeTab === 'paid' ? 'semibold' : 'regular'} color={activeTab === 'paid' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
-            Paid
-          </Text>
-          {bookings.active.filter(b => b.status === 'paid').length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">{bookings.active.filter(b => b.status === 'paid').length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'paid' && styles.activeTab]}
+            onPress={() => setActiveTab('paid')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'paid' && styles.activeTabText]}>
+              Paid
+            </Text>
+            {bookings.active.filter(b => b.status === 'paid').length > 0 && (
+              <View style={[styles.tabBadge, activeTab === 'paid' && styles.activeTabBadge]}>
+                <Text style={[styles.tabBadgeText, activeTab === 'paid' && styles.activeTabBadgeText]}>
+                  {bookings.active.filter(b => b.status === 'paid').length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.tab, activeTab === 'completed' && styles.activeTab]} onPress={() => setActiveTab('completed')}>
-          <Text variant="body" weight={activeTab === 'completed' ? 'semibold' : 'regular'} color={activeTab === 'completed' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
-            Completed
-          </Text>
-          {bookings.completed.length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">{bookings.completed.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
+            onPress={() => setActiveTab('completed')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
+              Completed
+            </Text>
+            {bookings.completed.length > 0 && (
+              <View style={[styles.tabBadge, activeTab === 'completed' && styles.activeTabBadge]}>
+                <Text style={[styles.tabBadgeText, activeTab === 'completed' && styles.activeTabBadgeText]}>
+                  {bookings.completed.length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.tab, activeTab === 'canceled' && styles.activeTab]} onPress={() => setActiveTab('canceled')}>
-          <Text variant="body" weight={activeTab === 'canceled' ? 'semibold' : 'regular'} color={activeTab === 'canceled' ? COLORS.PRIMARY.MAIN : COLORS.TEXT.SECONDARY} numberOfLines={1}>
-            Canceled
-          </Text>
-          {bookings.canceled.length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text variant="caption" weight="semibold" color="#fff">{bookings.canceled.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'canceled' && styles.activeTab]}
+            onPress={() => setActiveTab('canceled')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'canceled' && styles.activeTabText]}>
+              Canceled
+            </Text>
+            {bookings.canceled.length > 0 && (
+              <View style={[styles.tabBadge, activeTab === 'canceled' && styles.activeTabBadge]}>
+                <Text style={[styles.tabBadgeText, activeTab === 'canceled' && styles.activeTabBadgeText]}>
+                  {bookings.canceled.length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
 
       {/* Content */}
       <View style={{ flex: 1 }}>
@@ -672,152 +656,76 @@ const ProviderBookingsScreen = () => {
           )
         )}
       </View>
-
-      {/* Accept Request Modal */}
-      <Modal
-        visible={showAcceptModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowAcceptModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text variant="h4" weight="semibold" color={COLORS.TEXT.PRIMARY}>
-                Accept Service Request
-              </Text>
-              <TouchableOpacity onPress={() => setShowAcceptModal(false)}>
-                <Ionicons name="close" size={24} color={COLORS.TEXT.PRIMARY} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalBody}>
-              <Text variant="body" weight="semibold" color={COLORS.TEXT.PRIMARY} style={{ marginBottom: SPACING.MD }}>
-                {selectedRequest?.title}
-              </Text>
-
-              <View style={styles.modalSection}>
-                <Text variant="caption" weight="semibold" color={COLORS.TEXT.PRIMARY} style={{ marginBottom: SPACING.XS }}>
-                  Your Quote Price *
-                </Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={quotePrice}
-                  onChangeText={setQuotePrice}
-                  placeholder="Enter your price in ₹"
-                  keyboardType="numeric"
-                  placeholderTextColor={COLORS.TEXT.SECONDARY}
-                />
-              </View>
-
-              <View style={styles.modalSection}>
-                <Text variant="caption" weight="semibold" color={COLORS.TEXT.PRIMARY} style={{ marginBottom: SPACING.XS }}>
-                  Message to Customer (Optional)
-                </Text>
-                <TextInput
-                  style={[styles.modalInput, styles.modalTextArea]}
-                  value={quoteMessage}
-                  onChangeText={setQuoteMessage}
-                  placeholder="Add any notes or details about your service..."
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                  placeholderTextColor={COLORS.TEXT.SECONDARY}
-                />
-              </View>
-
-              <View style={styles.modalNote}>
-                <Ionicons name="information-circle-outline" size={16} color={COLORS.TEXT.SECONDARY} />
-                <Text variant="caption" color={COLORS.TEXT.SECONDARY} style={{ marginLeft: SPACING.XS, flex: 1 }}>
-                  Once accepted, an order will be created and the customer will be notified.
-                </Text>
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonOutline]}
-                onPress={() => setShowAcceptModal(false)}
-              >
-                <Text variant="body" weight="medium" color={COLORS.TEXT.SECONDARY}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonPrimary]}
-                onPress={submitAcceptance}
-                disabled={accepting}
-              >
-                {accepting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text variant="body" weight="medium" color="#fff">
-                    Submit
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
+  // Header styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    backgroundColor: '#fff',
+    paddingTop: SPACING.MD,
+    paddingBottom: SPACING.SM,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
+    borderBottomColor: '#E2E8F0',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingVertical: 4,
+    paddingRight: 12,
+  },
+  headerTextGroup: {
+    flex: 1,
   },
   headerTitle: {
-    flex: 1,
-    textAlign: 'center',
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.TEXT.PRIMARY,
+    color: '#1E293B',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    marginBottom: 2,
   },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+
+  // Tab styles - Pill design
   tabContainer: {
-    flexGrow: 0,
-    backgroundColor: '#fff',
-    paddingHorizontal: SPACING.MD,
-    paddingBottom: SPACING.SM,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
+    borderBottomColor: '#F1F5F9',
   },
   tabContent: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 2,
+    paddingHorizontal: 12,
+    gap: 8,
   },
   tab: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: SPACING.MD,
-    minWidth: 110,
-    marginRight: SPACING.SM,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-    position: 'relative',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
   },
   activeTab: {
-    borderBottomColor: COLORS.PRIMARY.MAIN,
+    backgroundColor: '#1E293B',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  activeTabText: {
+    color: '#FFFFFF',
   },
   tabBadge: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
+    backgroundColor: '#E2E8F0',
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -826,165 +734,291 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  activeTabBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  activeTabBadgeText: {
+    color: '#FFFFFF',
+  },
+
+  // Content styles
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: SPACING.MD,
-    paddingTop: SPACING.MD,
-    paddingBottom: SPACING['4XL'],
+    paddingHorizontal: 12,
+    paddingTop: 16,
+    paddingBottom: 100,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // Empty state styles
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SPACING.XL,
+    paddingHorizontal: 32,
+  },
+  emptyIconWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   emptyTitle: {
-    marginTop: SPACING.MD,
-    marginBottom: SPACING.SM,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   emptyText: {
-    marginBottom: SPACING.LG,
+    fontSize: 14,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+    textAlign: 'center',
+    lineHeight: 20,
   },
+
+  // Booking card styles
   bookingCard: {
-    backgroundColor: '#fff',
-    borderRadius: BORDER_RADIUS.LG,
-    marginBottom: SPACING.MD,
-    ...SHADOWS.SM,
-    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ECEFF4',
+    shadowColor: '#1E293B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    position: 'relative',
   },
   bookingHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: SPACING.MD,
-    paddingBottom: SPACING.SM,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  bookingIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   bookingInfo: {
     flex: 1,
-    marginRight: SPACING.SM,
   },
   bookingTitle: {
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    marginBottom: 2,
+  },
+  bookingCustomer: {
+    fontSize: 13,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.SM,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.SM,
+    borderRadius: 8,
   },
-  opportunityDescription: {
-    paddingHorizontal: SPACING.MD,
-    marginBottom: SPACING.SM,
-    lineHeight: 18,
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+    fontFamily: FONTS.POPPINS.MEDIUM,
   },
   bookingDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.MD,
-    paddingBottom: SPACING.MD,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
-  detailRow: {
+  detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
+  detailIconWrap: {
+    marginRight: 6,
+  },
+  detailAmount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  detailDate: {
+    fontSize: 13,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  cardChevron: {
+    position: 'absolute',
+    right: 16,
+    top: '50%',
+    marginTop: -10,
+  },
+
+  // Action buttons
   actionButtons: {
     flexDirection: 'row',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    paddingBottom: SPACING.MD,
-    gap: SPACING.SM,
+    marginTop: 16,
+    gap: 10,
   },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: BORDER_RADIUS.MD,
-    borderWidth: 1.5,
-  },
-  acceptButton: {
-    backgroundColor: `${COLORS.PRIMARY.MAIN}10`,
-    borderColor: COLORS.PRIMARY.MAIN,
-  },
-  rejectButton: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FCA5A5',
-  },
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: BORDER_RADIUS.LG,
-    borderTopRightRadius: BORDER_RADIUS.LG,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: SPACING.MD,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER.PRIMARY,
-  },
-  modalBody: {
-    padding: SPACING.MD,
-  },
-  modalSection: {
-    marginBottom: SPACING.MD,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-    borderRadius: BORDER_RADIUS.MD,
-    padding: SPACING.SM,
-    fontSize: 16,
-    color: COLORS.TEXT.PRIMARY,
-    backgroundColor: '#fff',
-  },
-  modalTextArea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  modalNote: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.BACKGROUND.SECONDARY,
-    padding: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MD,
-    marginTop: SPACING.SM,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    padding: SPACING.MD,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.BORDER.PRIMARY,
-    gap: SPACING.SM,
-  },
-  modalButton: {
+  declineBtn: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: BORDER_RADIUS.MD,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  declineBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  acceptBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+  },
+  acceptBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+
+  // Opportunity card styles
+  opportunityCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ECEFF4',
+    shadowColor: '#1E293B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  opportunityDistanceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  opportunityDistanceText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#10B981',
+    fontFamily: FONTS.POPPINS.MEDIUM,
+    marginLeft: 4,
+  },
+  opportunityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  opportunityIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  opportunityInfo: {
+    flex: 1,
+  },
+  opportunityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    marginBottom: 2,
+  },
+  opportunityCustomer: {
+    fontSize: 13,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  opportunityDescription: {
+    fontSize: 14,
+    color: '#475569',
+    fontFamily: FONTS.POPPINS.REGULAR,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  opportunityDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  opportunityDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  opportunityBudget: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    marginLeft: 6,
+  },
+  opportunityDate: {
+    fontSize: 13,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+    marginLeft: 6,
+  },
+  acceptJobBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#1E293B',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
   },
-  modalButtonOutline: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: COLORS.BORDER.PRIMARY,
-  },
-  modalButtonPrimary: {
-    backgroundColor: COLORS.PRIMARY.MAIN,
+  acceptJobBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
   },
 });
 
