@@ -344,8 +344,8 @@ const styles = StyleSheet.create({
         borderBottomColor: '#F1F5F9',
     },
     headerTitle: {
-        fontSize: scaleFontSize(20),
-        fontFamily: FONTS.POPPINS.BOLD,
+        fontSize: scaleFontSize(18),
+        fontFamily: FONTS.POPPINS.SEMIBOLD,
         color: '#000000',
     },
     markAllButton: {

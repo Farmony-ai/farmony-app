@@ -917,6 +917,67 @@ const ServiceRequestDetailsScreen = () => {
                 </View>
               )}
 
+              {/* Provider Matched Card - Uber-style */}
+              {requestStatus.toLowerCase() === 'accepted' && currentRequest?.lifecycle?.order?.providerId && (
+                <View style={styles.providerMatchedCard}>
+                  <View style={styles.providerMatchedRow}>
+                    <View style={styles.providerAvatarWrap}>
+                      <View style={styles.providerAvatar}>
+                        <Text style={styles.providerAvatarText}>
+                          {currentRequest.lifecycle.order.providerId.name?.charAt(0)?.toUpperCase() || 'P'}
+                        </Text>
+                      </View>
+                      <View style={styles.providerVerifiedBadge}>
+                        <Ionicons name="checkmark" size={10} color="#FFFFFF" />
+                      </View>
+                    </View>
+
+                    <View style={styles.providerInfo}>
+                      <Text style={styles.providerName}>
+                        {currentRequest.lifecycle.order.providerId.name || 'Provider'}
+                      </Text>
+                      <View style={styles.providerMetaRow}>
+                        <Ionicons name="star" size={14} color="#0F172A" />
+                        <Text style={styles.providerRating}>4.9</Text>
+                        <View style={styles.providerMetaDot} />
+                        <Text style={styles.providerTrips}>500+ services</Text>
+                      </View>
+                    </View>
+
+                    {currentRequest.lifecycle.order.agreedPrice && (
+                      <View style={styles.priceTag}>
+                        <Text style={styles.priceTagText}>
+                          ₹{currentRequest.lifecycle.order.agreedPrice.toLocaleString('en-IN')}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.providerActions}>
+                    <TouchableOpacity
+                      style={styles.providerActionBtn}
+                      onPress={() => {
+                        if (currentRequest.lifecycle?.order?.providerId?.phone) {
+                          Linking.openURL(`tel:${currentRequest.lifecycle.order.providerId.phone}`);
+                        }
+                      }}
+                    >
+                      <Ionicons name="call-outline" size={22} color="#0F172A" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.providerActionBtn}
+                      onPress={() => {
+                        if (currentRequest.lifecycle?.order?.providerId?.phone) {
+                          Linking.openURL(`sms:${currentRequest.lifecycle.order.providerId.phone}`);
+                        }
+                      }}
+                    >
+                      <Ionicons name="chatbubble-outline" size={22} color="#0F172A" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
               <View style={styles.orderDetailsCard}>
                 <TouchableOpacity
                   style={styles.orderDetailsHeader}
@@ -1609,6 +1670,115 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#C2410C',
     lineHeight: 18,
+  },
+  // Provider Matched Card - Uber-style
+  providerMatchedCard: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ECEFF4',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  providerMatchedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  providerAvatarWrap: {
+    position: 'relative',
+  },
+  providerAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  providerAvatarText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#0F172A',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  providerVerifiedBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0F172A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  providerInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  providerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+    marginBottom: 2,
+  },
+  providerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  providerRating: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#0F172A',
+    marginLeft: 4,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  providerMetaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#94A3B8',
+    marginHorizontal: 8,
+  },
+  providerTrips: {
+    fontSize: 14,
+    color: '#64748B',
+    fontFamily: FONTS.POPPINS.REGULAR,
+  },
+  priceTag: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  priceTagText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+    fontFamily: FONTS.POPPINS.SEMIBOLD,
+  },
+  providerActions: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  providerActionBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#F1F5F9',
   },
 });
 
