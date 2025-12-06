@@ -684,8 +684,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.08)',
   },
   subCategoryIconContainer: {
-    width: 56,
-    height: 56,
+    width: 72,
+    height: 72,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS_MINIMAL.background,
@@ -693,8 +693,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   subCategoryIcon: {
-    width: 72,
-    height: 72,
+    width: 64,
+    height: 64,
     resizeMode: 'contain',
   },
   subCategoryText: {

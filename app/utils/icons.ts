@@ -28,8 +28,13 @@ const categoryIcons: { [key: string]: any } = {
   // Construction & Infrastructure
   construction: require('../assets/Icons/Categories/construction.png'),
   
+  // Drone Services
+  drone: require('../assets/Icons/Categories/drone.png'),
+  'pesticide-drone': require('../assets/Icons/Categories/pesticide-sprayer.png'),
+  'seed-drone': require('../assets/Icons/Categories/seed-sprayer.png'),
+
   // Services & Professionals
-  farmer: require('../assets/Icons/Categories/farmer.png'),
+  farmer: require('../assets/Icons/Categories/harvester-worker.png'),
   worker: require('../assets/Icons/Categories/worker.png'),
 
   painter: require('../assets/Icons/Categories/painter.png'),

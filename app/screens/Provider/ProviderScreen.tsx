@@ -323,6 +323,15 @@ const ProviderScreen = () => {
     }
   }, [user?.id]);
 
+  // Refresh when navigated back with refresh param
+  useEffect(() => {
+    if (route.params?.refresh) {
+      fetchDashboard();
+      // Clear the param to prevent re-fetching on subsequent renders
+      navigation.setParams({ refresh: undefined });
+    }
+  }, [route.params?.refresh]);
+
   const onRefresh = () => fetchDashboard(true);
 
   useEffect(() => {

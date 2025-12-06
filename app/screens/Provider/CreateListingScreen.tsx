@@ -345,12 +345,12 @@ const CreateListingScreen = () => {
       if (isEditMode) {
         await ListingService.updateListing(listingId, payload, token);
         Alert.alert('Success', 'Listing updated successfully!', [
-          { text: 'OK', onPress: () => navigation.goBack() },
+          { text: 'OK', onPress: () => navigation.navigate('Provider', { refresh: true }) },
         ]);
       } else {
         await ListingService.createListing(payload, token);
         Alert.alert('Success', 'Listing created successfully!', [
-          { text: 'OK', onPress: () => navigation.goBack() },
+          { text: 'OK', onPress: () => navigation.navigate('Provider', { refresh: true }) },
         ]);
       }
     } catch (error) {
@@ -402,13 +402,7 @@ const CreateListingScreen = () => {
               </Text>
               <Image
                 source={categoryIcons[category.icon || 'tools'] || categoryIcons['tools']}
-                style={[
-                  styles.categoryIcon,
-                  formData.categoryId === category._id && { 
-                    tintColor: COLORS.PRIMARY.MAIN,
-                    opacity: 1 
-                  }
-                ]}
+                style={styles.categoryIcon}
               />
               {formData.categoryId === category._id && (
                 <View style={styles.selectedBadge}>
@@ -547,7 +541,7 @@ const CreateListingScreen = () => {
             onPress={() => setShowUnitDropdown(!showUnitDropdown)}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="schedule" size={20} color={COLORS.TEXT.PLACEHOLDER} />
+            <Ionicons name="time-outline" size={20} color={COLORS.TEXT.PLACEHOLDER} />
             <Text style={[styles.dropdownText, formData.unitOfMeasure && styles.dropdownTextSelected]}>
               {unitOptions.find(u => u.value === formData.unitOfMeasure)?.label || 'Select Unit'}
             </Text>
@@ -589,7 +583,7 @@ const CreateListingScreen = () => {
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Minimum Order Quantity</Text>
           <View style={styles.inputWrapper}>
-            <MaterialIcons name="shopping-cart" size={20} color={COLORS.TEXT.PLACEHOLDER} />
+            <Ionicons name="cube-outline" size={20} color={COLORS.TEXT.PLACEHOLDER} />
             <TextInput
               style={styles.input}
               placeholder="Enter minimum quantity"
@@ -1078,14 +1072,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   categoryIcon: {
-    width: 36,
-    height: 36,
+    width: 48,
+    height: 48,
     resizeMode: 'contain',
-    tintColor: COLORS.TEXT.SECONDARY,
     position: 'absolute',
     bottom: SPACING.SM,
     right: SPACING.SM,
-    opacity: 0.8,
   },
   categoryText: {
     fontSize: 12,
