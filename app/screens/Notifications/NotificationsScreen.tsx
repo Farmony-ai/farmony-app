@@ -147,11 +147,17 @@ const NotificationsScreen = () => {
         (state: RootState) => state.notifications,
     );
 
-    // Fetch notifications on screen focus
+    // Fetch notifications on screen focus, mark all as read when leaving
     useFocusEffect(
         useCallback(() => {
             dispatch(fetchNotifications());
             dispatch(fetchUnreadCount());
+
+            // Return cleanup function that runs when screen loses focus
+            return () => {
+                // Mark all notifications as read when navigating away
+                dispatch(markAllNotificationsAsRead());
+            };
         }, [dispatch]),
     );
 
