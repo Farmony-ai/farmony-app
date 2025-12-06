@@ -958,23 +958,76 @@ const ServiceRequestDetailsScreen = () => {
                       style={styles.providerActionBtn}
                       onPress={() => {
                         if (currentRequest.lifecycle?.order?.providerId?.phone) {
+                          // Use tel: to open dialer with number pre-populated (doesn't auto-dial)
                           Linking.openURL(`tel:${currentRequest.lifecycle.order.providerId.phone}`);
                         }
                       }}
                     >
                       <Ionicons name="call-outline" size={22} color="#0F172A" />
+                      <Text style={styles.providerActionLabel}>Call</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.providerActionBtn}
+                      style={[styles.providerActionBtn, styles.providerActionBtnLast]}
                       onPress={() => {
-                        if (currentRequest.lifecycle?.order?.providerId?.phone) {
-                          Linking.openURL(`sms:${currentRequest.lifecycle.order.providerId.phone}`);
-                        }
+                        const providerId = currentRequest.lifecycle?.order?.providerId?._id ||
+                                          currentRequest.lifecycle?.order?.providerId;
+                        const providerName = currentRequest.lifecycle?.order?.providerId?.name || 'Provider';
+                        const orderId = currentRequest.lifecycle?.order?._id || currentRequest.orderId;
+
+                        navigation.navigate('Chat', {
+                          recipientId: providerId,
+                          recipientName: providerName,
+                          orderId: orderId,
+                          requestId: normalizedRequestId,
+                        });
                       }}
                     >
                       <Ionicons name="chatbubble-outline" size={22} color="#0F172A" />
+                      <Text style={styles.providerActionLabel}>Chat</Text>
                     </TouchableOpacity>
                   </View>
+                </View>
+              )}
+
+              {/* Progress Timeline for Matched Status */}
+              {requestStatus.toLowerCase() === 'accepted' && (
+                <View style={styles.matchedTimelineSection}>
+                  <View style={styles.progressTimeline}>
+                    {/* Step 1 - Request Placed */}
+                    <View style={styles.timelineStep}>
+                      <View style={[styles.timelineIcon, styles.timelineIconCompleted]}>
+                        <Ionicons name="receipt-outline" size={20} color="#FFF" />
+                      </View>
+                      <View style={[styles.timelineLine, styles.timelineLineActive]} />
+                    </View>
+
+                    {/* Step 2 - Finding Provider */}
+                    <View style={styles.timelineStep}>
+                      <View style={[styles.timelineIcon, styles.timelineIconCompleted]}>
+                        <Ionicons name="search-outline" size={20} color="#FFF" />
+                      </View>
+                      <View style={[styles.timelineLine, styles.timelineLineActive]} />
+                    </View>
+
+                    {/* Step 3 - Provider Matched (Active) */}
+                    <View style={styles.timelineStep}>
+                      <View style={[styles.timelineIcon, styles.timelineIconActive]}>
+                        <Ionicons name="construct-outline" size={20} color="#FFF" />
+                      </View>
+                      <View style={styles.timelineLine} />
+                    </View>
+
+                    {/* Step 4 - Service Complete */}
+                    <View style={styles.timelineStepLast}>
+                      <View style={styles.timelineIcon}>
+                        <Ionicons name="home-outline" size={18} color="#64748B" />
+                      </View>
+                    </View>
+                  </View>
+
+                  <Text style={styles.matchedTimelineText}>
+                    Provider matched! Service will begin soon.
+                  </Text>
                 </View>
               )}
 
@@ -1530,7 +1583,7 @@ const styles = StyleSheet.create({
   },
   orderDetailsCard: {
     marginHorizontal: 12,
-    marginVertical: 12,
+    marginVertical: 8,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
@@ -1774,11 +1827,44 @@ const styles = StyleSheet.create({
   },
   providerActionBtn: {
     flex: 1,
+    flexDirection: 'row',
     paddingVertical: 14,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
     borderRightColor: '#F1F5F9',
+  },
+  providerActionBtnLast: {
+    borderRightWidth: 0,
+  },
+  providerActionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#0F172A',
+    marginLeft: 8,
+    fontFamily: FONTS.POPPINS.MEDIUM,
+  },
+  matchedTimelineSection: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ECEFF4',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  matchedTimelineText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+    fontFamily: FONTS.POPPINS.REGULAR,
   },
 });
 
